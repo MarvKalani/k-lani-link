@@ -13,6 +13,8 @@ tagged versions and downloads are listed on
 
 - The setup examples describe `stun.marvins.app` as the author's small STUN service
   for trying k-lani-link out, without an availability promise.
+- Stopping or disconnecting an HTTPS connection waits until the session has saved its
+  last activity checkpoint instead of letting it finish in the background.
 - Pin Basalt to `5d28effb` (expert fill through the DirectFile pipeline, MTP draft
   context, thinking-loop stop, idle conversations leave VRAM). Both integration patches
   are refreshed; privacy mode also refuses the new on-disk conversation tier. The

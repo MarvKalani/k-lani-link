@@ -198,14 +198,30 @@ impl Gateway {
             let mut backoff = Backoff::default();
             let mut unanswered = 0;
             loop {
-                match crate::mailbox::transport::connect(options, store.clone(), stop.clone()).await
-                {
+                let connected = tokio::select! {
+                    biased;
+                    _ = stop.cancelled() => return Ok(None),
+                    connected = crate::mailbox::transport::connect(options, store.clone(), stop.clone()) => connected,
+                };
+                match connected {
                     Ok(peer) => {
                         unanswered = 0;
                         backoff.reset();
                         let rejected = peer.rejected.clone();
                         self.reconnecting.store(false, Ordering::SeqCst);
+                        // Stopping closes the session through attach(), which waits for the
+                        // session's final activity checkpoint instead of leaving it running.
+                        let closed = peer.closed.clone();
+                        let stopping = stop.clone();
+                        let closer = tokio::spawn(async move {
+                            stopping.cancelled().await;
+                            closed.cancel();
+                        });
                         self.attach(peer).await;
+                        closer.abort();
+                        if stop.is_cancelled() {
+                            return Ok(None);
+                        }
                         if rejected.load(Ordering::SeqCst) {
                             return Err(crate::pairing::PairingRejected.into());
                         }
@@ -222,19 +238,26 @@ impl Gateway {
                         if error.is::<UnansweredHello>() {
                             unanswered += 1;
                             if unanswered == UNANSWERED_HELLO_LIMIT {
-                                return Ok(());
+                                return Ok(Some(()));
                             }
                         }
-                        backoff.wait(&error, &stop).await?;
+                        if let Err(error) = backoff.wait(&error, &stop).await {
+                            return if stop.is_cancelled() {
+                                Ok(None)
+                            } else {
+                                Err(error)
+                            };
+                        }
                     }
+                    Err(_) if stop.is_cancelled() => return Ok(None),
                     Err(error) => return Err(error),
                 }
             }
         };
-        let result = tokio::select! {
-            biased;
-            _=stop.cancelled()=>return,
-            result=result=>result,
+        let result = match result.await {
+            Ok(None) => return,
+            Ok(Some(())) => Ok(()),
+            Err(error) => Err(error),
         };
         self.reconnecting.store(false, Ordering::SeqCst);
         self.session_ended.store(true, Ordering::SeqCst);
