@@ -1,0 +1,18 @@
+[
+  {
+    "name": "wordcraft",
+    "version": "0.11.0",
+    "commit": "e31f2f06a5f8004ceaa88f68c00b47908e321aa4",
+    "url": "https://github.com/storytold/wordcraft/releases/download/v0.11.0/wordcraft-0.11.0-linux-x86_64.tar.gz",
+    "sha256": "034c247bf6dab172a2edfb0767de9065125b857826c6915f7ef39b9f43951d5a",
+    "size_bytes": 103471885
+  },
+  {
+    "name": "gridcraft",
+    "version": "0.12.1",
+    "commit": "f86aec12dabc744b5f75e1033f87bfe685e78481",
+    "url": "https://github.com/storytold/gridcraft/releases/download/v0.12.1/gridcraft-0.12.1-linux-x86_64.tar.gz",
+    "sha256": "1c1750dd6d26376cf8c8af22b46dc0ed3d8d5cbb115e555f0fc7d0cf7a9aea9a",
+    "size_bytes": 20816263
+  }
+]

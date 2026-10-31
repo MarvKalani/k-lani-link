@@ -1,0 +1,45 @@
+# Home host over the HTTPS relay instead of WebRTC; Basalt is unchanged.
+#   docker compose --env-file deploy/.env -f deploy/compose.yaml -f deploy/compose.https.yaml ...
+# Pair once (shows a code for the other computer; waits up to ten minutes):
+#   ... run --rm offer
+# then start as usual with `up -d`. The pairing lives in the `pairing_state` volume.
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+services:
+  link-host:
+    command: [host, --config, /var/lib/link/https/host/host.toml]
+    volumes: !override
+      - runtime_socket:/run/link:ro
+      - pairing_state:/var/lib/link
+  offer:
+    <<: *locked
+    profiles: [setup]
+    image: k-lani-link-host:local
+    network_mode: host
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    command:
+      - offer-https
+      - --dir
+      - /var/lib/link/https
+      - --relay-url
+      - ${LINK_RELAY_URL:?Set LINK_RELAY_URL to your relay, e.g. https://relay.example.com}
+      - --admission-token-file
+      - /run/tokens/host-token
+      - --client-admission-token-file
+      - /run/tokens/client-token
+      - --upstream
+      - http://localhost
+      - --upstream-socket
+      - /run/link/basalt.sock
+    volumes:
+      # Only the two token files; the folder is read-only and never enters the host service.
+      - type: bind
+        source: ${LINK_TOKEN_DIR:?Set LINK_TOKEN_DIR to the folder with host-token and client-token}
+        target: /run/tokens
+        read_only: true
+        bind: {create_host_path: false}
+      - pairing_state:/var/lib/link

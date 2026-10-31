@@ -1,0 +1,15 @@
+# Operator-only control; AI applications receive the inference token but not management-token.
+services:
+  basalt:
+    mem_limit: 6g
+    memswap_limit: 6g
+    environment: {LINK_REQUIRE_NO_SWAP: '1'}
+    entrypoint: [/opt/basalt/.venv/bin/python, -B, /opt/link-manager.py]
+    command: []
+    volumes:
+      - '${THINKRAIL_TEST_ROOT}/models.json:/run/secrets/models.json:ro'
+      - '${BASALT_MODEL_PATH}:/models/coder.basalt:ro'
+      - '${LINK_NVFP4_MODEL:?Set LINK_NVFP4_MODEL in compose.env}:/models/nvfp4.basalt:ro'
+  client:
+    volumes:
+      - '${THINKRAIL_TEST_ROOT}/management-token:/run/secrets/management-token:ro'

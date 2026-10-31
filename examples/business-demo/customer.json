@@ -1,0 +1,17 @@
+{
+  "synthetic_demo": true,
+  "notice": "FICTIONAL DEMO DATA — NOT A REAL INVOICE. No payment is due.",
+  "issuer": {"name": "Harbor Logic Demo Studio", "address": "10 Sample Street, Example City", "email": "billing@example.invalid"},
+  "customer": {"company": "Orion Example Lab", "contact": "Alex Morgan (fictional)", "address": "42 Example Lane, Example City", "email": "alex.morgan@example.invalid"},
+  "invoice_number": "DEMO-2026-001",
+  "invoice_date": "2026-10-27",
+  "due_date": "2026-11-10",
+  "currency": "EUR",
+  "illustrative_tax_rate": 0.20,
+  "items": [
+    {"description": "Architecture workshop", "hours": 3, "hourly_rate": 120},
+    {"description": "Private assistant integration", "hours": 8, "hourly_rate": 95},
+    {"description": "Validation and handover", "hours": 2, "hourly_rate": 80}
+  ],
+  "status": "Demo — not payable"
+}

@@ -1,0 +1,72 @@
+{
+  "published": "2026-10-29",
+  "recorded": "2026-10-27/2026-10-28",
+  "type": "Edited historical excerpts; no new inference run",
+  "assembly": "FFmpeg; former name overlays and provider labels masked; title cards and captions added",
+  "gif_export": "FilmCraft 0.13.0 headless CLI, network-disabled Docker; gifsicle optimize=3, 128 colors, no dithering",
+  "source_sha256": "8a73c154ba899e15007995bda323579302a9e971129d49e570482a988edbc1d3",
+  "mp4_timeline_seconds": {
+    "intro": [
+      0,
+      6
+    ],
+    "reasoning": [
+      6,
+      16
+    ],
+    "ledger_tools": [
+      16,
+      32
+    ],
+    "invoice_tools": [
+      32,
+      40
+    ],
+    "operator_correction": [
+      40,
+      50
+    ],
+    "verified_document_results": [
+      50,
+      58
+    ],
+    "invoice_previews": [
+      58,
+      70
+    ],
+    "ledger_preview": [
+      70,
+      77
+    ],
+    "hardware_and_scope": [
+      77,
+      87
+    ]
+  },
+  "files": [
+    {
+      "file": "k-lani-link-business-demo.mp4",
+      "bytes": 2613479,
+      "sha256": "789922d7553ba5b36c97ff7624b9aa917ac521640f187c6fcdac98a40b127c2c",
+      "seconds": 87.0,
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "k-lani-link-streaming.gif",
+      "bytes": 2137352,
+      "sha256": "edefce98cc2de810cb1801faaf2cba889a85b11d19221f59e8a5795d10a11f63",
+      "seconds": 10.0,
+      "width": 960,
+      "height": 540
+    },
+    {
+      "file": "k-lani-link-document-tools.gif",
+      "bytes": 1512287,
+      "sha256": "7f0b0c02a8b9ee22b25d14e14c4765ab59b5d1012113da8dc180fc3570531740",
+      "seconds": 8.0,
+      "width": 960,
+      "height": 540
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+# Copy into a NEW private directory as relay.toml. Use your own certificate and tokens.
+listen = "0.0.0.0:8789"
+tls_cert = "server.crt"
+tls_key = "server.key"
+max_connections = 256
+# HTTP/2 is offered first by ALPN; clients without it fall back to HTTP/1.1.
+# http1_only = true
+
+# Optional brake against guessing: an address with more refused requests per minute
+# than this gets 429 for failed_auth_ban_minutes. A valid token is never held back,
+# so a shared customer NAT address cannot lock its users out. 0 (default) is off.
+# Needs the relay's own TLS listener (not behind_tls_proxy).
+# failed_auth_per_minute = 20
+# failed_auth_ban_minutes = 15
+
+# Upper bounds for all tokens together.
+[global]
+rooms = 128
+sessions = 128
+bytes = 16777216
+pending_puts = 64
+pending_put_bytes = 1048576
+get_waiters = 64
+hello_slots = 1024
+requests_per_second = 1000
+request_burst = 2000
+# Open pairing-by-code slots on the whole relay (at most 900); 0 turns pairing by code
+# off. In a token's [tokens.limits] the same key bounds one space. Defaults: 64 here,
+# 4 per space; a single user rarely has more than one code open.
+pair_slots = 64
+
+# One [[tokens]] entry per token file. A token admits ciphertext traffic only; it cannot
+# decrypt content or replace pairing state. Optional keys must stand BEFORE the entry's
+# [tokens.limits] table, otherwise TOML reads them as limits.
+#
+#   space = "name"          tokens with the same space share rooms and limits, so host and
+#                           client may hold separate tokens (one per device) and each can
+#                           be revoked alone. Without it, a token has a space of its own
+#                           and both endpoints of a pair must then use that same token.
+#   expires = "2027-06-30"  last valid day (UTC); refused from the following midnight
+#   allow_ips = ["203.0.113.0/24", "2001:db8::/48", "198.51.100.7"]
+#                           only these addresses/networks; empty or missing admits any
+#   max_ips_per_day = 8     distinct addresses (IPv6 per /64) within 24 hours; new ones
+#                           beyond it are refused, known ones keep working. Kept in memory
+#                           as salted hashes only. 0 or missing: no limit.
+#
+# Address rules see the address that connects to the relay, so they are refused together
+# with behind_tls_proxy. Refusals are 401, the same as a wrong token.
+
+[[tokens]]
+token_file = "host-token"
+space = "pair"
+# Generous: on 401 the host process exits. Dual stack counts IPv4 and IPv6 separately.
+max_ips_per_day = 8
+# allow_ips = ["203.0.113.0/24"]
+# Limits of the space, set on its first token. Single user (one host, one or two
+# clients at a time):
+[tokens.limits]
+rooms = 4
+sessions = 16
+bytes = 4194304
+pending_puts = 32
+pending_put_bytes = 1048576
+get_waiters = 16
+hello_slots = 16
+requests_per_second = 400
+request_burst = 800
+pair_slots = 4
+
+[[tokens]]
+token_file = "client-token"
+space = "pair"
+# expires = "2027-06-30"
+max_ips_per_day = 12
+# Without its own [tokens.limits] a further token takes the space's limits.

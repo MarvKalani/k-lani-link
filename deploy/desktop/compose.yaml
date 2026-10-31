@@ -1,0 +1,158 @@
+# Docker Desktop, Linux containers. Start through Start.ps1 on Windows.
+name: k-lani-link-desktop
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+  restart: 'no'
+services:
+  prepare:
+    <<: *locked
+    profiles: [setup]
+    image: k-lani-link-desktop-opencode:local
+    network_mode: none
+    user: '0:0'
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    entrypoint: [python, -B, /opt/desktop/prepare.py]
+    # Only this short-lived, network-less container sees the client's folder. HTTPS needs the
+    # relay token, CA and pairing state beside client.toml; the proxy stays out of any volume
+    # except the private transport configuration.
+    environment: [LINK_CLIENT_FILE, LINK_PROXY_URL]
+    volumes:
+      - type: bind
+        source: ${LINK_CLIENT_DIR:?Select the private client folder}
+        target: /input
+        read_only: true
+        bind: {create_host_path: false}
+      - link_config:/output/link
+      - app_secrets:/output/app
+      - ui_secrets:/output/ui
+      - pairing_state:/output/state
+      - api_socket:/output/api
+      - ui_socket:/output/socket
+  # Pairing by code: receives the client side over the relay into a private Linux volume,
+  # never into a Windows folder. Manage.ps1 -Action Pair pipes the code in.
+  join:
+    <<: *locked
+    profiles: [setup]
+    image: k-lani-link-desktop-transport:local
+    entrypoint: [/usr/local/bin/k-lani-link, join-https, --dir, /var/lib/link/client]
+    networks: [transport]
+    environment: [LINK_PROXY_URL]
+    stdin_open: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    volumes:
+      # Mounted on the image's 0700 folder of UID 1000, so the new volume inherits it.
+      - joined:/var/lib/link
+  # The same preparation as `prepare`, reading the joined folder instead of a Windows one.
+  prepare-joined:
+    <<: *locked
+    profiles: [setup]
+    image: k-lani-link-desktop-opencode:local
+    network_mode: none
+    user: '0:0'
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    entrypoint: [python, -B, /opt/desktop/prepare.py]
+    environment: [LINK_PROXY_URL, LINK_INPUT_DIR=/joined/client]
+    volumes:
+      - joined:/joined:ro
+      - link_config:/output/link
+      - app_secrets:/output/app
+      - ui_secrets:/output/ui
+      - pairing_state:/output/state
+      - api_socket:/output/api
+      - ui_socket:/output/socket
+  link:
+    <<: *locked
+    image: k-lani-link-desktop-transport:local
+    build: {context: ../.., dockerfile: deploy/link.Dockerfile}
+    command: [client, --config, /run/secrets/client.toml, --api-socket, /run/link-api/api.sock]
+    networks: [transport]
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    volumes:
+      - link_config:/run/secrets:ro
+      - pairing_state:/var/lib/link
+      - api_socket:/run/link-api
+  opencode:
+    <<: *locked
+    image: k-lani-link-desktop-opencode:local
+    build: {context: ../.., dockerfile: deploy/opencode/Dockerfile}
+    platform: linux/amd64
+    network_mode: none
+    depends_on: {link: {condition: service_started}}
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,exec,size=256m,uid=1000,gid=1000,mode=1777
+      - /home/opencode:rw,nosuid,nodev,size=512m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - type: bind
+        source: ${LINK_WORKSPACE:?Select the approved project directory}
+        target: /work
+        bind: {create_host_path: false}
+      - app_secrets:/run/secrets:ro
+      - api_socket:/run/link-api:ro
+      - ui_socket:/run/opencode-ui
+    healthcheck:
+      test: [CMD, python, -B, /opt/desktop/verify.py, --health]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 125s
+  guard:
+    <<: *locked
+    image: k-lani-link-desktop-guard:local
+    build: {context: ../.., dockerfile: deploy/thinkrail/guard.Dockerfile}
+    cap_add: [NET_ADMIN]
+    networks: [browser]
+    ports: ['127.0.0.1:24244:8080']
+    dns: ['127.0.0.1']
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 32
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=1m,mode=0700']
+    healthcheck:
+      test: [CMD, test, -f, /tmp/guard.ready]
+      interval: 1s
+      timeout: 1s
+      retries: 5
+  ui:
+    <<: *locked
+    image: k-lani-link-desktop-ui:local
+    build: {context: ../.., dockerfile: deploy/desktop/ui.Dockerfile}
+    user: '1000:1000'
+    entrypoint: [nginx, -g, 'daemon off;']
+    network_mode: service:guard
+    depends_on:
+      guard: {condition: service_healthy}
+      opencode: {condition: service_healthy}
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 32
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700']
+    volumes:
+      - ui_socket:/run/opencode-ui:ro
+      - ui_secrets:/run/secrets:ro
+networks:
+  transport: {}
+  browser: {}
+volumes:
+  pairing_state: {}
+  # Only between join and preparation; Manage.ps1 removes it once the pairing is imported.
+  joined: {}
+  link_config: {}
+  app_secrets: {}
+  ui_secrets: {}
+  api_socket:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}
+  ui_socket:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}

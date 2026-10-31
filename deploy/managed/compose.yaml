@@ -1,0 +1,12 @@
+# Add after deploy/compose.yaml on the backend computer.
+services:
+  basalt:
+    mem_limit: 6g
+    memswap_limit: 6g
+    environment: {LINK_REQUIRE_NO_SWAP: '1'}
+    entrypoint: [/opt/basalt/.venv/bin/python, -B, /opt/link-manager.py]
+    command: []
+    volumes:
+      - '${LINK_MODEL_CATALOG:?Set the absolute path to models.json}:/run/secrets/models.json:ro'
+      - '${LINK_CODER_MODEL:?Set the absolute Coder model path}:/models/coder.basalt:ro'
+      - '${LINK_NVFP4_MODEL:?Set the absolute NVFP4 model path}:/models/nvfp4.basalt:ro'

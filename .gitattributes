@@ -1,0 +1,8 @@
+# Shell entrypoints must remain executable by Linux after a Windows checkout.
+*.sh text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.Dockerfile text eol=lf
+Dockerfile text eol=lf

@@ -1,0 +1,303 @@
+diff --git a/serve/config.py b/serve/config.py
+index 213c4a8..9f35c8d 100644
+--- a/serve/config.py
++++ b/serve/config.py
+@@ -176,6 +176,8 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str]):
+             else:
+                 src[at + 1] = part
+             a.shared_context = ctx                         # the total, for the startup line
++    if a.privacy_metrics_file and (not a.privacy or not Path(a.privacy_metrics_file).is_absolute()):
++        raise ValueError("privacy-metrics-file requires --privacy and an absolute local path")
+     if a.privacy:
+         from serve.privacy import validate
+         validate(a, file_words + cli_words)
+@@ -363,6 +365,8 @@ def build_parser() -> argparse.ArgumentParser:
+                     help="run a scripted engine instead of the model, for clients and tests (no --model needed)")
+     ap.add_argument("--privacy", action="store_true",
+                     help="text-only loopback API without application logs, diagnostics UI or request history")
++    ap.add_argument("--privacy-metrics-file", metavar="PATH",
++                    help="opt-in private numeric performance snapshot; no prompts, responses or request IDs")
+     ap.add_argument("--unix-socket", metavar="PATH", help="listen on a local Unix socket instead of TCP")
+     ap.add_argument("--model", help="the .basalt model file: the engine, tokenizer, sampling and vision come from it")
+     ap.add_argument("--engine-bin", help=argparse.SUPPRESS)      # set by `basalt serve`
+diff --git a/serve/handler.py b/serve/handler.py
+index adb2fd7..48e0b6d 100644
+--- a/serve/handler.py
++++ b/serve/handler.py
+@@ -268,7 +268,8 @@ def make_handler(svc: Service):
+                                  "parallel": max(1, int(getattr(svc.engine, "batch", 0) or 0)),
+                                  "link_privacy": {"version": 1, "application_logs": False,
+                                                       "request_history": False, "diagnostics": False,
+-                                                      "remote_images": False} if svc.privacy else None})
++                                                      "remote_images": False,
++                                                      "numeric_metrics": svc.numeric_metrics} if svc.privacy else None})
+             elif path == "/status":
+                 if not self._authorized():                  # it shows the last answer's tail
+                     return
+diff --git a/serve/numeric_metrics.py b/serve/numeric_metrics.py
+new file mode 100644
+index 0000000..3714e56
+--- /dev/null
++++ b/serve/numeric_metrics.py
+@@ -0,0 +1,96 @@
++"""Opt-in counters and timings only. No payloads, token strings, IDs, paths, logs or request history."""
++import json
++import math
++import os
++from pathlib import Path
++import stat
++import tempfile
++import threading
++import time
++
++
++def number(value):
++    if isinstance(value, bool) or not isinstance(value, (int, float)):
++        return None
++    return value if math.isfinite(value) and value >= 0 else None
++
++
++def completed(timings, ttft, output_tokens):
++    timings = timings if isinstance(timings, dict) else {}
++    return {"finished_at": time.time(), "output_tokens": number(output_tokens),
++            "prefill_tokens": number(timings.get("prompt_n")),
++            "cached_tokens": number(timings.get("cache_n")),
++            "prefill_ms": number(timings.get("prompt_ms")),
++            "prefill_tokens_per_second": number(timings.get("prompt_per_second")),
++            "decode_ms": number(timings.get("predicted_ms")),
++            "decode_tokens_per_second": number(timings.get("predicted_per_second")),
++            "ttft_ms": ttft * 1000 if number(ttft) is not None else None}
++
++
++def snapshot(service):
++    with service.status_lock:
++        live = [dict(st) for st, _ in service.live_reqs.values()] or [dict(service.status)]
++        last = dict(service.performance_last) if service.performance_last else None
++    active = [st for st in live if st.get("busy")]
++    state = "generating" if any(st.get("first_token") is not None for st in active) else \
++            "reading" if active else "idle" if service.loaded() else "unloaded"
++    # Service's rate is computed from generated-token counters, never SSE chunks or characters.
++    from serve.service import RATE_WINDOW_S
++    return {"schema": 1, "observed_at": time.time(), "process_started_at": service.started_at,
++            "backend": "basalt", "model": service.model,
++            "context_tokens_per_slot": service.engine.max_context,
++            "slots": max(1, int(getattr(service.engine, "batch", 0) or 0)),
++            "state": state, "active_requests": len(active),
++            "generated_tokens": sum(number(st.get("generated")) or 0 for st in active),
++            "decode_window_seconds": RATE_WINDOW_S,
++            "live_decode_tokens_per_second": number(service._tok_s()) if state == "generating" else None,
++            "live_prefill_tokens_per_second": number(service._prefill_tok_s_mean()) if state == "reading" else None,
++            "last": last}
++
++
++class NumericMetrics:
++    def __init__(self, service, path: Path):
++        if not service.privacy or not path.is_absolute():
++            raise ValueError("numeric metrics require privacy mode and an absolute path")
++        self.service, self.path = service, path
++        if path.exists() or path.is_symlink():
++            info = path.lstat()
++            if not stat.S_ISREG(info.st_mode) or (hasattr(os, "getuid") and info.st_uid != os.getuid()):
++                raise ValueError("metrics destination is not an owned regular file")
++        if not path.parent.is_dir():
++            raise ValueError("metrics parent directory does not exist")
++        self.done = threading.Event()
++        self.thread = None
++
++    def write(self):
++        temporary = None
++        try:
++            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent,
++                                             prefix=".performance-", delete=False) as output:
++                temporary = Path(output.name)
++                json.dump(snapshot(self.service), output, separators=(",", ":"), allow_nan=False)
++            temporary.replace(self.path)
++        finally:
++            if temporary is not None:
++                temporary.unlink(missing_ok=True)
++
++    def start(self):
++        self.service.numeric_metrics = True
++        self.write()
++        def run():
++            while not self.done.wait(0.5):
++                try:
++                    self.write()
++                except (OSError, TypeError, ValueError):
++                    # The collector rejects stale samples. Never log a failed export or disturb inference.
++                    return
++        self.thread = threading.Thread(target=run, daemon=True)
++        self.thread.start()
++
++    def stop(self):
++        self.done.set()
++        if self.thread:
++            self.thread.join(timeout=1)
++        self.service.numeric_metrics = False
++        self.service.performance_last = None
++        self.path.unlink(missing_ok=True)
+diff --git a/serve/server.py b/serve/server.py
+index 9ec0511..48660de 100644
+--- a/serve/server.py
++++ b/serve/server.py
+@@ -241,6 +241,11 @@ def main() -> int:
+     svc.thinking_loop_tokens = a.thinking_loop_tokens
+     svc.gpu_indices = gpus_in_play(cfg, engine_args(cfg) if not a.mock_engine else [])   # the cards /metrics reads
+     svc.gpu_index = svc.gpu_indices[0]
++    metrics = None
++    if a.privacy_metrics_file:
++        from serve.numeric_metrics import NumericMetrics
++        metrics = NumericMetrics(svc, Path(a.privacy_metrics_file))
++        metrics.start()
+     httpd = serve(svc, host=a.host, port=a.port, unix_socket=a.unix_socket)
+     svc.start_idle_unload()
+     svc.start_idle_sleep()
+@@ -297,7 +302,8 @@ def main() -> int:
+     except KeyboardInterrupt:
+         if not rc:
+             print("[server] stopping (Ctrl+C again to force)", flush=True)
+-        closers = [svc.stop, httpd.shutdown, httpd.server_close, getattr(engine, "close", None), vision.close if vision else None]
++        closers = [metrics.stop if metrics else None, svc.stop, httpd.shutdown, httpd.server_close,
++                   getattr(engine, "close", None), vision.close if vision else None]
+         for close in filter(None, closers):
+             try:
+                 close()
+diff --git a/serve/service.py b/serve/service.py
+index 96b6df1..47df0ca 100644
+--- a/serve/service.py
++++ b/serve/service.py
+@@ -129,6 +129,8 @@ class Service:
+         self.before_load = None
+         self.vram_reserve = None                         # last POST /v1/vram reserve (None: the start's)
+         self.reasoning_budget_tokens = 0                 # default thinking budget (0: none)
++        self.numeric_metrics = False
++        self.performance_last = None
+         self.answer_room = True                          # reserve output space when thinking
+         self.thinking_loop_tokens = 256                  # one token repeated this often in the thinking ends it (0: off)
+         self.anthropic_think_unasked = True               # "anthropic_thinking": "on_request" -> False
+@@ -812,7 +814,7 @@ class Service:
+         return ids, kwargs.get("enable_thinking", True) is not False, max_new
+ 
+     def _note(self, n, evs, st=None, rate=None):
+-        if self.privacy:
++        if self.privacy and not self.numeric_metrics:
+             return
+         with self.status_lock:
+             s = self.status if st is None else st
+@@ -823,6 +825,8 @@ class Service:
+             if s.get("first_token") is None:
+                 s["first_token"] = time.time()
+             (self.rate if rate is None else rate).append((time.time(), n))   # live rate window
++            if self.privacy:
++                return  # numeric opt-in never keeps token text, tool names or response tails
+             for ev in evs:
+                 if ev.kind == "reasoning":
+                     s["phase"] = "thinking"
+@@ -1203,6 +1207,9 @@ class Service:
+                                 if not self.privacy:
+                                     self.last_timings = dict(timings, at=int(time.time())) if timings else None
+                             self.last_request_at = time.time()
++                            if self.numeric_metrics:
++                                from serve.numeric_metrics import completed
++                                self.performance_last = completed(timings, ttft, n)
+                             if not self.privacy:
+                                 now = time.time()
+                                 rate = n / max(1e-6, now - ft) if ft else 0.0
+diff --git a/serve/tests/test_numeric_metrics.py b/serve/tests/test_numeric_metrics.py
+new file mode 100644
+index 0000000..83614f5
+--- /dev/null
++++ b/serve/tests/test_numeric_metrics.py
+@@ -0,0 +1,92 @@
++"""Numeric export must not weaken privacy routes or retain inference payloads."""
++import contextlib
++import io
++import json
++from pathlib import Path
++import stat
++import tempfile
++import time
++import unittest
++
++from serve.config import build_parser, parse_settings
++from serve.engine.mock import MockEngine
++from serve.frontend import ChatTemplate, Event
++from serve.handler import serve
++from serve.numeric_metrics import NumericMetrics, completed, snapshot
++from serve.service import Service
++from serve.tests.test_privacy import ROOT, request
++from serve.tests.test_server import ByteTokenizer
++
++
++class NumericPrivacy(unittest.TestCase):
++    def service(self):
++        tok = ByteTokenizer()
++        engine = MockEngine(tok, "checking.</think>\n\nPRIVATE_RESPONSE_MARKER", record_requests=False)
++        return Service(engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++
++    def test_whitelist_ignores_arbitrary_payload_fields(self):
++        svc = self.service()
++        svc.status.update(busy=True, first_token=time.time()-2, generated=20, tail="SECRET", tool="SECRET")
++        svc.performance_last = completed({"prompt_n": 10, "prompt_ms": 2, "predicted_per_second": 8,
++                                         "text": "SECRET", "request": "SECRET"}, 0.2, 16)
++        out = snapshot(svc)
++        self.assertNotIn("SECRET", json.dumps(out))
++        self.assertEqual(out["last"]["decode_tokens_per_second"], 8)
++        self.assertEqual(out["last"]["ttft_ms"], 200)
++        self.assertEqual(out["state"], "generating")
++
++    def test_live_numeric_opt_in_keeps_no_response_tail(self):
++        svc = self.service()
++        svc.numeric_metrics = True
++        svc.status.update(busy=True, started=time.time())
++        svc._note(7, [Event("content", "SECRET_RESPONSE")])
++        result = snapshot(svc)
++        self.assertEqual(result["state"], "generating")
++        self.assertEqual(result["generated_tokens"], 7)
++        self.assertGreater(svc.status["first_token"], 0)
++        self.assertTrue(svc.rate)
++        self.assertNotIn("SECRET", repr(svc.status))
++        self.assertNotIn("tail", svc.status)
++
++    def test_opt_in_requires_privacy_and_absolute_path(self):
++        for args in [["--privacy-metrics-file", "/tmp/numeric.json"],
++                     ["--privacy", "--privacy-metrics-file", "relative.json"]]:
++            with self.assertRaises(ValueError):
++                parse_settings(build_parser(), args)
++
++    def test_streaming_has_only_private_numeric_file_and_no_admin_routes(self):
++        svc = self.service()
++        with tempfile.TemporaryDirectory() as directory:
++            file = Path(directory) / "performance.json"
++            metrics = NumericMetrics(svc, file)
++            metrics.start()
++            httpd = serve(svc, port=0)
++            base = f"http://127.0.0.1:{httpd.server_address[1]}"
++            try:
++                with contextlib.redirect_stdout(io.StringIO()):
++                    status, body = request(base, "/v1/chat/completions", {"model": svc.model,
++                        "messages": [{"role": "user", "content": "PRIVATE_PROMPT_MARKER"}], "stream": True})
++                self.assertEqual(status, 200)
++                self.assertIn(b"reasoning_content", body)
++                metrics.write()
++                exported = file.read_text()
++                self.assertNotIn("PRIVATE_", exported)
++                self.assertEqual(stat.S_IMODE(file.stat().st_mode), 0o600)
++                data = json.loads(exported)
++                self.assertEqual(data["state"], "idle")
++                self.assertGreater(data["last"]["output_tokens"], 0)
++                self.assertIsNotNone(data["last"]["ttft_ms"])
++                for path in ("/metrics", "/api/logs", "/status", "/slots", "/props"):
++                    self.assertEqual(request(base, path)[0], 404)
++                self.assertEqual(request(base, "/v1/load", {})[0], 404)
++                self.assertFalse(svc.history)
++                self.assertFalse(svc.slot_last)
++                self.assertIsNone(svc.last_timings)
++                self.assertEqual(svc.logs.since(), ([], 0))
++            finally:
++                metrics.stop(); svc.stop(); httpd.shutdown(); httpd.server_close()
++            self.assertFalse(file.exists())
++
++
++if __name__ == "__main__":
++    unittest.main()

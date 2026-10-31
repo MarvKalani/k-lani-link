@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>k-lani-link · Connection</title><link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">YOUR APPS. YOUR COMPUTE.</p><h1>k-lani-link</h1></div><span id="version" class="version"></span></header>
+    <section class="connection" aria-live="polite">
+      <div class="status-line"><span id="light" class="light"></span><h2 id="status">Opening control panel…</h2></div>
+      <p id="detail">This page controls the local transport. No conversation data is collected here.</p>
+      <div class="buttons"><button id="connect" disabled>Connect</button><button id="disconnect" class="secondary" disabled>Disconnect</button><button id="test" class="secondary" disabled>Test backend</button></div>
+      <p id="error" role="alert" hidden></p>
+      <div id="result" hidden></div>
+    </section>
+    <section>
+      <p class="eyebrow">01 · PAIR THIS COMPUTER</p><h2>Enter the pairing code</h2>
+      <p>On the model computer, the operator starts pairing and gives you an eleven-digit code. Enter it here. This computer then connects by itself.</p>
+      <div id="relay-row"><label>Relay address<input id="relay" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://relay.example.com"></label></div>
+      <p id="relay-preset" class="muted" hidden>Relay: <span id="relay-name"></span> · <button id="relay-change" class="link" type="button">use another relay</button></p>
+      <label>Pairing code<input id="code" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="472-1234-5678" maxlength="20"></label>
+      <div class="buttons"><button id="pair" disabled>Pair</button></div>
+      <p class="muted">A code works once and for ten minutes. A wrong code is used up; ask for a new one. The relay only forwards encrypted data and never learns the code.</p>
+      <p id="saved" aria-live="polite"></p>
+      <details><summary>Direct connection with a client.toml file instead</summary>
+        <p>Get a fresh <code>client.toml</code> from the operator of your model computer. Both ends need the matching pairing code, signaling service and explicit STUN settings.</p>
+        <label class="file">Choose client.toml<input id="config" type="file" accept=".toml,text/plain"></label>
+        <p class="muted">The configuration stays on this computer, outside your project folder. Keep it out of Git, chat messages and screenshots. Old Docker paths are replaced with local paths. TURN and model administration are not enabled by this panel.</p>
+      </details>
+    </section>
+    <section>
+      <p class="eyebrow">02 · CONNECTION</p><h2>Connect and check</h2>
+      <ol><li>After pairing by code this computer connects by itself, also when the application starts again. With a client.toml file, start the matching host on the other computer and click <strong>Connect</strong>.</li><li>When the light turns green, click <strong>Test backend</strong>. A model list checks the full path through the encrypted tunnel.</li></ol>
+      <p class="muted">A pairing by code uses the HTTPS relay and works wherever normal web access works. A direct connection from a client.toml needs permission for peer UDP traffic; there is no automatic fallback between the two.</p>
+    </section>
+    <section>
+      <p class="eyebrow">03 · USE YOUR MODEL</p><h2>Connect your AI application</h2>
+      <p>For a native AI client, select an OpenAI-compatible provider and use this local API:</p>
+      <label>Base URL<input id="base" readonly value="http://127.0.0.1:8787/v1"></label>
+      <div class="buttons"><button id="show-key" class="secondary" disabled>Show local API key</button><button id="copy-key" class="secondary" hidden>Copy key</button><button id="hide-key" class="secondary" hidden>Hide key</button></div>
+      <input id="key" aria-label="Local inference API key" readonly hidden>
+      <p class="muted">The local API key is different from the one-time pairing code. Use a model ID from Test backend. This native transport does not isolate your AI application from the Internet.</p>
+      <aside><h3>Using OpenCode in Docker?</h3><p>The Docker Desktop profile runs its own transport and limits project access to <code>D:\OpenCode</code>. This panel does not start or monitor that separate stack. Use its Windows launcher and browser at <code>http://127.0.0.1:24244/</code>. Do not start both clients with the same pairing code.</p><a href="https://github.com/MarvKalani/k-lani-link/blob/main/deploy/desktop/README.md" target="_blank" rel="noreferrer">Open Docker setup instructions ↗</a></aside>
+    </section>
+    <details><summary>Connection troubleshooting</summary><ul><li><strong>Still connecting:</strong> check that the host is running, both configs match, clocks are synchronized, and signaling/STUN and direct peer traffic are permitted.</li><li><strong>Access refused by the relay:</strong> the relay token for this computer expired, was revoked or is limited to other addresses. Ask the operator, or pair again with a new code.</li><li><strong>Code not accepted:</strong> a code works once. Ask for a new one and type it again.</li><li><strong>Pair rejected:</strong> get matching fresh configuration files. Do not weaken authentication.</li><li><strong>New code required:</strong> an established tunnel consumes its code. After a full disconnect or restart, create a fresh pair on both computers. Never delete consumed-code markers.</li><li><strong>Connected, but backend test fails:</strong> check that a model is loaded and the backend exposes the required privacy profile. The control panel does not bypass that check.</li><li><strong>Local port occupied:</strong> stop the other native client or use another loopback port in the configuration.</li></ul></details>
+    <footer><p>Closing this tab leaves the transport running. Reopen the application to return here. <strong>Quit application</strong> stops it. No tray icon is included in this preview.</p><button id="quit" class="secondary">Quit application</button></footer>
+  </main><script src="/app.js"></script>
+</body></html>

@@ -1,0 +1,665 @@
+diff --git a/serve/config.py b/serve/config.py
+index f533dd9..213c4a8 100644
+--- a/serve/config.py
++++ b/serve/config.py
+@@ -176,6 +176,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str]):
+             else:
+                 src[at + 1] = part
+             a.shared_context = ctx                         # the total, for the startup line
++    if a.privacy:
++        from serve.privacy import validate
++        validate(a, file_words + cli_words)
+     return a, file_argv + cli, file_words, cli_words
+ 
+ 
+@@ -358,6 +361,9 @@ def build_parser() -> argparse.ArgumentParser:
+                                  allow_abbrev=False)
+     ap.add_argument("--mock-engine", action="store_true",
+                     help="run a scripted engine instead of the model, for clients and tests (no --model needed)")
++    ap.add_argument("--privacy", action="store_true",
++                    help="text-only loopback API without application logs, diagnostics UI or request history")
++    ap.add_argument("--unix-socket", metavar="PATH", help="listen on a local Unix socket instead of TCP")
+     ap.add_argument("--model", help="the .basalt model file: the engine, tokenizer, sampling and vision come from it")
+     ap.add_argument("--engine-bin", help=argparse.SUPPRESS)      # set by `basalt serve`
+     ap.add_argument("--alias", help="the model name the API reports (default: the name stored in the model file)")
+diff --git a/serve/engine/mock.py b/serve/engine/mock.py
+index 22f4ca7..dcd4ca6 100644
+--- a/serve/engine/mock.py
++++ b/serve/engine/mock.py
+@@ -18,12 +18,13 @@ class MockEngine:
+     """Replays scripted completions as token ids plus the end-of-turn token; a list gives one script per request, the last repeating."""
+ 
+     def __init__(self, tokenizer, script: str | list[str], max_context: int = 32768, delay_s: float = 0.0,
+-                 batch: int = 0, route=None):
++                 batch: int = 0, route=None, record_requests: bool = True):
+         self.tok, self.max_context, self.delay = tokenizer, max_context, delay_s
+         # batch >= 2: that many requests generate at once, the rest wait their turn (first come, first served)
+         self.batch = batch if batch >= 2 else 0
+         self.cv, self.admission, self.busy = threading.Condition(), AdmissionQueue(), 0
+         self.route = route                              # prompt ids -> index of the script to answer with
++        self.record_requests = record_requests
+         self.peak = 0                                   # most requests generating at once
+         self.requests: list[tuple[list[int], dict]] = []    # (prompt, sampling) of each request, in arrival order
+         end = tokenizer.encode(IM_END, parse_special=True)
+@@ -60,9 +61,10 @@ class MockEngine:
+                 self.cv.notify_all()
+ 
+     def _run(self, ids, max_new, sampling, cancel, embeddings=None):
+-        self.requests.append((list(ids), dict(sampling or {})))
+-        self.last_prompt = list(ids)
+-        self.last_embeddings = embeddings
++        if self.record_requests:
++            self.requests.append((list(ids), dict(sampling or {})))
++            self.last_prompt = list(ids)
++            self.last_embeddings = embeddings
+         script = self.script
+         if self.route:
+             script = self.scripts[self.route(list(ids))]
+diff --git a/serve/handler.py b/serve/handler.py
+index 1509791..adb2fd7 100644
+--- a/serve/handler.py
++++ b/serve/handler.py
+@@ -5,6 +5,7 @@ import json
+ import os
+ import select
+ import socket
++import socketserver
+ import sys
+ import threading
+ import time
+@@ -213,6 +214,9 @@ def make_handler(svc: Service):
+ 
+         def do_GET(self):
+             path = self.path.split("?")[0].rstrip("/")
++            if svc.privacy and path not in ("/health", "/api/health", "/v1/models", "/models"):
++                self._json(404, {"error": {"message": "not found"}})
++                return
+             if path.startswith("/fonts/"):
+                 name = path[len("/fonts/"):]
+                 f = ROOT / "serve" / "web" / "fonts" / name
+@@ -260,7 +264,11 @@ def make_handler(svc: Service):
+             elif path in ("/health", "/api/health"):
+                 self._json(200, {"status": "ok", "max_context": svc.engine.max_context, "model": svc.model,
+                                  "images": svc.vision is not None, "api_key": bool(svc.api_key),
+-                                 "loaded": svc.loaded(), "loading": svc.loading, "service": "basalt"})
++                                 "loaded": svc.loaded(), "loading": svc.loading, "service": "basalt",
++                                 "parallel": max(1, int(getattr(svc.engine, "batch", 0) or 0)),
++                                 "link_privacy": {"version": 1, "application_logs": False,
++                                                      "request_history": False, "diagnostics": False,
++                                                      "remote_images": False} if svc.privacy else None})
+             elif path == "/status":
+                 if not self._authorized():                  # it shows the last answer's tail
+                     return
+@@ -306,6 +314,9 @@ def make_handler(svc: Service):
+             if not self._authorized():
+                 return
+             path = self.path.split("?")[0].rstrip("/")   # clients post /v1/messages?beta=true
++            if svc.privacy and path not in ("/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/messages/count_tokens"):
++                self._json(404, {"error": {"message": "not found"}})
++                return
+             if path.startswith("/v1/") and self._foreign_page():
+                 return
+             if path in ("/unload", "/load") and not self._control_body():
+@@ -761,9 +772,38 @@ class Server(ThreadingHTTPServer):
+             super().handle_error(request, client_address)
+ 
+ 
+-def serve(svc: Service, host="127.0.0.1", port=8080) -> ThreadingHTTPServer:
++class UnixServer(Server):
++    address_family = getattr(socket, "AF_UNIX", socket.AF_INET)
++
++    def server_bind(self):
++        socketserver.TCPServer.server_bind(self)
++        self.server_name, self.server_port = "localhost", 0
++        os.chmod(self.server_address, 0o600)
++        info = os.stat(self.server_address)
++        self.socket_identity = (info.st_dev, info.st_ino)
++
++    def get_request(self):
++        connection, _ = super().get_request()
++        return connection, ("127.0.0.1", 0)
++
++    def server_close(self):
++        super().server_close()
++        try:
++            info = os.stat(self.server_address, follow_symlinks=False)
++            if (info.st_dev, info.st_ino) == getattr(self, "socket_identity", None):
++                os.unlink(self.server_address)
++        except FileNotFoundError:
++            pass
++
++
++def serve(svc: Service, host="127.0.0.1", port=8080, unix_socket=None) -> ThreadingHTTPServer:
+     svc.host_names = host_names_for(host, svc.allowed_hosts, svc.trusted_origins)
+     svc.start_telemetry()
+-    httpd = Server((host, port), make_handler(svc))
++    if unix_socket:
++        if not hasattr(socket, "AF_UNIX") or not os.path.isabs(unix_socket):
++            raise ValueError("unix-socket requires an absolute path and AF_UNIX support")
++        httpd = UnixServer(unix_socket, make_handler(svc))
++    else:
++        httpd = Server((host, port), make_handler(svc))
+     threading.Thread(target=httpd.serve_forever, daemon=True).start()
+     return httpd
+diff --git a/serve/privacy.py b/serve/privacy.py
+new file mode 100644
+index 0000000..bec5b39
+--- /dev/null
++++ b/serve/privacy.py
+@@ -0,0 +1,47 @@
++"""Explicit text-only serving without application logs or diagnostic retention."""
++from __future__ import annotations
++
++import os
++import sys
++
++
++class NullLogBuffer:
++    """The log interface without a buffer, counters or retained messages."""
++
++    def add(self, src: str, text: str) -> None:
++        pass
++
++    def since(self, after_id: int = 0, limit: int = 500) -> tuple[list, int]:
++        return [], 0
++
++
++def silence_stdio() -> None:
++    """Discard Python and native output; inherited child descriptors stay quiet."""
++    sink = os.open(os.devnull, os.O_WRONLY)
++    try:
++        for fd in (1, 2):
++            os.dup2(sink, fd)
++    finally:
++        if sink not in (1, 2):
++            os.close(sink)
++    sys.stdout = open(os.devnull, "w", encoding="utf-8")
++    sys.stderr = open(os.devnull, "w", encoding="utf-8")
++
++
++def validate(args, engine_words: list[str]) -> None:
++    """Reject options that can expose or record request-derived information."""
++    if args.host not in ("127.0.0.1", "::1", "localhost"):
++        raise ValueError("privacy requires a loopback listener")
++    if args.debug or args.request_lines or args.open or args.vision != "off":
++        raise ValueError("privacy forbids debug, request-lines, open and vision")
++    if args.allowed_host or args.cors_origin:
++        raise ValueError("privacy forbids extra browser origins and Host names")
++    if args.unix_socket and not os.path.isabs(args.unix_socket):
++        raise ValueError("unix-socket requires an absolute path")
++    for word in engine_words:
++        name = word.split("=", 1)[0]
++        if name.startswith(("--dump", "--log", "--trace", "--expert-profile-save")) or name in (
++                "--draft-log", "--profile", "--stage-timing", "--vision", "--vision-mmproj"):
++            raise ValueError("privacy forbids engine diagnostics and image input")
++        if name in ("--conversation-cache-dir", "--conversation-cache-disk-mib"):
++            raise ValueError("privacy forbids writing conversations to disk")
+diff --git a/serve/server.py b/serve/server.py
+index cef80dd..9ec0511 100644
+--- a/serve/server.py
++++ b/serve/server.py
+@@ -40,6 +40,7 @@ from serve.service import Service  # noqa: E402
+ from serve.util.logbuf import ColorStream, LogBuffer, TeeStream, tail_file  # noqa: E402
+ from serve.util.console import LEGEND, tagged  # noqa: E402
+ from serve.util.text import ByteTokenizer  # noqa: E402
++from serve.privacy import NullLogBuffer, silence_stdio  # noqa: E402
+ 
+ 
+ def fail(msg: str) -> None:
+@@ -70,15 +71,20 @@ def grammar_entry(on: bool, cli: list[str], used: list[str]) -> tuple[bool, str]
+ 
+ 
+ def main() -> int:
++    if "--privacy" in sys.argv[1:]:
++        silence_stdio()
+     ap = build_parser()
+     try:
+         a, used_argv, file_engine, cli_engine = parse_settings(ap, sys.argv[1:])
+     except ValueError as e:
+         fail(f"--config: {e}")
++    if a.privacy and "--privacy" not in sys.argv[1:]:
++        silence_stdio()
+     service.DEBUG, engine_process.REQUEST_LINES = a.debug, a.request_lines
+-    logs = LogBuffer()                                  # this process's and the engine's output
+-    sys.stdout, sys.stderr = (TeeStream(ColorStream.wrap(sys.stdout), logs, "srv"),
+-                              TeeStream(ColorStream.wrap(sys.stderr), logs, "srv"))
++    logs = NullLogBuffer() if a.privacy else LogBuffer()
++    if not a.privacy:
++        sys.stdout, sys.stderr = (TeeStream(ColorStream.wrap(sys.stdout), logs, "srv"),
++                                  TeeStream(ColorStream.wrap(sys.stderr), logs, "srv"))
+     print(tagged("legend", LEGEND), flush=True)          # first line, so the key precedes every value
+     cfg = {}                                            # what the model file implies
+     try:
+@@ -131,10 +137,11 @@ def main() -> int:
+                                     grammar_entry(a.grammar, sys.argv[1:], used_argv)), flush=True)
+     if a.alias:
+         cfg["model_name"] = a.alias
+-    try:                                                # fail fast if the port is taken
+-        Server((a.host, a.port), BaseHTTPRequestHandler).server_close()
+-    except OSError:
+-        fail(f"port {a.port} is in use (--port N)")
++    if not a.unix_socket:
++        try:                                            # fail fast if the port is taken
++            Server((a.host, a.port), BaseHTTPRequestHandler).server_close()
++        except OSError:
++            fail(f"port {a.port} is in use (--port N)")
+     if cfg.get("tokenizer"):
+         a.tokenizer = cfg["tokenizer"]
+     tok = ByteTokenizer()
+@@ -170,12 +177,16 @@ def main() -> int:
+                 vision = Vision(cfg["vision"], log=open(cfg["log"], "a", encoding="utf-8") if cfg.get("log") else None,
+                                 env=vision_env(env, mode))
+         print(vision_line(cfg.get("vision"), cfg, vision.ready_s if vision else 0.0), flush=True)
++        if a.privacy:
++            cfg["log"] = None
+         if lazy:
+             print(tagged("model", "unloaded, the first request loads it"), flush=True)
+         if cfg.get("log"):                              # follow the engine's log file
+             threading.Thread(target=tail_file, args=(logs, cfg["log"], "eng"), daemon=True).start()
+-        else:
++        elif not a.privacy:
+             ProcessEngine.stderr_sink = lambda line: logs.add("eng", line)
++        else:
++            ProcessEngine.stderr_sink = None
+         known_flags = engine_flags_of(cfg["engine_bin"])
+         has_grammar = known_flags is not None and "--grammar" in known_flags
+         if a.grammar and not has_grammar:
+@@ -191,13 +202,14 @@ def main() -> int:
+             vision.attach(engine)
+     else:
+         engine, vision, sampling_defaults = MockEngine(tok, a.script or [
+-            "Thinking about it.</think>\n\nHello from the mock engine."], batch=a.parallel or 0), None, dict(a.sampling_launch)
++            "Thinking about it.</think>\n\nHello from the mock engine."], batch=a.parallel or 0,
++            record_requests=not a.privacy), None, dict(a.sampling_launch)
+     # the model's exported template, else the bundled one
+     tpl = tpath / "chat_template.jinja"
+     svc = Service(engine, tok, ChatTemplate(tpl if tpl.exists() else ROOT / "serve/chat_template.jinja"),
+                   model_name=cfg.get("model_name", "qwen3.8-flash-next"), vision=vision,
+                   sampling_defaults=sampling_defaults, fit_max_tokens=a.fit_max_tokens, grammar=a.grammar,
+-                  grammar_engine=bool(a.mock_engine or has_grammar))
++                  grammar_engine=bool(a.mock_engine or has_grammar), privacy=a.privacy)
+     svc.logs = logs
+     if any(x == "--api-key" and i + 1 < len(used_argv) and not used_argv[i + 1].strip() or x.strip() == "--api-key="
+            for i, x in enumerate(used_argv)):
+@@ -229,7 +241,7 @@ def main() -> int:
+     svc.thinking_loop_tokens = a.thinking_loop_tokens
+     svc.gpu_indices = gpus_in_play(cfg, engine_args(cfg) if not a.mock_engine else [])   # the cards /metrics reads
+     svc.gpu_index = svc.gpu_indices[0]
+-    httpd = serve(svc, host=a.host, port=a.port)
++    httpd = serve(svc, host=a.host, port=a.port, unix_socket=a.unix_socket)
+     svc.start_idle_unload()
+     svc.start_idle_sleep()
+     svc.on_loaded = lambda: announce()
+@@ -285,7 +297,7 @@ def main() -> int:
+     except KeyboardInterrupt:
+         if not rc:
+             print("[server] stopping (Ctrl+C again to force)", flush=True)
+-        closers = [svc.stop, httpd.shutdown, getattr(engine, "close", None), vision.close if vision else None]
++        closers = [svc.stop, httpd.shutdown, httpd.server_close, getattr(engine, "close", None), vision.close if vision else None]
+         for close in filter(None, closers):
+             try:
+                 close()
+diff --git a/serve/service.py b/serve/service.py
+index 769fb66..96b6df1 100644
+--- a/serve/service.py
++++ b/serve/service.py
+@@ -14,6 +14,7 @@ from serve.engine.errors import EngineDied, EngineSilent, EngineStartError, Engi
+ from serve.engine.mock import Engine
+ from serve.frontend import ChatTemplate, Event, OutputParser, images_of, literal_tags, mark_think_literals, unmark_think_literals
+ from serve.util.logbuf import LogBuffer
++from serve.privacy import NullLogBuffer
+ from serve.security import LOOPBACK_NAMES
+ from serve.prompt import CTX_SLACK, PromptText, overflow_error, room_error
+ from serve.util.text import Detokenizer, IM_END, StopMatcher, control_literals, stop_strings
+@@ -80,8 +81,12 @@ class Service:
+ 
+     def __init__(self, engine: Engine, tokenizer, template: ChatTemplate, model_name: str = "qwen3.8-flash-next",
+                  vision: Vision | None = None, sampling_defaults: dict | None = None,
+-                 fit_max_tokens: bool = False, grammar: bool = GRAMMAR_DEFAULT, grammar_engine: bool = True):
++                 fit_max_tokens: bool = False, grammar: bool = GRAMMAR_DEFAULT, grammar_engine: bool = True,
++                 privacy: bool = False):
+         self.engine, self.tok, self.template, self.model, self.vision = engine, tokenizer, template, model_name, vision
++        if privacy and vision is not None:
++            raise ValueError("privacy requires vision disabled")
++        self.privacy = privacy
+         self.literals = literal_tags(control_literals(tokenizer))   # control texts that stay text inside a message
+         self.fit_max_tokens = fit_max_tokens          # clamp the output cap instead of a 400
+         self.grammar = grammar                        # the `grammar` option: every tool or JSON request gets one
+@@ -93,7 +98,7 @@ class Service:
+         self.api_key = ""                              # when set, /v1/* requires it
+         # put a non-default reasoning effort in a system turn before the answer so the cached prefix survives
+         self.effort_end = False
+-        self.logs = LogBuffer()                         # server and engine output
++        self.logs = NullLogBuffer() if privacy else LogBuffer()
+         # origins allowed to call /v1/* (CORS; "*" = any); empty: no CORS headers
+         self.cors_origins: list[str] = []
+         # origins treated as the server's own page for the load/unload/VRAM controls (no wildcard)
+@@ -166,8 +171,9 @@ class Service:
+             return budget
+         room = max_new - min(max(ANSWER_RESERVE_MIN, max_new // 4), max_new // 2)
+         if budget is None or budget > room:
+-            print(f"[server] thinking budget {room} tokens, output cap {max_new} (--no-answer-room disables)",
+-                  flush=True)
++            if not self.privacy:
++                print(f"[server] thinking budget {room} tokens, output cap {max_new} (--no-answer-room disables)",
++                      flush=True)
+             return room
+         return budget
+ 
+@@ -482,6 +488,8 @@ class Service:
+ 
+     def start_telemetry(self):
+         """Start the hardware sampler behind GET /metrics, including this server's speeds."""
++        if self.privacy:
++            return
+         if getattr(self, "telemetry", None) is None:
+             from serve.util.telemetry import Telemetry
+             self.telemetry = Telemetry(extra=lambda: {"tok_s": self._tok_s(),
+@@ -804,6 +812,8 @@ class Service:
+         return ids, kwargs.get("enable_thinking", True) is not False, max_new
+ 
+     def _note(self, n, evs, st=None, rate=None):
++        if self.privacy:
++            return
+         with self.status_lock:
+             s = self.status if st is None else st
+             s["generated"] = n
+@@ -836,6 +846,8 @@ class Service:
+ 
+     def live_line(self, now: float) -> str | None:
+         """One line for every request that is generating; None when none is."""
++        if self.privacy:
++            return None
+         with self.status_lock:
+             reqs = [st for st, _ in self.live_reqs.values()] or ([self.status] if self.status.get("busy") else [])
+             rows = []
+@@ -857,6 +869,8 @@ class Service:
+ 
+     def _progress(self, last_print, every=1.0, st=None):
+         """Print progress while a request runs: its prompt read, then the shared live line."""
++        if self.privacy:
++            return last_print
+         now = time.time()
+         with self.status_lock:
+             s = dict(self.status if st is None else st)
+@@ -1025,9 +1039,11 @@ class Service:
+                                         ended_thinking = True
+                                         break
+                                     finish = "stop"
+-                                    raw_ids.append(t)
++                                    if DEBUG and not self.privacy:
++                                        raw_ids.append(t)
+                                     break
+-                                raw_ids.append(t)
++                                if DEBUG and not self.privacy:
++                                    raw_ids.append(t)
+                                 seg.append(t)
+                                 if parser.state == "reasoning":
+                                     run_n = run_n + 1 if t == run_id else 1
+@@ -1127,7 +1143,8 @@ class Service:
+                                 break                   # no room for the call: "length"
+                         for t in extra:
+                             n += 1
+-                            raw_ids.append(t)
++                            if DEBUG and not self.privacy:
++                                raw_ids.append(t)
+                             thinking_n += parser.state == "reasoning"
+                             evs = cut(parser.feed(detok.push(t)))
+                             self._note(n, evs, st, rate)
+@@ -1158,42 +1175,51 @@ class Service:
+                             pcie_share = round(last["offloaded"] / routed, 3) \
+                                 if last.get("offloaded") is not None and routed else None
+                             seen = prompt_tokens_seen(len(ids), last)   # less than len(ids) when cancelled mid-read
+-                            self.requests_done += 1
+-                            if st.get("slot") is not None:
+-                                self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
+-                                                              "accepted": last.get("drafts_accepted"), "at": time.time()}
+                             ft = st.get("first_token")
+                             ttft = ft - st["started"] if ft and st.get("started") else None
+                             windows, window_tokens = st.get("windows") or 0, st.get("window_tokens") or 0
+                             dl = window_tokens / windows if windows else None
+-                            self.history.append({
+-                                "id": f"r_{self.requests_done:04d}", "path": path, "slot": self._slot_of(st),
+-                                "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,
+-                                "prompt_tokens": seen, "reused": last.get("reused"), "output_tokens": n,
+-                                "prompt_ms": last.get("prompt_ms"),
+-                                "decode_tok_s": round(last["generated"] / (last["decode_ms"] / 1000), 1)
+-                                if n and last.get("generated") and last.get("decode_ms") else None,
+-                                "hit_rate": hit_rate, "pcie_share": pcie_share,
+-                                "drafts_offered": last.get("drafts_offered"),
+-                                "drafts_accepted": last.get("drafts_accepted"),
+-                                "ttft_s": round(ttft, 2) if ttft is not None else None,
+-                                "draft_len": round(dl, 2) if dl is not None else None})
+-                            self._note_best(self.history[-1])
++                            if not self.privacy:
++                                self.requests_done += 1
++                                if st.get("slot") is not None:
++                                    self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
++                                                                  "accepted": last.get("drafts_accepted"), "at": time.time()}
++                                self.history.append({
++                                    "id": f"r_{self.requests_done:04d}", "path": path, "slot": self._slot_of(st),
++                                    "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,
++                                    "prompt_tokens": seen, "reused": last.get("reused"), "output_tokens": n,
++                                    "prompt_ms": last.get("prompt_ms"),
++                                    "decode_tok_s": round(last["generated"] / (last["decode_ms"] / 1000), 1)
++                                    if n and last.get("generated") and last.get("decode_ms") else None,
++                                    "hit_rate": hit_rate, "pcie_share": pcie_share,
++                                    "drafts_offered": last.get("drafts_offered"),
++                                    "drafts_accepted": last.get("drafts_accepted"),
++                                    "ttft_s": round(ttft, 2) if ttft is not None else None,
++                                    "draft_len": round(dl, 2) if dl is not None else None})
++                                self._note_best(self.history[-1])
+                             fresh = getattr(self.engine, "last", None)
+                             if fresh is not None and fresh is not before:      # a DONE line arrived for this request
+                                 timings = request_timings(seen, n, last)
+-                                self.last_timings = dict(timings, at=int(time.time())) if timings else None
++                                if not self.privacy:
++                                    self.last_timings = dict(timings, at=int(time.time())) if timings else None
+                             self.last_request_at = time.time()
+-                            now = time.time()
+-                            rate = n / max(1e-6, now - ft) if ft else 0.0
+-                            print(done_line(self._slot_of(st), seen, n, finish, cancel.is_set(), timings, ttft, rate,
+-                                            dl, hit_rate, pcie_share), flush=True)
+-                            if finish == "length" and parser.state == "reasoning":
+-                                print("[server] warning: max tokens reached while thinking, no answer "
+-                                      "(set reasoning_budget_tokens, or start with --reasoning-budget-tokens)",
+-                                      flush=True)
+-                            if DEBUG and raw_ids:
+-                                print(f"[server] raw: {self.tok.decode(raw_ids)!r}", flush=True)
++                            if not self.privacy:
++                                now = time.time()
++                                rate = n / max(1e-6, now - ft) if ft else 0.0
++                                print(done_line(self._slot_of(st), seen, n, finish, cancel.is_set(), timings, ttft, rate,
++                                                dl, hit_rate, pcie_share), flush=True)
++                                if finish == "length" and parser.state == "reasoning":
++                                    print("[server] warning: max tokens reached while thinking, no answer "
++                                          "(set reasoning_budget_tokens, or start with --reasoning-budget-tokens)",
++                                          flush=True)
++                                if DEBUG and raw_ids:
++                                    print(f"[server] raw: {self.tok.decode(raw_ids)!r}", flush=True)
++                        if self.privacy:
++                            queued = st.get("queued", 0)
++                            st.clear()
++                            st["queued"] = queued
++                            if not par:
++                                self.rate.clear()
+                         st["busy"] = False
+                         st.pop("tail", None)                     # drop the tail once done
+                         st.pop("tool", None)
+@@ -1202,6 +1228,10 @@ class Service:
+                             if self.live_reqs:              # the newest request still running
+                                 self.status.update(list(self.live_reqs.values())[-1][0])
+                             else:
++                                if self.privacy:
++                                    queued = self.status.get("queued", 0)
++                                    self.status.clear()
++                                    self.status["queued"] = queued
+                                 self.status.update(busy=False)
+                                 self.status.pop("tail", None)
+                                 self.status.pop("tool", None)
+diff --git a/serve/tests/test_privacy.py b/serve/tests/test_privacy.py
+new file mode 100644
+index 0000000..f06e5d7
+--- /dev/null
++++ b/serve/tests/test_privacy.py
+@@ -0,0 +1,160 @@
++"""Privacy admission, streaming parity, diagnostics retention and quiet process startup."""
++from __future__ import annotations
++
++import contextlib
++import http.client
++import io
++import json
++import os
++import socket
++import subprocess
++import tempfile
++import sys
++import time
++import unittest
++import urllib.error
++import urllib.request
++from pathlib import Path
++
++from serve.config import build_parser, parse_settings
++from serve.engine.mock import MockEngine
++from serve.frontend import ChatTemplate
++from serve.handler import serve
++from serve.privacy import NullLogBuffer
++from serve.service import Service
++from serve.util.text import ByteTokenizer
++
++ROOT = Path(__file__).resolve().parents[2]
++HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
++
++
++def request(base, path, body=None):
++    req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body is not None else None,
++                                 headers={"Content-Type": "application/json"})
++    try:
++        with HTTP.open(req, timeout=5) as response:
++            return response.status, response.read()
++    except urllib.error.HTTPError as error:
++        with error:
++            return error.code, error.read()
++
++
++class Privacy(unittest.TestCase):
++    @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "Unix sockets required")
++    def test_unix_socket_preserves_thinking_and_has_no_tcp_listener(self):
++        tok = ByteTokenizer()
++        engine = MockEngine(tok, "checking.</think>\n\nanswer", record_requests=False)
++        svc = Service(engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++        with tempfile.TemporaryDirectory() as directory:
++            path = str(Path(directory) / "basalt.sock")
++            httpd = serve(svc, unix_socket=path)
++            try:
++                self.assertEqual(httpd.socket.family, socket.AF_UNIX)
++                client = http.client.HTTPConnection("localhost", timeout=5)
++                client.sock = socket.socket(socket.AF_UNIX)
++                client.sock.connect(path)
++                client.request("POST", "/v1/chat/completions", json.dumps({"model": svc.model,
++                    "messages": [{"role": "user", "content": "hello"}], "stream": True}),
++                    {"Content-Type": "application/json"})
++                with client.getresponse() as response:
++                    raw = response.read()
++                    self.assertEqual(response.status, 200)
++                self.assertIn(b"reasoning_content", raw)
++                self.assertIn(b"[DONE]", raw)
++                self.assertFalse(svc.history)
++            finally:
++                svc.stop(); httpd.shutdown(); httpd.server_close()
++            self.assertFalse(Path(path).exists())
++
++    def test_diagnostic_network_and_image_options_are_rejected(self):
++        for flags in (["--debug"], ["--request-lines"], ["--open"], ["--vision", "cpu"],
++                      ["--host", "0.0.0.0"], ["--cors-origin", "*"], ["--allowed-host", "*"],
++                      ["--draft-log", "out"], ["--dump-routing", "out"],
++                      ["--expert-profile-save", "out"], ["--profile"],
++                      ["--conversation-cache-dir", "out"], ["--conversation-cache-disk-mib", "64"]):
++            with self.subTest(flags=flags), self.assertRaises(ValueError):
++                parse_settings(build_parser(), ["--privacy", *flags])
++        args, _, _, _ = parse_settings(build_parser(), ["--privacy", "--model", "m.basalt", "--kv", "int8"])
++        self.assertTrue(args.privacy)
++
++    def test_answer_room_is_quiet_in_privacy_mode(self):
++        tok = ByteTokenizer()
++        svc = Service(MockEngine(tok, "done", record_requests=False), tok,
++                      ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++        output = io.StringIO()
++        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
++            self.assertLess(svc.answer_budget({}, 4096, None), 4096)
++        self.assertEqual(output.getvalue(), "")
++
++    def test_null_logger_never_keeps_messages(self):
++        logs = NullLogBuffer()
++        logs.add("server", "sensitive marker")
++        self.assertEqual(logs.since(), ([], 0))
++        self.assertEqual(vars(logs), {})
++
++    def test_api_streams_without_history_metrics_or_image_downloads(self):
++        tok = ByteTokenizer()
++        engine = MockEngine(tok, "</think>\n\nprivate answer", record_requests=False)
++        svc = Service(engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++        httpd = serve(svc, port=0)
++        base = f"http://127.0.0.1:{httpd.server_address[1]}"
++        try:
++            status, body = request(base, "/health")
++            self.assertEqual(status, 200)
++            self.assertEqual(json.loads(body)["link_privacy"]["application_logs"], False)
++            for path in ("/", "/metrics", "/api/logs", "/status", "/slots", "/props", "/web/app.js"):
++                self.assertEqual(request(base, path)[0], 404)
++            self.assertEqual(request(base, "/v1/unload", {})[0], 404)
++            prompt = {"model": svc.model, "messages": [{"role": "user", "content": "private question"}], "stream": True}
++            with contextlib.redirect_stdout(io.StringIO()):
++                status, body = request(base, "/v1/chat/completions", prompt)
++            self.assertEqual(status, 200)
++            events = [json.loads(line[6:]) for line in body.decode().splitlines()
++                      if line.startswith("data: {")]
++            text = "".join(event["choices"][0].get("delta", {}).get("content", "") for event in events)
++            self.assertEqual(text, "private answer")
++            self.assertIn(b"[DONE]", body)
++            self.assertFalse(svc.history)
++            self.assertFalse(svc.slot_last)
++            self.assertFalse(svc.best)
++            self.assertEqual(svc.requests_done, 0)
++            self.assertIsNone(svc.last_timings)
++            self.assertEqual(svc.logs.since(), ([], 0))
++            self.assertFalse(getattr(svc, "telemetry", None))
++            self.assertFalse(engine.requests)
++            self.assertFalse(engine.last_prompt)
++            self.assertNotIn("tail", svc.status)
++            image = {"model": svc.model, "messages": [{"role": "user", "content": [
++                {"type": "image_url", "image_url": {"url": "http://127.0.0.1:1/must-not-fetch"}}]}]}
++            self.assertEqual(request(base, "/v1/chat/completions", image)[0], 400)
++        finally:
++            svc.stop()
++            httpd.shutdown()
++            httpd.server_close()
++
++    def test_private_server_emits_no_stdout_or_stderr(self):
++        with socket.socket() as sock:
++            sock.bind(("127.0.0.1", 0))
++            port = sock.getsockname()[1]
++        proc = subprocess.Popen([sys.executable, "-B", "-m", "serve.server", "--privacy", "--mock-engine",
++                                 "--port", str(port)], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
++                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
++        try:
++            deadline = time.monotonic() + 10
++            while True:
++                try:
++                    self.assertEqual(request(f"http://127.0.0.1:{port}", "/health")[0], 200)
++                    break
++                except (OSError, urllib.error.URLError):
++                    if time.monotonic() > deadline or proc.poll() is not None:
++                        self.fail("privacy server did not start")
++                    time.sleep(0.05)
++        finally:
++            proc.terminate()
++            stdout, stderr = proc.communicate(timeout=10)
++        self.assertEqual(stdout, b"")
++        self.assertEqual(stderr, b"")
++
++
++if __name__ == "__main__":
++    unittest.main()

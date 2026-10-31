@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["link"],
+  "share": "disabled",
+  "permission": {
+    "webfetch": "ask",
+    "websearch": "ask",
+    "bash": "ask"
+  },
+  "provider": {
+    "link": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Basalt via k-lani-link",
+      "options": {
+        "baseURL": "http://127.0.0.1:8787/v1"
+      },
+      "models": {
+        "REPLACE_WITH_BASALT_MODEL_ID": {
+          "name": "Basalt at home"
+        }
+      }
+    }
+  }
+}

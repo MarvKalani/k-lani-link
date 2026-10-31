@@ -1,0 +1,285 @@
+/* k-lani-link landing page — local styles only, no external assets */
+
+:root {
+  --bg: #0f1520;
+  --panel: #17202f;
+  --panel-2: #1d2939;
+  --ink: #e8edf5;
+  --muted: #9fb0c6;
+  --accent: #4fb3a3;
+  --accent-2: #7cd0c2;
+  --line: #2a3a52;
+  --warn-bg: #23211b;
+  --warn-line: #8a7a3f;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  background:
+    radial-gradient(1200px 700px at 80% -10%, #1b2a3d 0%, transparent 60%),
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+a { color: var(--accent-2); }
+a:hover { color: #a8e4da; }
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+}
+.skip-link:focus {
+  position: fixed;
+  left: 8px;
+  top: 8px;
+  z-index: 10;
+  background: var(--ink);
+  color: var(--bg);
+  padding: 6px 10px;
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 clamp(16px, 4vw, 40px);
+}
+
+/* Top bar */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: 1.15rem;
+}
+.brand .dot { color: var(--accent-2); }
+.nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-left: auto;
+}
+.nav-links a { text-decoration: none; font-size: 0.95rem; }
+.nav-links a:hover, .nav-links a[aria-current="page"] { text-decoration: underline; }
+
+/* Hero */
+header {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(240px, 4fr);
+  gap: clamp(24px, 4vw, 48px);
+  align-items: center;
+  padding: clamp(32px, 6vw, 72px) 0;
+}
+h1 {
+  font-size: clamp(1.9rem, 4.5vw, 3rem);
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+h1 .sub {
+  display: block;
+  font-size: 0.45em;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.lede {
+  font-size: clamp(1.02rem, 2vw, 1.2rem);
+  color: var(--muted);
+  max-width: 62ch;
+}
+.hero-figure {
+  margin: 0;
+  justify-self: center;
+}
+.hero-figure img {
+  display: block;
+  width: min(100%, 320px);
+  height: auto;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+.hero-figure figcaption {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.cta {
+  display: inline-block;
+  margin: 10px 12px 0 0;
+  padding: 10px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #08121e;
+  font-weight: 600;
+  text-decoration: none;
+}
+.cta:hover { background: var(--accent-2); color: #08121e; }
+
+/* Sections */
+section {
+  padding: clamp(28px, 5vw, 56px) 0;
+  border-top: 1px solid var(--line);
+}
+h2 {
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  margin: 0 0 18px;
+}
+.kicker {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+
+/* Architecture cards */
+.card-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 18px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+}
+.card h3 { margin: 0 0 8px; font-size: 1.06rem; }
+.card h3 .tag {
+  float: right;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--accent-2);
+}
+.card p { margin: 0 0 10px; color: var(--muted); }
+.card p:last-of-type { margin-bottom: 0; }
+
+.steps {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+.steps li { margin-bottom: 6px; }
+.steps b { color: var(--ink); font-weight: 600; }
+
+code { font-family: var(--mono); font-size: 0.92em; color: #cfe8e2; }
+.note {
+  margin: 14px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  border-left: 3px solid var(--accent);
+  padding: 6px 12px;
+  background: var(--panel-2);
+  border-radius: 0 8px 8px 0;
+}
+
+/* Flow diagram (pure CSS, no images) */
+.flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 22px;
+}
+.flow .node {
+  flex: 1 1 160px;
+  text-align: center;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 0.9rem;
+}
+.flow .arrow {
+  align-self: center;
+  color: var(--accent-2);
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+/* Use case section */
+.case-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: 18px;
+}
+.filelist {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.filelist li {
+  padding: 10px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.filelist .fname { font-family: var(--mono); font-size: 0.92em; }
+
+/* Accuracy / claims box */
+.claims {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  margin-top: 18px;
+}
+.claims h2 { margin-bottom: 10px; }
+.claims ul { margin: 0; padding-left: 22px; }
+.claims li { margin-bottom: 8px; color: var(--ink); }
+.claims strong { color: #f3d98f; }
+
+footer {
+  padding: 34px 0 44px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  border-top: 1px solid var(--line);
+}
+footer p { margin: 0 0 8px; }
+
+@media (max-width: 760px) {
+  header { grid-template-columns: 1fr; }
+  .hero-figure { justify-self: start; margin-top: 18px; }
+  .hero-figure img { width: min(100%, 260px); }
+  nav-links { margin-left: 0; }
+  .flow .arrow { transform: rotate(90deg); width: 100%; text-align: center; }
+  .flow .node { flex-basis: 100%; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card, .cta { transition: transform 140ms ease, background 140ms ease; }
+  .card:hover { transform: translateY(-2px); }
+}
+
+@media print {
+  body { background: #fff; color: #111; }
+  .card, .claims, .flow { break-inside: avoid; }
+}

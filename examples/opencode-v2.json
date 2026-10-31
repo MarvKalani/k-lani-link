@@ -1,0 +1,90 @@
+{
+  "model": "link/basalt",
+  "default_agent": "build",
+  "update": "disable",
+  "share": "disabled",
+  "warming": false,
+  "snapshots": false,
+  "formatter": false,
+  "lsp": false,
+  "providers": {
+    "link": {
+      "name": "Basalt via k-lani-link",
+      "env": [
+        "LINK_API_KEY"
+      ],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:8787/v1"
+      },
+      "compatibility": {
+        "reasoningField": "reasoning_content",
+        "maxTokensField": "max_tokens",
+        "streamUsage": true
+      },
+      "body": {
+        "store": false,
+        "reasoning_effort": "medium"
+      },
+      "models": {
+        "basalt": {
+          "modelID": "MODELL_ID_AUS_V1_MODELS",
+          "name": "MODELL_ID_AUS_V1_MODELS \u00b7 k-lani-link \u00b7 256K",
+          "limit": {
+            "context": 262144,
+            "output": 16384
+          },
+          "capabilities": {
+            "tools": true,
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ],
+            "reasoning": {
+              "supported": true
+            }
+          },
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "policies": [
+    {
+      "action": "provider.use",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "link",
+      "effect": "allow"
+    }
+  ],
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "webfetch",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "task",
+      "resource": "*",
+      "effect": "deny"
+    }
+  ]
+}

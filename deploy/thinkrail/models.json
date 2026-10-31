@@ -1,0 +1,16 @@
+{
+  "default": "coder",
+  "context_tokens": 262144,
+  "kv_cache": "int8",
+  "presets": {
+    "coder": {
+      "example_file": "Qwen3.8-FN-GSQ-RCO-Coder.basalt",
+      "description": "Local Coder pack; preferred for the coding demo. Model ID is discovered from Basalt."
+    },
+    "nvfp4": {
+      "example_file": "Qwen3.8-FN-NVFP4.basalt",
+      "description": "Alternative NVIDIA NVFP4 pack; run and measure separately. Model ID is discovered from Basalt."
+    }
+  },
+  "quality_note": "Pack names do not establish quality scores. Match exact pack provenance before comparing benchmark tables."
+}

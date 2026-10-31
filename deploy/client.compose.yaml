@@ -1,0 +1,41 @@
+# Run on the client computer. The transport and application have separate networks.
+name: k-lani-link-client
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+  restart: 'no'
+services:
+  client:
+    <<: *locked
+    image: k-lani-link-host:local
+    build: {context: .., dockerfile: deploy/link.Dockerfile}
+    network_mode: host
+    command: [client, --config, /run/secrets/client.toml, --api-socket, /run/link-api/api.sock]
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    volumes:
+      - '${LINK_CLIENT_CONFIG:?Set the absolute private client.toml path}:/run/secrets/client.toml:ro'
+      - api_socket:/run/link-api
+      - pairing_state:/var/lib/link
+  api-test:
+    <<: *locked
+    profiles: [tools]
+    image: python:3.12-slim
+    user: '1000:1000'
+    network_mode: none
+    mem_limit: 128m
+    memswap_limit: 128m
+    entrypoint: [python, -B, /opt/link-request.py]
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    volumes:
+      - './client-request.py:/opt/link-request.py:ro'
+      - '${LINK_CLIENT_CONFIG}:/run/secrets/client.toml:ro'
+      - api_socket:/run/link-api:ro
+volumes:
+  pairing_state:
+  api_socket:
+    name: ${LINK_API_VOLUME:-k-lani-link-client_api_socket}
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}

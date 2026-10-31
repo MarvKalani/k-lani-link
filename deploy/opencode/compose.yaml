@@ -1,0 +1,62 @@
+name: k-lani-opencode-test
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+  restart: 'no'
+services:
+  guard:
+    <<: *locked
+    image: k-lani-thinkrail-guard:local
+    build: {context: ../.., dockerfile: deploy/thinkrail/guard.Dockerfile}
+    cap_add: [NET_ADMIN]
+    environment: {LINK_STATS_PORT: '8081'}
+    ports: ['127.0.0.1:24244:8080', '127.0.0.1:24245:8081']
+    dns: ['127.0.0.1']
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=1m,mode=0700']
+    healthcheck:
+      test: [CMD, test, -f, /tmp/guard.ready]
+      interval: 1s
+      timeout: 1s
+      retries: 5
+  opencode:
+    <<: *locked
+    image: k-lani-opencode:2.2.0
+    build: {context: ../.., dockerfile: deploy/opencode/Dockerfile}
+    network_mode: none
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,exec,size=128m,uid=1000,gid=1000,mode=1777
+      - /home/opencode/.cache:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700
+      - /home/opencode/.local/share/opencode/log:rw,nosuid,nodev,noexec,size=8m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - opencode_home:/home/opencode
+      - '${LINK_CLIENT_CONFIG}:/run/secrets/client.toml:ro'
+      - '${OPENCODE_TEST_ROOT}/secrets/server-password.txt:/run/secrets/server-password.txt:ro'
+      - '${OPENCODE_TEST_ROOT}/work:/work'
+      - '${OPENCODE_TEST_ROOT}/ui:/run/opencode-ui'
+      - link_api:/run/link-api:ro
+  ui:
+    <<: *locked
+    image: nginx:1.29-alpine
+    user: '1000:1000'
+    entrypoint: [nginx, -g, 'daemon off;']
+    network_mode: service:guard
+    depends_on: {guard: {condition: service_healthy}, opencode: {condition: service_started}}
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700']
+    volumes:
+      - './nginx.conf:/etc/nginx/nginx.conf:ro'
+      - '${OPENCODE_TEST_ROOT}/ui:/run/opencode-ui:ro'
+      - '${OPENCODE_TEST_ROOT}/secrets/proxy-auth.conf:/run/secrets/proxy-auth.conf:ro'
+      - '../thinkrail/stats.html:/opt/link-stats.html:ro'
+      - '${OPENCODE_TEST_ROOT}/metrics:/run/link-metrics:ro'
+volumes:
+  opencode_home:
+  link_api:
+    external: true
+    name: ${LINK_API_VOLUME:-k-lani-thinkrail-test_api_socket}

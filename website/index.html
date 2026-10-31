@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="k-lani-link: an encrypted peer-to-peer bridge between a client app and a swappable inference backend — landing page for a synthetic workflow demonstration.">
+<title>k-lani-link — encrypted peer bridge for a local AI client</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand">k-lani-link<span class="dot">●</span></span>
+    <nav class="nav-links" aria-label="Page sections">
+      <a href="#architecture">Architecture</a>
+      <a href="#flow">Request path</a>
+      <a href="#use-case">Use case</a>
+      <a href="#claims">What this demo does not claim</a>
+    </nav>
+  </div>
+</div>
+
+<main id="main">
+<div class="wrap"><p class="note">This page was originally generated in a local-model demonstration. The product name and artwork were subsequently updated by the operator. The example documents remain unchanged.</p></div>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Encrypted, local, peer-to-peer AI plumbing <span class="sub">k-lani-link</span></h1>
+      <p class="lede">
+        A client application — such as OpenCode — talks to a local, OpenAI-compatible
+        inference API. <strong>k-lani-link</strong> pairs two peers and authenticates
+        them to each other, and the inference payloads ride a direct
+        <strong>encrypted peer channel</strong>: WebRTC secured with DTLS plus an additional
+        layer of content encryption. Direct does not mean LAN-only — that channel can
+        traverse the public internet; the protection is cryptographic, not geographic.
+      </p>
+      <a class="cta" href="#architecture">See how it works</a>
+    </div>
+    <figure class="hero-figure">
+      <img src="assets/k-lani-link.webp" width="1024" height="1536" alt="Project artwork for k-lani-link: a stylized bird illustration. It is not a network diagram.">
+      <figcaption>Project artwork for k-lani-link — supplied artwork with its product label updated (artwork only; the request path is described in the Architecture section).</figcaption>
+    </figure>
+  </header>
+
+  <section id="architecture">
+    <span class="kicker">Architecture</span>
+    <h2>How the encrypted path works</h2>
+    <div class="card-grid">
+      <article class="card">
+        <h3>Local API endpoint <span class="tag">OPENAI-COMPATIBLE</span></h3>
+        <p>The client app sends chat/completion calls to a local, OpenAI-compatible
+        API. The inference backend behind that endpoint is <strong>replaceable</strong>:
+        swap models or servers without changing the client.</p>
+        <p>The client never needs a public endpoint for the demo to work.</p>
+      </article>
+      <article class="card">
+        <h3>Peer pairing &amp; authentication <span class="tag">WEBRTC + DTLS</span></h3>
+        <p><strong>k-lani-link</strong> pairs the two peers and authenticates each to the
+        other before any payload traffic flows. The two peers are the <strong>k-lani-link
+        client</strong> on the app side and the <strong>k-lani-link host</strong> — the peer
+        process running on the <strong>model machine</strong>, not a central hosting
+        service. Transport is WebRTC: the channel is secured with DTLS, and payloads
+        additionally pass through content-level encryption, so data is protected in
+        transit <em>and</em> at the payload level.</p>
+      </article>
+      <article class="card">
+        <h3>Signaling closes after pairing <span class="tag">DISCONNECT</span></h3>
+        <p><strong>Pairing is a setup step that completes before the first API call</strong>
+        (not re-negotiated per request), and the <strong>signaling connection closes once
+        pairing completes</strong>. A closed signaling socket right after rendezvous is
+        the expected, healthy state — not an error and not an open attack surface.</p>
+        <p>Keep the two kinds of traffic apart: <strong>setup traffic</strong> (pairing,
+        toward configured signaling/STUN services) versus <strong>inference payload
+        traffic</strong> over the encrypted peer channel.</p>
+      </article>
+      <article class="card">
+        <h3>TURN is explicit opt-in <span class="tag">OFF BY DEFAULT</span></h3>
+        <p>TURN relay is <strong>disabled by default</strong>; enabling it requires an
+        explicit setting, so no relay is involved unless you deliberately opt in. And a
+        relay is not a man in the middle of your data: even when enabled, a TURN server
+        only <strong>relays this peer connection</strong> — it carries the
+        <strong>encrypted channel</strong>, not the plaintext inference payload.</p>
+      </article>
+      <article class="card">
+        <h3>Streaming responses <span class="tag">STREAMED</span></h3>
+        <p>Where the model/provider and the client both support it, responses —
+        including <strong>reasoning fields and tool calls</strong> — arrive as a stream
+        rather than one large blob, so the UI updates as tokens (and tool events) land.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="flow">
+    <span class="kicker">Request path</span>
+    <h2>One request, step by step</h2>
+    <div class="flow" role="img" aria-label="Client app, to k-lani-link client, over the encrypted peer channel, to the k-lani-link host on the model machine, to the inference backend, to a streamed reply">
+      <span class="node">Client app (e.g. OpenCode)</span>
+      <span class="arrow" aria-hidden="true">→</span>
+      <span class="node">k-lani-link client (client-side peer)</span>
+      <span class="arrow" aria-hidden="true">→</span>
+      <span class="node">Encrypted peer channel</span>
+      <span class="arrow" aria-hidden="true">→</span>
+      <span class="node">k-lani-link host (model machine)</span>
+      <span class="arrow" aria-hidden="true">→</span>
+      <span class="node">Inference backend</span>
+      <span class="arrow" aria-hidden="true">→</span>
+      <span class="node">Streamed reply, reasoning &amp; tool calls</span>
+    </div>
+    <ol class="steps">
+      <li><b>Before any API call</b>, two peer processes pair: the <b>k-lani-link client</b> on the app side and the <b>k-lani-link host</b> on the model machine rendezvous via a <b>separate signaling broker</b> — the host is one of the peers, not a central intermediary. They authenticate during pairing, and the signaling connection <b>closes after pairing</b>.</li>
+      <li>The client app then talks to its local OpenAI-compatible API; each call's <b>inference payload</b> rides the already-established <b>encrypted peer channel</b> — <b>DTLS</b> on the transport, <b>content encryption</b> on the payload. Pairing is not re-requested per call.</li>
+      <li>The channel is direct peer-to-peer and can still <b>traverse the internet</b>; direct does not mean LAN-only.</li>
+      <li><b>Setup traffic</b> (pairing toward configured signaling/STUN services) is distinct from <b>payload traffic</b> over the encrypted peer channel; if TURN is enabled explicitly, the relay carries only the <b>encrypted channel</b>.</li>
+      <li>The <b>inference backend</b> answers with <b>streamed model responses</b> when supported; the backend behind the endpoint is swappable.</li>
+    </ol>
+    <p class="note">The privacy posture covers the channel: encrypted in transit, peer to
+    peer — wherever that channel runs. It says nothing about what each peer's device stores,
+    and it is not the same thing as keeping everything on a LAN.</p>
+  </section>
+
+  <section id="use-case">
+    <span class="kicker">Use case</span>
+    <h2>The invoice-and-ledger workflow</h2>
+    <div class="case-grid">
+      <article class="card">
+        <h3>What the demo does <span class="tag">FICTIONAL</span></h3>
+        <p>A small business workflow: an agent drafts a clearly laid-out one-page
+        <strong>invoice</strong> for a fictional issuer and customer, then records the
+        same line items in a <strong>spreadsheet ledger</strong> with quantity, rate and
+        totals formulas. It shows an AI client doing practical office work end-to-end
+        on the local encrypted path.</p>
+        <p>"Fictional" applies to the <strong>demo data</strong>: every person, document and
+        figure is synthetic — no real customer data, identifiers or payment instructions exist
+        anywhere in the demo. The <strong>architecture described on this page is the product's
+        real one</strong>, not part of the fiction.</p>
+      </article>
+      <article class="card">
+        <h3>Artifacts produced <span class="tag">LOCAL FILES</span></h3>
+        <ul class="filelist">
+          <li><span class="fname"><a href="examples/invoice.docx">invoice.docx</a></span> — editable one-page invoice</li>
+          <li><span class="fname"><a href="examples/invoice.pdf">invoice.pdf</a></span> — the same invoice in PDF</li>
+          <li><span class="fname"><a href="examples/ledger.xlsx">ledger.xlsx</a></span> — line items with live formulas</li>
+          <li><span class="fname"><a href="examples/ledger.html">ledger.html</a></span> — quick HTML preview of the ledger</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section id="claims">
+    <div class="claims">
+      <span class="kicker">Accuracy</span>
+      <h2>What this demo does not claim</h2>
+      <ul>
+        <li><strong>No automatic GDPR compliance or certification.</strong> An encrypted channel
+        does not certify GDPR conformance; compliance is a legal and organizational process,
+        not a property a tool can grant you.</li>
+        <li><strong>Organizational policy, device security and local history still matter.</strong>
+        The agent keeps its own local history on the device, and transport encryption does
+        nothing about endpoint security or company policy.</li>
+        <li><strong>This recorded lab runs both peers on one machine.</strong> It demonstrates
+        the encrypted path end to end; it is not a remote office-to-home benchmark.</li>
+        <li><strong>No invented benchmarks.</strong> No speeds, latencies or throughput figures
+        are published here, and no claim is made that the full 256K context window was used.</li>
+        <li><strong>Support is not universal.</strong> This page does not claim that every
+        browser, extension or client already supports this path.</li>
+        <li><strong>The use-case data is fictional, the architecture is not.</strong> The
+        customer, documents and figures are synthetic — that disclaimer covers the demo
+        content only; the page describes the product's real architecture.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>k-lani-link demonstration site — entirely self-contained: no external assets, fonts, CDNs or
+    network calls; the page loads only <code>styles.css</code>, <code>main.js</code>, the bundled image,
+    and the byte-for-byte example documents in <code>examples/</code>.</p>
+    <p>All content is English and the demo data is fictional. The invoice and ledger originals in the
+    parent folder are left untouched; the downloads here are bundled copies.</p>
+    <p>Demonstration page generated <span id="year">2026</span>.</p>
+  </div>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>

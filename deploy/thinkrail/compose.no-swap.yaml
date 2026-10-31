@@ -1,0 +1,14 @@
+# Explicit low-RAM test profile. Model data is read from its configured file; no swap is permitted.
+services:
+  basalt:
+    environment:
+      LINK_REQUIRE_NO_SWAP: '1'
+    mem_limit: 4g
+    memswap_limit: 4g
+    command: [--reasoning-budget-tokens, '2048', --mmap-experts, --prefill, '512']
+    labels:
+      com.k-lani-link.memory-profile: no-swap-mmap-prefill-512
+  thinkrail:
+    memswap_limit: 2g
+    environment:
+      LINK_REQUIRE_NO_SWAP: '1'

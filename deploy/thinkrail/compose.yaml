@@ -1,0 +1,126 @@
+name: k-lani-thinkrail-test
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+  restart: 'no'
+services:
+  guard:
+    <<: *locked
+    image: k-lani-thinkrail-guard:local
+    build: {context: ../.., dockerfile: deploy/thinkrail/guard.Dockerfile}
+    cap_add: [NET_ADMIN]
+    ports: ['127.0.0.1:24242:8080']
+    dns: ['127.0.0.1']
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=1m,mode=0700']
+    healthcheck:
+      test: [CMD, test, -f, /tmp/guard.ready]
+      interval: 1s
+      timeout: 1s
+      retries: 5
+  signal:
+    <<: *locked
+    image: k-lani-link-host:local
+    network_mode: service:guard
+    depends_on: {guard: {condition: service_healthy}}
+    command: [signal, --listen, '127.0.0.1:28788', --token-file, /run/secrets/token.txt]
+    volumes: ['${THINKRAIL_TEST_ROOT}/pair/signaling-token.txt:/run/secrets/token.txt:ro']
+  basalt:
+    <<: *locked
+    image: k-lani-link-basalt:local
+    build:
+      context: ../..
+      dockerfile: deploy/basalt.Dockerfile
+      additional_contexts:
+        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#5d28effbc0dfe9f8a554cc895e6de8858cbc4bb0}
+    network_mode: none
+    gpus: all
+    environment: {LINK_NUMERIC_METRICS: '1'}
+    mem_limit: 16g
+    memswap_limit: 16g
+    labels:
+      com.k-lani-link.model-preset: ${BASALT_MODEL_PRESET:-coder}
+      com.k-lani-link.context-tokens: '262144'
+    command: [--reasoning-budget-tokens, '2048']
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+      - /home/link/.cache:rw,nosuid,nodev,noexec,size=256m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - '${BASALT_MODEL_PATH}:/models/model.basalt:ro'
+      - './basalt.json:/run/secrets/basalt.json:ro'
+      - basalt_socket:/run/link
+    healthcheck:
+      test: [CMD, /opt/basalt/.venv/bin/python, -B, /opt/link-healthcheck.py]
+      interval: 5s
+      timeout: 3s
+      start_period: 180s
+      retries: 3
+  host:
+    <<: *locked
+    image: k-lani-link-host:local
+    build: {context: ../.., dockerfile: deploy/link.Dockerfile}
+    network_mode: service:guard
+    command: [host, --config, /run/secrets/host.toml]
+    depends_on: {basalt: {condition: service_healthy}, signal: {condition: service_started}}
+    volumes:
+      - '${THINKRAIL_TEST_ROOT}/pair/host.toml:/run/secrets/host.toml:ro'
+      - basalt_socket:/run/link:ro
+      - host_state:/var/lib/link
+  client:
+    <<: *locked
+    image: k-lani-link-host:local
+    network_mode: service:guard
+    command: [client, --config, /run/secrets/client.toml, --api-socket, /run/link-api/api.sock]
+    depends_on: {host: {condition: service_started}}
+    volumes:
+      - '${THINKRAIL_TEST_ROOT}/pair/client.toml:/run/secrets/client.toml:ro'
+      - api_socket:/run/link-api
+      - client_state:/var/lib/link
+  thinkrail:
+    <<: *locked
+    image: k-lani-thinkrail:0.3.0-nightly.7
+    build: {context: ../.., dockerfile: deploy/thinkrail/Dockerfile}
+    network_mode: none
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 256
+    depends_on: {client: {condition: service_started}}
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,exec,size=256m,uid=1000,gid=1000,mode=1777
+      - /home/thinkrail/.thinkrail/logs:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700
+      - /home/thinkrail/.cache:rw,nosuid,nodev,noexec,size=128m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - thinkrail_home:/home/thinkrail
+      - '${THINKRAIL_TEST_ROOT}/pair/client.toml:/run/secrets/client.toml:ro'
+      - '${THINKRAIL_TEST_ROOT}/work:/work'
+      - '${THINKRAIL_TEST_ROOT}/recovery:/run/thinkrail-recovery:ro'
+      - api_socket:/run/link-api:ro
+      - ui_socket:/run/thinkrail-ui
+  ui:
+    <<: *locked
+    image: nginx:1.29-alpine
+    user: '1000:1000'
+    entrypoint: [nginx, -g, 'daemon off;']
+    network_mode: service:guard
+    depends_on: {thinkrail: {condition: service_started}, guard: {condition: service_healthy}}
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700']
+    volumes:
+      - './nginx.conf:/etc/nginx/nginx.conf:ro'
+      - './stats.html:/opt/link-stats.html:ro'
+      - '${THINKRAIL_TEST_ROOT}/metrics:/run/link-metrics:ro'
+      - ui_socket:/run/thinkrail-ui:ro
+volumes:
+  thinkrail_home:
+  host_state:
+  client_state:
+  basalt_socket:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}
+  api_socket:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}
+  ui_socket:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}

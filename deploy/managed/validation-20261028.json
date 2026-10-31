@@ -1,0 +1,314 @@
+{
+  "measured_on": "2026-10-28",
+  "kind": "same-host functional GPU validation, not a filled-context or isolated engine benchmark",
+  "backend_commit": "71116cc3c0f8f93312d146b8df444288cfb40fbd",
+  "gpu": "RTX 5070 Ti",
+  "gpu_power_limit_watts": 300,
+  "profile": {
+    "context_tokens_per_slot": 262144,
+    "parallel": 2,
+    "kv": "int8",
+    "prefill": 512,
+    "backend_memory_limit": "6g",
+    "swap_disabled": true,
+    "both_peers_on_one_host": true,
+    "filled_context_test": false,
+    "model_files_same_filesystem": true
+  },
+  "storage": "Both model packs on /dev/md0, the same RAID 0 filesystem",
+  "success": true,
+  "same_tunnel_survived_all_changes": true,
+  "signaling_stopped": true,
+  "memory_events": "low 0\nhigh 0\nmax 884648\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+  "runs": [
+    {
+      "model": "coder",
+      "load_status": 200,
+      "load_seconds": 7.213813025038689,
+      "verified_profile": {
+        "active_model": "coder",
+        "models": [
+          {
+            "id": "coder",
+            "context_tokens": 262144,
+            "parallel": 2,
+            "context_per_slot": 262144,
+            "loaded": true
+          },
+          {
+            "id": "nvfp4",
+            "context_tokens": 262144,
+            "parallel": 2,
+            "context_per_slot": 262144,
+            "loaded": false
+          }
+        ]
+      },
+      "pairs": [
+        {
+          "iteration": 1,
+          "requests": [
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 2.111160201020539,
+              "elapsed_seconds": 15.667562152026221,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            },
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 3.3845810460625216,
+              "elapsed_seconds": 15.823960460023955,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            }
+          ],
+          "max_observed_active": 2
+        },
+        {
+          "iteration": 2,
+          "requests": [
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 0.30440581194125116,
+              "elapsed_seconds": 10.20277577394154,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            },
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 1.1114578460110351,
+              "elapsed_seconds": 10.2769806899596,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            }
+          ],
+          "max_observed_active": 2
+        }
+      ]
+    },
+    {
+      "model": "nvfp4",
+      "load_status": 200,
+      "load_seconds": 8.583007314009592,
+      "verified_profile": {
+        "active_model": "nvfp4",
+        "models": [
+          {
+            "id": "coder",
+            "context_tokens": 262144,
+            "parallel": 2,
+            "context_per_slot": 262144,
+            "loaded": false
+          },
+          {
+            "id": "nvfp4",
+            "context_tokens": 262144,
+            "parallel": 2,
+            "context_per_slot": 262144,
+            "loaded": true
+          }
+        ]
+      },
+      "pairs": [
+        {
+          "iteration": 1,
+          "requests": [
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 4.163813090999611,
+              "elapsed_seconds": 46.07176792505197,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            },
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": true,
+              "first_token_seconds": 6.3056241469457746,
+              "elapsed_seconds": 43.47301485890057,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            }
+          ],
+          "max_observed_active": 2
+        },
+        {
+          "iteration": 2,
+          "requests": [
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 3.1841790289618075,
+              "elapsed_seconds": 34.30676464003045,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            },
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 0.8372516059316695,
+              "elapsed_seconds": 34.387237192946486,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            }
+          ],
+          "max_observed_active": 2
+        }
+      ]
+    },
+    {
+      "model": "coder",
+      "load_status": 200,
+      "load_seconds": 7.830106866080314,
+      "verified_profile": {
+        "active_model": "coder",
+        "models": [
+          {
+            "id": "coder",
+            "context_tokens": 262144,
+            "parallel": 2,
+            "context_per_slot": 262144,
+            "loaded": true
+          },
+          {
+            "id": "nvfp4",
+            "context_tokens": 262144,
+            "parallel": 2,
+            "context_per_slot": 262144,
+            "loaded": false
+          }
+        ]
+      },
+      "pairs": [
+        {
+          "iteration": 1,
+          "requests": [
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 3.0973916130606085,
+              "elapsed_seconds": 12.90600139903836,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            },
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 2.1628116980427876,
+              "elapsed_seconds": 12.872143986984156,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            }
+          ],
+          "max_observed_active": 2
+        },
+        {
+          "iteration": 2,
+          "requests": [
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 0.380353176034987,
+              "elapsed_seconds": 7.97727982501965,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            },
+            {
+              "status": 200,
+              "done": true,
+              "reasoning_received": true,
+              "content_received": false,
+              "first_token_seconds": 1.1018208680907264,
+              "elapsed_seconds": 8.149465339025483,
+              "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 128,
+                "total_tokens": 203
+              },
+              "error_events": 0
+            }
+          ],
+          "max_observed_active": 2
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Short 75-token prompts; 262144 tokens per slot configured, not filled.",
+    "128 output tokens per request include reasoning; output caps can end before final answer text.",
+    "No WAN or SSD-bandwidth measurement. OS file cache was not flushed.",
+    "A previous 4 GiB attempt suffered one backend OOM kill; this 6 GiB run had none.",
+    "GPU was shared with a desktop service using approximately 260 MiB VRAM."
+  ]
+}

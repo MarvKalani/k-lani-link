@@ -1,0 +1,37 @@
+# Manual alternative. Prefer `k-lani-link codex-profile` for a complete
+# profile, tested model catalog and pipe-based credentials: deploy/codex/README.md.
+# Replace model/catalog path and set LINK_API_KEY in the client's environment.
+model = "REPLACE_WITH_BASALT_MODEL_ID"
+model_provider = "link"
+model_catalog_json = "/absolute/path/to/generated/link.config.models.json"
+web_search = "disabled"
+show_raw_agent_reasoning = true
+hide_agent_reasoning = false
+sandbox_mode = "workspace-write"
+
+[model_providers.link]
+name = "k-lani-link private inference"
+base_url = "http://127.0.0.1:8787/v1"
+env_key = "LINK_API_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+request_max_retries = 0
+stream_max_retries = 0
+stream_idle_timeout_ms = 600000
+
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[sandbox_workspace_write]
+network_access = false
+
+[features]
+apps = false
+plugins = false
+multi_agent = false
+memories = false
+shell_snapshot = false

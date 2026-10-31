@@ -1,0 +1,38 @@
+name: Update download links
+on:
+  release:
+    types: [published, edited, deleted, unpublished, released, prereleased]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: readme-download-links
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Refresh direct downloads, including published previews
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            # This disposable checkout contains only this job's generated changes.
+            git fetch origin "$DEFAULT_BRANCH"
+            git reset --hard "origin/$DEFAULT_BRANCH"
+            python3 -B deploy/portable/update_downloads.py
+            python3 -B deploy/check-names.py
+            git diff --check
+            if git diff --quiet -- README.md README.de.md; then exit 0; fi
+            git add README.md README.de.md
+            git commit -m 'Refresh latest published Windows downloads'
+            if git push origin "HEAD:$DEFAULT_BRANCH"; then exit 0; fi
+          done
+          exit 1

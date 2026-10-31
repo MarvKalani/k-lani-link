@@ -1,0 +1,31 @@
+/target/
+/pair/
+/private/
+deploy/client.env
+*.local.toml
+.env
+deploy/.env
+.link-key-state/
+.thinkrail-build/
+.thinkrail-test/
+.opencode-test/
+.opencode-build/
+.release/
+recordings/
+*.basalt
+*.gguf
+*.safetensors
+**/auth.json
+__pycache__/
+*.py[cod]
+
+# Relay admission tokens never belong in the repository
+relay-token
+*.relay-token
+host-token
+client-token
+
+# A PHP relay's own settings and stored ciphertext
+deploy/php-relay/standalone/config.php
+deploy/php-relay/standalone/data/*
+!deploy/php-relay/standalone/data/.htaccess

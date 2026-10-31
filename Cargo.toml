@@ -1,0 +1,65 @@
+[workspace]
+resolver = "3"
+members = ["crates/k-lani-link-protocol"]
+
+[package]
+name = "k-lani-link"
+version = "1.2610.29-preview.3"
+edition = "2024"
+rust-version = "1.96"
+publish = false
+license = "BUSL-1.1"
+description = "Private OpenAI-compatible streaming over authenticated WebRTC or an explicit HTTPS mailbox"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+async-stream = "0.3"
+axum = "0.8"
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
+base64 = "0.22"
+bytes = "1"
+clap = { version = "4", features = ["derive", "env"] }
+futures-util = "0.3"
+getrandom = "0.2"
+ipnet = "2"
+# Optional HTTP/3 (QUIC) mailbox path; ring only, no platform verifier or aws-lc.
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1"
+http-body-util = "0.1"
+hyper-util = { version = "0.1", features = ["tokio"] }
+k-lani-link-protocol = { path = "crates/k-lani-link-protocol" }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "http2"] }
+rpassword = "7"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+toml = "0.8"
+tower = { version = "0.5", default-features = false, features = ["util"] }
+# Disable transitive transport/HTTP logging at compile time, including debug builds.
+tracing = { version = "0.1", features = ["max_level_off", "release_max_level_off"] }
+log = { version = "0.4", features = ["max_level_off", "release_max_level_off"] }
+url = "2"
+webpki-roots = "1"
+webrtc = "0.21.1"
+spake2 = "0.4"
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc"] }
+hkdf = "0.12"
+
+[profile.release]
+lto = "thin"
+strip = true
+
+[dev-dependencies]
+rcgen = "0.14"
+tokio = { version = "1", features = ["test-util"] }
+
+[[example]]
+name = "https-probe"
+path = "deploy/https/probe.rs"

@@ -1,0 +1,50 @@
+# Run on the client computer with an HTTPS client folder from `init-https`.
+# The folder keeps its real 0600/0700 permissions and must belong to UID 1000. It is
+# mounted read-write: its pairing state advances with every new session, exactly as
+# when the client runs without Docker. The application container never sees it.
+name: k-lani-link-client
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+  restart: 'no'
+services:
+  client:
+    <<: *locked
+    image: k-lani-link-host:local
+    build: {context: .., dockerfile: deploy/link.Dockerfile}
+    network_mode: host
+    command: [client, --config, /run/link-client/client.toml, --api-socket, /run/link-api/api.sock]
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    volumes:
+      - type: bind
+        source: ${LINK_CLIENT_DIR:?Set the absolute private HTTPS client folder}
+        target: /run/link-client
+        bind: {create_host_path: false}
+      - api_socket:/run/link-api
+  api-test:
+    <<: *locked
+    profiles: [tools]
+    image: python:3.12-slim
+    user: '1000:1000'
+    network_mode: none
+    mem_limit: 128m
+    memswap_limit: 128m
+    entrypoint: [python, -B, /opt/link-request.py]
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777']
+    volumes:
+      - './client-request.py:/opt/link-request.py:ro'
+      # Only the configuration file: it holds the local API key, not the relay token or state.
+      - type: bind
+        source: ${LINK_CLIENT_DIR}/client.toml
+        target: /run/secrets/client.toml
+        read_only: true
+        bind: {create_host_path: false}
+      - api_socket:/run/link-api:ro
+volumes:
+  api_socket:
+    name: ${LINK_API_VOLUME:-k-lani-link-client_api_socket}
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=1000,gid=1000,mode=0700'}

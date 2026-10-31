@@ -1,0 +1,23 @@
+# An opt-in private relay. Endpoints still need their own existing state folders.
+name: k-lani-link-https
+services:
+  relay:
+    image: k-lani-link-https:local
+    build: {context: ../.., dockerfile: deploy/https/Dockerfile}
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: {driver: none}
+    ulimits: {core: 0}
+    pids_limit: 64
+    cpus: 2
+    mem_limit: 256m
+    memswap_limit: 256m
+    restart: 'no'
+    ports:
+      - '${LINK_HTTPS_BIND:-127.0.0.1:8789}:8789/tcp'
+      # Only with `http3 = true` in relay.toml: publish the UDP twin for QUIC.
+      # - '${LINK_HTTPS_BIND:-127.0.0.1:8789}:8789/udp'
+    volumes:
+      - '${LINK_HTTPS_RELAY_DIR:?Set a dedicated private relay folder}:/config:ro'

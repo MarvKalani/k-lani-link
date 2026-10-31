@@ -1,0 +1,16 @@
+# ICE configuration fragment, not a complete host/client configuration.
+# Replace the existing relay setting and ICE section; keep private keys unchanged.
+# stun.marvins.app is a small STUN service run by the author for trying k-lani-link out,
+# without an availability promise. Edit or remove the active URL to choose another STUN provider.
+# Only uncomment servers you want to contact: each selected operator sees network addresses.
+relay = "disabled"
+
+[[ice_servers]]
+urls = [
+  "stun:stun.marvins.app:3478",
+  # "stun:stun.l.google.com:19302",
+  # "stun:stun1.l.google.com:19302",
+  # "stun:your-stun-host.example:3478", # Replace with your own server before enabling.
+]
+
+# TURN remains disabled. No automatic server is added if these entries fail.

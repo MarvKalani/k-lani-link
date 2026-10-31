@@ -1,0 +1,6 @@
+# Add after deploy/client.compose.yaml on the client computer.
+# The credential is deliberately not mounted in an AI application container.
+services:
+  client:
+    volumes:
+      - '${LINK_MANAGEMENT_TOKEN_FILE:?Set the private management key path}:/run/secrets/management-token:ro'

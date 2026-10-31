@@ -1,0 +1,27 @@
+# JetBrains Mellum 2.1 (12B-A2.5B, Thinking, Q8_0 GGUF) as a local OpenAI- and
+# Anthropic-compatible backend for k-lani-link, via the official llama.cpp CUDA server.
+# Stop Basalt (or any other GPU model) first: on a 16 GB card only one fits.
+#   LINK_MELLUM_DIR=/path/to/Mellum2.1-12B-A2.5B-Thinking-GGUF \
+#     docker compose -f deploy/mellum.compose.yaml up -d
+# Host config: upstream = "http://127.0.0.1:18091" and allow_unverified_backend = true
+# (llama.cpp has no k-lani-link privacy profile; it keeps no request log by default).
+name: k-lani-link-mellum
+services:
+  mellum:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,size=64m']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: 'no'
+    # Loopback only: the k-lani-link host is the only intended client.
+    ports: ['127.0.0.1:18091:8080']
+    volumes:
+      - '${LINK_MELLUM_DIR:?Set the folder holding the Mellum GGUF}:/models:ro'
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
+    # Full 131,072-token context fits 16 GB with flash attention and a 4-bit KV cache.
+    command: [-m, /models/Mellum2.1-12B-A2.5B-Thinking-Q8_0.gguf, -c, '131072', -ngl, '99',
+              --flash-attn, 'on', -ctk, q4_0, -ctv, q4_0, --jinja, --host, 0.0.0.0, --port, '8080']

@@ -1,0 +1,7 @@
+services:
+  opencode:
+    image: k-lani-opencode-craft:2.2.0
+    build: {context: ../.., dockerfile: deploy/opencode/craft/Dockerfile}
+    environment:
+      LINK_CRAFT_TOOLS: '1'
+      WORDCRAFT_REGION: en-GB

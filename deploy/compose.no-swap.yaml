@@ -1,0 +1,8 @@
+# Optional bounded-RAM reference profile; the host must already have swap disabled.
+services:
+  basalt:
+    environment:
+      LINK_REQUIRE_NO_SWAP: '1'
+    mem_limit: 4g
+    memswap_limit: 4g
+    command: [--mmap-experts, --prefill, '512', --reasoning-budget-tokens, '2048']

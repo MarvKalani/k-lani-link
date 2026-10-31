@@ -1,0 +1,95 @@
+name: Portable builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/portable.yml'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'src/**'
+      - 'crates/**'
+      - 'tests/**'
+      - 'deploy/portable/**'
+
+permissions:
+  contents: read
+env:
+  CARGO_HTTP_MULTIPLEXING: 'false'
+  CARGO_NET_RETRY: '5'
+
+jobs:
+  notices:
+    name: Dependency notices
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: python3 deploy/portable/licenses.py --output .release/portable/notices
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-notices
+          path: .release/portable/notices/
+          if-no-files-found: error
+          retention-days: 30
+  native:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            rustflags: '-C target-feature=+crt-static'
+          - platform: windows-arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            rustflags: '-C target-feature=+crt-static'
+          - platform: macos-arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - platform: macos-x64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - platform: linux-x64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - platform: linux-arm64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags || '' }}
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Prepare pinned Rust toolchain
+        run: rustup target add ${{ matrix.target }}
+      - name: Native tests including encrypted WebRTC streaming
+        run: cargo test --workspace --locked --target ${{ matrix.target }}
+      - name: Native lint
+        run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
+      - name: Build portable executable
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin k-lani-link
+      - name: Verify executable and prepare artifact
+        run: python deploy/portable/stage.py --target ${{ matrix.target }} --platform ${{ matrix.platform }}
+      - name: Upload tested binary and build record
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-${{ matrix.platform }}
+          path: .release/portable/${{ matrix.platform }}/
+          if-no-files-found: error
+          retention-days: 30

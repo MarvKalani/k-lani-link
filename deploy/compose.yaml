@@ -1,0 +1,77 @@
+name: k-lani-link
+services:
+  basalt:
+    image: k-lani-link-basalt:local
+    build:
+      context: ..
+      dockerfile: deploy/basalt.Dockerfile
+      additional_contexts:
+        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#5d28effbc0dfe9f8a554cc895e6de8858cbc4bb0}
+      args:
+        BUILD_JOBS: ${BASALT_BUILD_JOBS:-2}
+    network_mode: none
+    gpus: all
+    environment: {LINK_NUMERIC_METRICS: '${LINK_NUMERIC_METRICS:-0}'}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: none
+    ulimits:
+      core: 0
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=256m,mode=1777
+      - /home/link/.cache:rw,nosuid,nodev,noexec,size=256m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - type: bind
+        source: ${BASALT_MODEL_PATH:?Set BASALT_MODEL_PATH to the real .basalt file}
+        target: /models/model.basalt
+        read_only: true
+      - type: bind
+        source: ./basalt.json
+        target: /run/secrets/basalt.json
+        read_only: true
+      - runtime_socket:/run/link
+    healthcheck:
+      test: [CMD, /opt/basalt/.venv/bin/python, -B, /opt/link-healthcheck.py]
+      interval: 10s
+      timeout: 3s
+      start_period: 180s
+      retries: 3
+  link-host:
+    image: k-lani-link-host:local
+    # The host only opens WebRTC sockets. Avoid adding Docker NAT to ICE.
+    network_mode: host
+    build:
+      context: ..
+      dockerfile: deploy/link.Dockerfile
+    depends_on:
+      basalt:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: none
+    ulimits:
+      core: 0
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777
+    volumes:
+      - type: bind
+        # WebRTC only; compose.https.yaml replaces this mount. Unset, Docker refuses to start
+        # and names this missing path.
+        source: ${LINK_HOST_CONFIG:-./LINK_HOST_CONFIG-is-not-set}
+        target: /run/secrets/host.toml
+        read_only: true
+        bind: {create_host_path: false}
+      - runtime_socket:/run/link:ro
+      - pairing_state:/var/lib/link
+volumes:
+  pairing_state:
+  runtime_socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=1000,gid=1000,mode=0700

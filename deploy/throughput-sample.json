@@ -1,0 +1,41 @@
+{
+  "measured_at": "2026-10-28",
+  "mode": "synthetic short request through existing encrypted same-host tunnel",
+  "model": "Qwen3.8-Flash-Next IQ3_XXS",
+  "memory_profile": "4 GiB no swap, mmap experts, prefill 512, 262144 context, int8 KV",
+  "request": {
+    "model": "Qwen3.8-Flash-Next IQ3_XXS",
+    "elapsed_seconds": 14.865,
+    "first_content_seconds": 7.046382379019633,
+    "sse_events": 58,
+    "reasoning_received": true,
+    "content_received": true,
+    "done": true,
+    "errors": [],
+    "usage": {
+      "prompt_tokens": 69,
+      "completion_tokens": 62,
+      "total_tokens": 131,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "engine": {
+    "prefill_ms": 6990.3,
+    "prefill_tokens_per_second": 9.9,
+    "output_tokens": 62,
+    "decode_ms": 7867.2,
+    "prefill_tokens": 69,
+    "ttft_ms": null,
+    "finished_at": 1793150728.2916315,
+    "decode_tokens_per_second": 7.9,
+    "cached_tokens": 0
+  },
+  "limitations": [
+    "Single short request, not a sustained benchmark",
+    "The prior business video did not measure token rates",
+    "Earlier retries stopped at Basalt RAM guard; no swap or guard bypass",
+    "ThinkRail alternative was stopped for this OpenCode test"
+  ]
+}

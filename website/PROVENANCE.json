@@ -1,0 +1,48 @@
+{
+  "generated_by": {
+    "agent": "OpenCode 2.2.0",
+    "model": "Qwen3.8-Flash-Next IQ3_XXS via Basalt",
+    "transport": "k-lani-link (the product carried a different name when this run was recorded)",
+    "document_tools": [
+      "WordCraft 0.11.0",
+      "GridCraft 0.12.1"
+    ]
+  },
+  "operator": "Codex: setup, briefs, four document follow-ups, two website follow-ups, read-only checks, byte-for-byte copying and video assembly",
+  "generated_files_directly_edited_by_operator": true,
+  "synthetic_data": true,
+  "both_peers_on_same_host": true,
+  "original_accepted_sha256": {
+    "styles.css": "e4175db1f9892ee9f1304a3889391454d96e2a18ec3435a106d1431d7a9c42e3",
+    "main.js": "4eab5cedb0833821a955dfdf2a74d276912b802a1049e1dcdbbb8b2e44f4f38d",
+    "index.html": "b83d7f038214375a6e1cc990f0ab669d66a96301da6e884641b75d2cdd261a0f",
+    "examples/invoice.pdf": "463f08896a2a109b35d2f7ebaefa82b3097591cb4a061ad4b6f8e4366254915c",
+    "examples/ledger.xlsx": "446861287b80a0e6283b37bec63cc90272f7a5f6b6c9c80d543920e4efb351ea",
+    "examples/invoice.docx": "6eb7efd207c297106ad124b789952b7bc06176e455509e69bae349dabe04b518",
+    "examples/ledger.html": "e34cd12b4a9dcd381a0aa9d76c27a32170d5ee3285bd76fc6de3f926be7cda59",
+    "artwork (original, before the product name changed)": "28798a68cf46d2ef6abc4ac22f0481206ab0c284de320eff096c25f9e601bb1e"
+  },
+  "sha256": {
+    "assets/k-lani-link.webp": "61d7e4a67c6ccfa4f7cb63ff6b46c3dbd0cc0c4ad4fd28959ea238d620c6983a",
+    "examples/invoice.docx": "b115a1753fad322f9d72996a31eff104fe8f4fc9d21c80bcb86274ffdef4171f",
+    "examples/invoice.pdf": "463f08896a2a109b35d2f7ebaefa82b3097591cb4a061ad4b6f8e4366254915c",
+    "examples/ledger.html": "e34cd12b4a9dcd381a0aa9d76c27a32170d5ee3285bd76fc6de3f926be7cda59",
+    "examples/ledger.xlsx": "446861287b80a0e6283b37bec63cc90272f7a5f6b6c9c80d543920e4efb351ea",
+    "index.html": "03128a4ab48426b92941b273d79e59af3033c26cadb663c29c8a7f3ddfcb587f",
+    "main.js": "19a0ab8b0dd8ba8f670ba2b10ee7dd46b5b273ae243f8e2887544434f9e56d85",
+    "styles.css": "dd18b2d6bb386387edd290bf0f332de093be60793999ea8cfadc084dcfdd6aaa"
+  },
+  "post_generation_changes": {
+    "date": "2026-10-28",
+    "purpose": "Rename product to k-lani-link",
+    "operator": "Codex",
+    "changes": [
+      "Product wording in HTML and code comments; provenance notice added to the page.",
+      "Project artwork label changed with built-in image_gen; user supplied the WebP conversion.",
+      "2026-10-31: the invoice.docx metadata field lastModifiedBy names k-lani-link; the document text and layout are unchanged."
+    ],
+    "documents_changed": false,
+    "originals": "Preserved in a private local archive; not part of the new source snapshot.",
+    "recording_status": "Unedited historical media remains private. A labelled public archive edit published 2026-10-29 masks former name overlays and provider badges; see assets/demo/README.md. No new inference run claimed."
+  }
+}

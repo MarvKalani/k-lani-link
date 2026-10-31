@@ -1,0 +1,4 @@
+{
+  "server": {"model": "/models/model.basalt", "privacy": true, "vision": "off", "host": "127.0.0.1"},
+  "engine": {"max-context": 262144, "kv": "int8"}
+}
