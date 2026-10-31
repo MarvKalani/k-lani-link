@@ -3,16 +3,16 @@
 <!-- WINDOWS-DOWNLOADS:START -->
 ## Download for Windows
 
-**[⬇ Download Windows x64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29-preview.3/k-lani-link-1.2610.29-preview.3-windows-x64.exe)** · **[⬇ OpenCode + Docker setup ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip)**
+**[⬇ Download Windows x64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-1.2610.31-preview.1-windows-x64.exe)** · **[⬇ OpenCode + Docker setup ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip)**
 
 | What do you want to run? | Download | Instructions |
 | --- | --- | --- |
-| Portable executable on an Intel/AMD PC | [Windows x64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29-preview.3/k-lani-link-1.2610.29-preview.3-windows-x64.zip) | [Native setup](deploy/portable/README.md#windows-connect-to-a-remote-model) |
-| Windows on ARM, e.g. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29-preview.3/k-lani-link-1.2610.29-preview.3-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29-preview.3/k-lani-link-1.2610.29-preview.3-windows-arm64.zip) | [Native setup](deploy/portable/README.md#windows-connect-to-a-remote-model) |
+| Portable executable on an Intel/AMD PC | [Windows x64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-1.2610.31-preview.1-windows-x64.zip) | [Native setup](deploy/portable/README.md#windows-connect-to-a-remote-model) |
+| Windows on ARM, e.g. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-1.2610.31-preview.1-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-1.2610.31-preview.1-windows-arm64.zip) | [Native setup](deploy/portable/README.md#windows-connect-to-a-remote-model) |
 | OpenCode in the browser, isolated with `D:\OpenCode` | [Current Docker setup ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip) | [Docker Desktop setup](deploy/desktop/README.md) |
 
-**Latest published portable version: 1.2610.29-preview.3 (preview).**
-[Release notes](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2610.29-preview.3) · [Changes since this build](https://github.com/MarvKalani/k-lani-link/compare/v1.2610.29-preview.3...main) · [SHA-256 checksums](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29-preview.3/SHA256SUMS) · [macOS / Linux / all downloads](https://github.com/MarvKalani/k-lani-link/releases)
+**Latest published portable version: 1.2610.31-preview.1 (preview).**
+[Release notes](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2610.31-preview.1) · [Changes since this build](https://github.com/MarvKalani/k-lani-link/compare/v1.2610.31-preview.1...main) · [SHA-256 checksums](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/SHA256SUMS) · [macOS / Linux / all downloads](https://github.com/MarvKalani/k-lani-link/releases)
 
 The Docker ZIP contains the current source and launcher; build its images locally once. The EXE provides the transport only, without the OpenCode UI; source pushes do not rebuild published binaries. Docker Desktop / company-network acceptance is still pending.
 <!-- WINDOWS-DOWNLOADS:END -->
