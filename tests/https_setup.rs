@@ -69,7 +69,12 @@ fn issuance_exports_both_durable_roles_and_moving_the_client_preserves_state() {
     std::fs::rename(pair.join("client"), &moved).unwrap();
     let client = Config::load(&moved.join("client.toml")).unwrap();
     let options = client.https.unwrap();
-    assert_eq!(options.state_dir, moved.join("state"));
+    // Loading resolves the folder, so compare resolved paths (/private/var on macOS,
+    // \\?\ and long names on Windows).
+    assert_eq!(
+        std::fs::canonicalize(&options.state_dir).unwrap(),
+        std::fs::canonicalize(moved.join("state")).unwrap()
+    );
     let store = Store::open(&options.state_dir, EndpointRole::Client).unwrap();
     assert_eq!(
         store
@@ -154,7 +159,11 @@ fn the_backend_socket_goes_into_the_host_folder_only() {
         .args(["--upstream-socket", "/run/link/basalt.sock"])
         .output()
         .unwrap();
-    assert!(output.status.success());
+    // A backend socket is Unix only; elsewhere the setup refuses it.
+    assert_eq!(output.status.success(), cfg!(unix));
+    if !cfg!(unix) {
+        return;
+    }
     let host = Config::load(&fixture.0.join("pair/host/host.toml")).unwrap();
     assert_eq!(host.upstream, "http://localhost");
     assert_eq!(
