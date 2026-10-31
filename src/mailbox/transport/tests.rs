@@ -906,15 +906,15 @@ async fn mock_completion(
 ) -> axum::response::Response {
     backend.calls.fetch_add(1, Ordering::SeqCst);
     if body["model"] == "count" {
-        let stream = futures_util::stream::iter(
-            counted()
-                .into_iter()
-                .map(|line| Ok::<_, std::convert::Infallible>(Bytes::from(line))),
-        )
-        .then(|line| async {
-            tokio::time::sleep(Duration::from_micros(200)).await;
-            line
-        });
+        // About 4 s in all: line n is due n ms after the start. Fixed deadlines keep the
+        // pace on Windows too, where each single sleep lasts up to a 15.6 ms timer tick.
+        let start = tokio::time::Instant::now();
+        let stream = futures_util::stream::iter(counted().into_iter().enumerate()).then(
+            move |(n, line)| async move {
+                tokio::time::sleep_until(start + Duration::from_millis(n as u64)).await;
+                Ok::<_, std::convert::Infallible>(Bytes::from(line))
+            },
+        );
         return axum::response::Response::builder()
             .header("content-type", "text/event-stream")
             .body(axum::body::Body::from_stream(stream))

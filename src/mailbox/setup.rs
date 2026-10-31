@@ -74,7 +74,7 @@ impl Material {
 }
 /// A new private directory (never an existing one), resolved to its absolute path.
 pub fn new_directory(dir: &Path) -> Result<PathBuf> {
-    let mut builder = std::fs::DirBuilder::new();
+    let builder = &mut std::fs::DirBuilder::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;

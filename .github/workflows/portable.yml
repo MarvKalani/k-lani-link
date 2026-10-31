@@ -79,7 +79,7 @@ jobs:
       - name: Prepare pinned Rust toolchain
         run: rustup target add ${{ matrix.target }}
       - name: Native tests including encrypted WebRTC streaming
-        run: cargo test --workspace --locked --target ${{ matrix.target }}
+        run: cargo test --workspace --locked --no-fail-fast --target ${{ matrix.target }}
       - name: Native lint
         run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
       - name: Build portable executable
