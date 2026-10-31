@@ -133,9 +133,9 @@ create a **customer invoice, PDF, Excel ledger and English project website**
 with WordCraft/GridCraft. All customer data was fictional; CPU, RAM and GPU
 measurements accompanied the run.
 
-[![Recorded local AI workflow with container resource counters](assets/demo/k-lani-link-streaming.gif)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29/k-lani-link-business-demo.mp4)
+[![Recorded local AI workflow with container resource counters](assets/demo/k-lani-link-streaming.gif)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-business-demo.mp4)
 
-**[Watch / download the English demo (MP4, 87 seconds)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29/k-lani-link-business-demo.mp4)**
+**[Watch / download the English demo (MP4, 87 seconds)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-business-demo.mp4)**
 · [Editing notes and GIF downloads](assets/demo/README.md)
 
 This is an edited archive of the 27–28 October run, not a new inference run.
@@ -199,8 +199,7 @@ Prefer a native program? The portable variants use one executable, with no
 installer: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64/ARM64.
 Starting the new UI preview without arguments opens a local connection panel;
 PowerShell/terminal commands remain available. It includes configuration import,
-live connection status and a real backend/model-list test. The first 1.2610.29
-download is CLI-only; the panel requires 1.2610.29-preview.3 or later.
+live connection status and a real backend/model-list test.
 The initial downloads are unsigned previews; security software or company policy
 may block them. Native operation does not provide Docker's application isolation.
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)

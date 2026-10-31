@@ -4,8 +4,7 @@ k-lani-link runs without an installer, administrator installation, bundled LLM o
 additional WASM runtime. Starting the executable without arguments opens a local
 browser control panel. On Windows, double-click the EXE. Explicit `client`, `host`,
 pairing and operator commands remain available in PowerShell or a terminal.
-The control panel was introduced in **1.2610.29-preview.3**; the earlier
-**1.2610.29** download is command-line only. A tray icon is not included yet.
+A tray icon is not included yet.
 
 Get versioned downloads from [GitHub Releases](https://github.com/MarvKalani/k-lani-link/releases).
 Use the processor architecture of your operating system:
@@ -61,7 +60,7 @@ For isolated OpenCode in your Windows browser, see the separate
 [Docker Desktop setup](../desktop/README.md). The instructions below run the
 transport natively and do not isolate the AI application's network access.
 
-### Browser control panel (1.2610.29-preview.3 and later)
+### Browser control panel
 
 1. Download the current x64 EXE for Intel/AMD Windows, or ARM64 for Windows on ARM.
 2. Double-click it. The local control panel opens in your default browser; no

@@ -4,7 +4,7 @@ members = ["crates/k-lani-link-protocol"]
 
 [package]
 name = "k-lani-link"
-version = "1.2610.29-preview.3"
+version = "1.2610.31-preview.1"
 edition = "2024"
 rust-version = "1.96"
 publish = false

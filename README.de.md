@@ -140,9 +140,9 @@ Basalt verwendet, um mit WordCraft/GridCraft eine **Kundenrechnung, ein PDF,
 eine Excel-Tabelle und eine englische Projektwebsite** zu erstellen. Alle
 Kundendaten waren fiktiv; CPU, RAM und GPU wurden mitgemessen.
 
-[![Aufgezeichneter lokaler KI-Ablauf mit Ressourcenanzeige](assets/demo/k-lani-link-streaming.gif)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29/k-lani-link-business-demo.mp4)
+[![Aufgezeichneter lokaler KI-Ablauf mit Ressourcenanzeige](assets/demo/k-lani-link-streaming.gif)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-business-demo.mp4)
 
-**[Englisches Demo-Video ansehen / herunterladen (MP4, 87 Sekunden)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29/k-lani-link-business-demo.mp4)**
+**[Englisches Demo-Video ansehen / herunterladen (MP4, 87 Sekunden)](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-business-demo.mp4)**
 · [Schnittdokumentation und GIFs](assets/demo/README.md)
 
 Das ist ein bearbeiteter Archivmitschnitt vom 27.–28. Oktober, kein neuer
@@ -210,10 +210,9 @@ keinen TURN-Dienst. Ein automatischer Relay-Fallback findet nicht statt.
 Die nativen Varianten bestehen aus einem Programm ohne Installer:
 Windows x64/ARM64, macOS Intel/Apple Silicon und Linux x64/ARM64. Sie starten in
 PowerShell oder einem Terminal und verwenden denselben verschlüsselten Tunnel.
-Ab **1.2610.29-preview.3** öffnet ein Doppelklick außerdem eine lokale
+Ein Doppelklick öffnet außerdem eine lokale
 Bedienoberfläche mit Konfigurationsimport, Verbindungsstatus und Backend-Test.
-Die frühere EXE **1.2610.29** hat diese Oberfläche noch nicht. Eine Tray-Anzeige
-ist in dieser Vorschau noch nicht enthalten.
+Eine Tray-Anzeige ist in dieser Vorschau noch nicht enthalten.
 Die ersten Downloads sind unsignierte Vorabversionen; Schutzsoftware oder
 Unternehmensrichtlinien können sie blockieren. Der native Betrieb bietet keine
 Docker-Isolation der KI-Anwendungen.

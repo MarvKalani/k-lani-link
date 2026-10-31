@@ -1,6 +1,6 @@
 # Recorded local AI workflow
 
-[Watch / download the English MP4](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.29/k-lani-link-business-demo.mp4)
+[Watch / download the English MP4](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2610.31-preview.1/k-lani-link-business-demo.mp4)
 
 An 87-second **edited archive**, published on 29 October 2026, of the real
 OpenCode/Basalt business workflow recorded on 27–28 October. It shows streamed

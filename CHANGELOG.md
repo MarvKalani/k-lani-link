@@ -7,6 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- No changes since 1.2610.31-preview.1.
+
+## 1.2610.31-preview.1 — 31 October 2026 (pairing by code preview)
+
+- The setup examples describe `stun.marvins.app` as the author's small STUN service
+  for trying k-lani-link out, without an availability promise.
 - Pin Basalt to `5d28effb` (expert fill through the DirectFile pipeline, MTP draft
   context, thinking-loop stop, idle conversations leave VRAM). Both integration patches
   are refreshed; privacy mode also refuses the new on-disk conversation tier. The
