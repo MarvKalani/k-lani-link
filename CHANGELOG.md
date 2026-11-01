@@ -7,6 +7,8 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.1-preview.2 — 1 November 2026 (several model computers, QR pairing, signed updates)
+
 - Several model computers at once: the control panel pairs up to eight hosts and puts
   one local API in front of them, with one base URL and one key. The models of all
   hosts appear in one list; each request goes only to the host that lists its model,
