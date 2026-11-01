@@ -4,7 +4,9 @@
 #   LINK_MELLUM_DIR=/path/to/Mellum2.1-12B-A2.5B-Thinking-GGUF \
 #     docker compose -f deploy/mellum.compose.yaml up -d
 # Host config: upstream = "http://127.0.0.1:18091" and allow_unverified_backend = true
-# (llama.cpp has no k-lani-link privacy profile; it keeps no request log by default).
+# (llama.cpp has no k-lani-link privacy profile). llama.cpp logs no prompts or answers, but
+# it does log when each request ran and how many tokens it used; Docker logging is off
+# below so that this record is never kept either.
 name: k-lani-link-mellum
 services:
   mellum:
@@ -14,6 +16,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     restart: 'no'
+    logging: {driver: none}
     # Loopback only: the k-lani-link host is the only intended client.
     ports: ['127.0.0.1:18091:8080']
     volumes:
