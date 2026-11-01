@@ -56,7 +56,7 @@ pub fn insert(app: &App, queue: &Queue, seq: u64, body: Bytes) -> StatusCode {
     if records.len() >= CAP
         || app
             .buffered
-            .fetch_update(Relaxed, Relaxed, |n| {
+            .try_update(Relaxed, Relaxed, |n| {
                 n.checked_add(body.len()).filter(|n| *n <= MAX_BUFFERED)
             })
             .is_err()
