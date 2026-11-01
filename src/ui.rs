@@ -17,6 +17,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::Digest;
 use std::{
     fs::{File, OpenOptions},
     future::IntoFuture,
@@ -39,13 +40,48 @@ struct Active {
     stop: CancellationToken,
     task: JoinHandle<()>,
 }
+/// One model computer the panel connects to.
+struct Connection {
+    /// Its pairing folder inside the panel directory, or `imported` for a client.toml.
+    id: String,
+    config: Config,
+    /// Its tunnel while connected.
+    active: Option<Active>,
+    gateway: Option<Gateway>,
+}
+impl Connection {
+    fn new(id: String, config: Config) -> Self {
+        Self {
+            id,
+            config,
+            active: None,
+            gateway: None,
+        }
+    }
+    /// Where its relay or signaling server is, for telling computers apart in the panel.
+    fn label(&self) -> String {
+        let address = self
+            .config
+            .https
+            .as_ref()
+            .and_then(|https| https.relays.first().cloned())
+            .unwrap_or_else(|| self.config.signaling_url.clone());
+        url::Url::parse(&address)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned))
+            .unwrap_or(address)
+    }
+}
 #[derive(Default)]
 struct Control {
-    config: Option<Config>,
-    active: Option<Active>,
+    /// The first one's local address is the front's; see `front`.
+    connections: Vec<Connection>,
+    /// The one local API in front of all connections.
+    front: Option<Active>,
     /// A pairing by code is waiting for the other computer.
     joining: bool,
 }
+const IMPORTED: &str = "imported";
 #[derive(Clone)]
 struct Panel {
     token: String,
@@ -59,7 +95,52 @@ struct Panel {
     /// A private CA for the relay; only tests set one, a real relay needs a public certificate.
     relay_ca: Option<PathBuf>,
     updates: Arc<std::sync::Mutex<Updates>>,
+    /// What the front reaches, readable without the control lock.
+    routes: front::Routes,
+    catalog: front::Catalogs,
+    /// The front's API key: the first pairing's, kept in the panel folder so that an AI
+    /// app keeps working when computers are added or removed.
+    key: Arc<std::sync::RwLock<Option<String>>>,
 }
+impl Panel {
+    fn key(&self) -> Option<String> {
+        self.key.read().unwrap().clone()
+    }
+    /// Loads the front's key, or takes the first connection's when there is none yet.
+    fn ensure_key(&self, control: &Control) {
+        if self.key().is_some() {
+            return;
+        }
+        let file = self.directory.join(API_KEY_FILE);
+        let key = std::fs::read_to_string(&file)
+            .ok()
+            .map(|key| key.trim().to_owned())
+            .filter(|key| !key.is_empty())
+            .or_else(|| {
+                let key = control.connections.first()?.config.api_key.clone();
+                private_file(&file, &key).ok()?;
+                Some(key)
+            });
+        *self.key.write().unwrap() = key;
+    }
+    /// Tells the front which tunnels are running.
+    fn publish(&self, control: &Control) {
+        let routes = control
+            .connections
+            .iter()
+            .filter(|connection| connection.active.is_some())
+            .filter_map(|connection| {
+                Some(front::Route {
+                    id: connection.id.clone(),
+                    key: connection.config.api_key.clone(),
+                    gateway: connection.gateway.clone()?,
+                })
+            })
+            .collect();
+        *self.routes.write().unwrap() = routes;
+    }
+}
+const API_KEY_FILE: &str = "api-key";
 /// What the panel knows about updates; see `crate::update`.
 #[derive(Default)]
 struct Updates {
@@ -77,6 +158,8 @@ struct Updates {
 }
 const UPDATES_OFF: &str = "updates-off";
 const STAGE: &str = "update";
+/// The most model computers one panel connects to at once.
+const MAX_COMPUTERS: usize = 8;
 
 fn failure(status: StatusCode, message: &'static str) -> Response {
     (status, Json(json!({"error": message}))).into_response()
@@ -169,6 +252,7 @@ fn router(panel: Panel) -> Router {
         )
         .route("/api/connect", post(connect))
         .route("/api/disconnect", post(disconnect))
+        .route("/api/remove", post(remove))
         .route("/api/test", post(test_backend))
         .route("/api/credentials", post(credentials))
         .route("/api/quit", post(quit))
@@ -241,7 +325,7 @@ async fn save(
         }
     };
     let mut control = panel.control.lock().await;
-    if control.active.is_some() {
+    if control.front.is_some() {
         return failure(
             StatusCode::CONFLICT,
             "Disconnect before replacing the configuration. A new tunnel needs a fresh pairing code.",
@@ -271,9 +355,11 @@ async fn save(
             "Cannot save the private client configuration.",
         );
     }
-    // An imported file replaces a pairing by code as the configuration; its folder stays.
+    // An imported file replaces the pairings by code as the configuration; their folders stay.
     let _ = std::fs::remove_file(panel.directory.join(PAIRING_POINTER));
-    control.config = Some(config);
+    let _ = std::fs::remove_file(panel.directory.join(PAIRINGS));
+    control.connections = vec![Connection::new(IMPORTED.into(), config)];
+    panel.ensure_key(&control);
     Json(json!({"saved": true})).into_response()
 }
 
@@ -284,19 +370,62 @@ struct JoinInput {
     #[serde(default)]
     relay: String,
 }
-/// Names the folder of the current HTTPS pairing inside the panel directory.
+/// Names the first HTTPS pairing's folder inside the panel directory; older versions read
+/// only this one.
 const PAIRING_POINTER: &str = "https-pairing.txt";
+/// Names every HTTPS pairing's folder, one per line, the first one first.
+const PAIRINGS: &str = "https-pairings.txt";
 
-/// The HTTPS pairing the panel uses, from its pointer file, if any.
-fn paired(directory: &std::path::Path) -> Option<Config> {
-    let name = std::fs::read_to_string(directory.join(PAIRING_POINTER)).ok()?;
-    let name = name.trim();
-    if !name.starts_with("https-") || !name[6..].bytes().all(|b| b.is_ascii_hexdigit()) {
+fn valid_folder(name: &str) -> bool {
+    name.len() > 6 && name.starts_with("https-") && name[6..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+/// One HTTPS pairing's configuration from its folder.
+fn pairing(directory: &std::path::Path, name: &str) -> Option<Config> {
+    if !valid_folder(name) {
         return None;
     }
     Config::load(&directory.join(name).join("client.toml"))
         .ok()
         .filter(|config| config.transport == crate::config::Transport::Https)
+}
+/// The HTTPS pairings the panel uses, from its list file or, written by an older version,
+/// its pointer file.
+fn paired(directory: &std::path::Path) -> Vec<Connection> {
+    let names = std::fs::read_to_string(directory.join(PAIRINGS))
+        .or_else(|_| std::fs::read_to_string(directory.join(PAIRING_POINTER)))
+        .unwrap_or_default();
+    let mut seen = std::collections::HashSet::new();
+    names
+        .lines()
+        .map(str::trim)
+        .filter(|name| seen.insert(name.to_owned()))
+        .filter_map(|name| Some(Connection::new(name.into(), pairing(directory, name)?)))
+        .collect()
+}
+/// Writes the list and the first pairing's pointer, each replaced whole.
+fn save_pairings(directory: &std::path::Path, connections: &[Connection]) -> anyhow::Result<()> {
+    let names: Vec<&str> = connections
+        .iter()
+        .map(|connection| connection.id.as_str())
+        .filter(|id| valid_folder(id))
+        .collect();
+    for (file, text) in [
+        (PAIRINGS, names.join("\n")),
+        (
+            PAIRING_POINTER,
+            names.first().copied().unwrap_or_default().to_owned(),
+        ),
+    ] {
+        let target = directory.join(file);
+        if text.is_empty() {
+            let _ = std::fs::remove_file(&target);
+            continue;
+        }
+        let temporary = directory.join(format!("{file}-{}.tmp", random_secret()?));
+        private_file(&temporary, &text)?;
+        std::fs::rename(&temporary, &target)?;
+    }
+    Ok(())
 }
 
 /// Pairing by code: receives a client folder from the host and makes it the configuration.
@@ -336,8 +465,8 @@ async fn join(
     .await
 }
 
-/// Makes a new pairing the configuration: `receive` writes the client folder it is given.
-/// Each pairing gets a new folder; an earlier one is kept, never overwritten.
+/// Adds a new pairing to the configuration: `receive` writes the client folder it is given.
+/// Each pairing gets a new folder; the other computers stay connected.
 async fn pair<F, W>(panel: &Panel, receive: W) -> Response
 where
     W: FnOnce(PathBuf) -> F + Send + 'static,
@@ -345,8 +474,11 @@ where
 {
     {
         let mut control = panel.control.lock().await;
-        if control.active.is_some() {
-            return failure(StatusCode::CONFLICT, "Disconnect before pairing again.");
+        if control.connections.len() >= MAX_COMPUTERS {
+            return failure(
+                StatusCode::CONFLICT,
+                "Eight model computers are the most. Remove one before adding another.",
+            );
         }
         if control.joining {
             return failure(StatusCode::CONFLICT, "A pairing is already waiting.");
@@ -361,19 +493,21 @@ where
             let name = format!("https-{}", crate::config::random_id()?);
             let config = receive(worker.directory.join(&name)).await?;
             let config = Config::load(&config)?;
-            let temporary = worker
-                .directory
-                .join(format!("{PAIRING_POINTER}-{}.tmp", random_secret()?));
-            private_file(&temporary, &name)?;
-            std::fs::rename(&temporary, worker.directory.join(PAIRING_POINTER))?;
-            anyhow::Ok(config)
+            anyhow::Ok(Connection::new(name, config))
         }
         .await;
         let mut control = worker.control.lock().await;
         control.joining = false;
         match result {
-            Ok(config) => {
-                control.config = Some(config);
+            Ok(connection) => {
+                // A pairing by code replaces an imported client.toml, as it always did.
+                if control.connections.iter().any(|c| c.id == IMPORTED) && control.front.is_none() {
+                    control.connections.retain(|c| c.id != IMPORTED);
+                }
+                control.connections.push(connection);
+                save_pairings(&worker.directory, &control.connections)
+                    .map_err(|_| "Cannot save the pairing.".to_owned())?;
+                worker.ensure_key(&control);
                 Ok(())
             }
             Err(error) => Err(crate::diagnostic::printable(&error)
@@ -423,12 +557,31 @@ async fn scan(State(panel): State<Panel>, body: axum::body::Bytes) -> Response {
             "This QR code is not a k-lani-link pairing code. Show the code from offer-https --qr.",
         );
     }
+    // A QR code pairs once; its secret is void after the first connection anyway.
+    let used = panel.directory.join(QR_USED);
+    let fingerprint: String = sha2::Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let seen = std::fs::read_to_string(&used).unwrap_or_default();
+    if seen.lines().any(|line| line == fingerprint) {
+        return failure(
+            StatusCode::CONFLICT,
+            "This QR code was already used. Show a new one with offer-https --qr.",
+        );
+    }
     let local = panel.relay_ca.clone();
-    pair(&panel, move |dir| async move {
+    let response = pair(&panel, move |dir| async move {
         crate::mailbox::couple::join_qr(&dir, &text, None, local)
     })
-    .await
+    .await;
+    if response.status() == StatusCode::OK {
+        let _ = std::fs::write(&used, format!("{seen}{fingerprint}\n"));
+    }
+    response
 }
+/// Fingerprints of the QR codes this panel paired with.
+const QR_USED: &str = "qr-used.txt";
 
 async fn limited_body(mut response: reqwest::Response, limit: usize) -> Option<Vec<u8>> {
     let mut result = Vec::new();
@@ -441,31 +594,56 @@ async fn limited_body(mut response: reqwest::Response, limit: usize) -> Option<V
     Some(result)
 }
 
-async fn local_health(panel: &Panel, config: &Config) -> Option<Value> {
-    let response = panel
-        .http
-        .get(format!("http://{}/health", config.listen))
-        .bearer_auth(&config.api_key)
-        .send()
-        .await
-        .ok()?;
-    if response.status() != StatusCode::OK {
-        return None;
-    }
-    let body = limited_body(response, 8192).await?;
-    serde_json::from_slice(&body).ok()
-}
-
 async fn status(State(panel): State<Panel>) -> Json<Value> {
     Json(snapshot(&panel).await)
 }
 
-/// The panel's state, for the page and the notification-area icon.
+/// One connection's phase, from its own gateway's health.
+async fn phase_of(panel: &Panel, connection: &Connection) -> &'static str {
+    let Some(active) = &connection.active else {
+        return "disconnected";
+    };
+    // A tunnel that gave up (access refused, code used) still reports why.
+    let ended = active.task.is_finished();
+    let route = panel
+        .routes
+        .read()
+        .unwrap()
+        .iter()
+        .find(|route| route.id == connection.id)
+        .cloned();
+    let Some(health) = (match &route {
+        Some(route) => front::health_of(route).await,
+        None => None,
+    }) else {
+        return if ended { "stopped" } else { "connecting" };
+    };
+    if health["access_denied"] == true {
+        "denied"
+    } else if health["pairing_rejected"] == true {
+        "rejected"
+    } else if health["new_code_required"] == true {
+        "new_code_required"
+    } else if ended {
+        "stopped"
+    } else if health["connected"] == true {
+        "connected"
+    } else if health["recovering"] == true {
+        "recovering"
+    } else {
+        "connecting"
+    }
+}
+
+/// The panel's state, for the page and the notification-area icon. With several model
+/// computers, `phase` is `connected` while at least one is; each has its own entry in
+/// `computers`.
 async fn snapshot(panel: &Panel) -> Value {
     let control = panel.control.lock().await;
-    let mut result = json!({"version": env!("CARGO_PKG_VERSION"), "configured": control.config.is_some(),
-        "running": control.active.is_some(), "phase": "not_configured", "relay": "disabled",
-        "joining": control.joining, "default_relay": crate::mailbox::couple::DEFAULT_RELAY,
+    let mut result = json!({"version": env!("CARGO_PKG_VERSION"),
+        "configured": !control.connections.is_empty(), "running": control.front.is_some(),
+        "phase": "not_configured", "relay": "disabled", "joining": control.joining,
+        "default_relay": crate::mailbox::couple::DEFAULT_RELAY,
         "tray": cfg!(any(windows, target_os = "macos"))});
     {
         let updates = panel.updates.lock().unwrap();
@@ -475,30 +653,39 @@ async fn snapshot(panel: &Panel) -> Value {
             "staged": updates.staged, "writable": updates.writable,
         });
     }
-    if let Some(config) = &control.config {
-        result["api_base"] = json!(format!("http://{}/v1", config.listen));
-        result["transport"] = json!(config.transport);
-        result["phase"] = json!("disconnected");
-        if let Some(active) = &control.active {
-            result["phase"] = json!("connecting");
-            if active.task.is_finished() {
-                result["phase"] = json!("stopped");
-            } else if let Some(health) = local_health(panel, config).await {
-                result["phase"] = json!(if health["connected"] == true {
-                    "connected"
-                } else if health["recovering"] == true {
-                    "recovering"
-                } else if health["access_denied"] == true {
-                    "denied"
-                } else if health["pairing_rejected"] == true {
-                    "rejected"
-                } else if health["new_code_required"] == true {
-                    "new_code_required"
-                } else {
-                    "connecting"
-                });
-            }
+    if let Some(first) = control.connections.first() {
+        result["api_base"] = json!(format!("http://{}/v1", first.config.listen));
+        let https = control
+            .connections
+            .iter()
+            .all(|c| c.config.transport == crate::config::Transport::Https);
+        result["transport"] = if https {
+            json!(crate::config::Transport::Https)
+        } else {
+            json!(first.config.transport)
+        };
+        let mut computers = Vec::new();
+        for connection in &control.connections {
+            let phase = phase_of(panel, connection).await;
+            computers.push(
+                json!({"id": connection.id, "label": connection.label(), "phase": phase,
+                "models": front::listed_by(&panel.catalog, &connection.id)}),
+            );
         }
+        let front_stopped = control
+            .front
+            .as_ref()
+            .is_some_and(|front| front.task.is_finished());
+        result["phase"] = if control.front.is_none() {
+            json!("disconnected")
+        } else if front_stopped {
+            json!("stopped")
+        } else if computers.iter().any(|c| c["phase"] == "connected") {
+            json!("connected")
+        } else {
+            computers[0]["phase"].clone()
+        };
+        result["computers"] = json!(computers);
     }
     if control.joining {
         result["phase"] = json!("joining");
@@ -506,57 +693,89 @@ async fn snapshot(panel: &Panel) -> Value {
     result
 }
 
+/// Starts the front and every connection that is not running yet: the panel's own start,
+/// "Connect", and a computer added while the others are connected.
 async fn connect(State(panel): State<Panel>) -> Response {
     let mut control = panel.control.lock().await;
-    if control.active.is_some() {
-        return failure(
-            StatusCode::CONFLICT,
-            "The client is already running. Use Disconnect before starting another tunnel.",
-        );
-    }
-    let Some(config) = control.config.clone() else {
+    let Some(listen) = control.connections.first().map(|c| c.config.listen) else {
         return failure(
             StatusCode::BAD_REQUEST,
             "Import your private client.toml first.",
         );
     };
-    let Ok(listener) = TcpListener::bind(config.listen).await else {
+    if control.front.is_some() && control.connections.iter().all(|c| c.active.is_some()) {
         return failure(
             StatusCode::CONFLICT,
-            "The local API port is occupied. Stop the other client or import a configuration with another loopback port.",
+            "The client is already running. Use Disconnect before starting another tunnel.",
         );
-    };
-    let state_dir = panel.directory.join("pairing-state");
-    let Ok(gateway) = Gateway::new(config) else {
-        return failure(
-            StatusCode::BAD_REQUEST,
-            "The client configuration cannot be started.",
-        );
-    };
-    let stop = panel.stop.child_token();
-    let shutdown = stop.clone();
-    let task = tokio::spawn(async move {
-        let background = gateway.clone();
-        let token = shutdown.clone();
-        let peer = tokio::spawn(async move {
-            background.maintain(token, state_dir).await;
+    }
+    let mut started = Vec::new();
+    for connection in control.connections.iter().filter(|c| c.active.is_none()) {
+        let mut config = connection.config.clone();
+        // The host decides how many requests run at once; this side only must not be the
+        // narrower door.
+        config.max_concurrent_requests = config.max_concurrent_requests.max(8);
+        config.max_queued_requests = config.max_queued_requests.max(16);
+        let Ok(gateway) = Gateway::new(config) else {
+            return failure(
+                StatusCode::BAD_REQUEST,
+                "The client configuration cannot be started.",
+            );
+        };
+        started.push((connection.id.clone(), gateway));
+    }
+    if control.front.is_none() {
+        let Ok(listener) = TcpListener::bind(listen).await else {
+            return failure(
+                StatusCode::CONFLICT,
+                "The local API port is occupied. Stop the other client or import a configuration with another loopback port.",
+            );
+        };
+        panel.ensure_key(&control);
+        let stop = panel.stop.child_token();
+        let shutdown = stop.clone();
+        let app = front::router(panel.clone());
+        let task = tokio::spawn(async move {
+            let server = axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown.clone().cancelled_owned());
+            let _ = shutdown::with_grace(&shutdown, shutdown::GRACE, server.into_future()).await;
+            shutdown.cancel();
         });
-        let server = axum::serve(listener, gateway.router())
-            .with_graceful_shutdown(shutdown.clone().cancelled_owned());
-        let _ = shutdown::with_grace(&shutdown, shutdown::GRACE, server.into_future()).await;
-        shutdown.cancel();
-        let _ = peer.await;
-    });
-    control.active = Some(Active { stop, task });
+        control.front = Some(Active { stop, task });
+    }
+    let state_dir = panel.directory.join("pairing-state");
+    for (id, gateway) in started {
+        let stop = panel.stop.child_token();
+        let (background, token, state_dir) = (gateway.clone(), stop.clone(), state_dir.clone());
+        let task = tokio::spawn(async move { background.maintain(token, state_dir).await });
+        if let Some(connection) = control.connections.iter_mut().find(|c| c.id == id) {
+            connection.active = Some(Active { stop, task });
+            connection.gateway = Some(gateway);
+        }
+    }
+    panel.publish(&control);
     Json(json!({"started": true})).into_response()
+}
+
+async fn stop_connection(connection: &mut Connection) {
+    connection.gateway = None;
+    if let Some(active) = connection.active.take() {
+        active.stop.cancel();
+        let _ = active.task.await;
+    }
 }
 
 async fn stop_client(panel: &Panel) {
     let mut control = panel.control.lock().await;
-    if let Some(active) = control.active.take() {
-        active.stop.cancel();
-        let _ = active.task.await;
+    if let Some(front) = control.front.take() {
+        front.stop.cancel();
+        let _ = front.task.await;
     }
+    for connection in &mut control.connections {
+        stop_connection(connection).await;
+    }
+    panel.publish(&control);
+    *panel.catalog.lock().unwrap() = front::Catalog::default();
 }
 
 async fn disconnect(State(panel): State<Panel>) -> Json<Value> {
@@ -564,14 +783,62 @@ async fn disconnect(State(panel): State<Panel>) -> Json<Value> {
     Json(json!({"stopped": true}))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoveInput {
+    id: String,
+}
+/// Ends one model computer's connection and deletes its pairing; the others keep running.
+async fn remove(
+    State(panel): State<Panel>,
+    input: Result<Json<RemoveInput>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let Ok(Json(input)) = input else {
+        return failure(StatusCode::BAD_REQUEST, "Unknown model computer.");
+    };
+    let mut control = panel.control.lock().await;
+    let Some(index) = control.connections.iter().position(|c| c.id == input.id) else {
+        return failure(StatusCode::NOT_FOUND, "Unknown model computer.");
+    };
+    let mut connection = control.connections.remove(index);
+    stop_connection(&mut connection).await;
+    if control.connections.is_empty()
+        && let Some(front) = control.front.take()
+    {
+        front.stop.cancel();
+        let _ = front.task.await;
+    }
+    panel.publish(&control);
+    *panel.catalog.lock().unwrap() = front::Catalog::default();
+    if save_pairings(&panel.directory, &control.connections).is_err() {
+        return failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Cannot save the pairing list.",
+        );
+    }
+    let gone = if valid_folder(&connection.id) {
+        std::fs::remove_dir_all(panel.directory.join(&connection.id))
+    } else {
+        std::fs::remove_file(panel.directory.join("client.toml"))
+    };
+    if gone.is_err_and(|error| error.kind() != std::io::ErrorKind::NotFound) {
+        return failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "The pairing was removed, but its folder could not be deleted.",
+        );
+    }
+    Json(json!({"removed": true})).into_response()
+}
+
 async fn credentials(State(panel): State<Panel>) -> Response {
     let control = panel.control.lock().await;
-    match &control.config {
-        Some(config) => Json(
-            json!({"api_base": format!("http://{}/v1", config.listen), "api_key": config.api_key}),
-        )
-        .into_response(),
-        None => failure(
+    panel.ensure_key(&control);
+    match (control.connections.first(), panel.key()) {
+        (Some(first), Some(key)) => {
+            Json(json!({"api_base": format!("http://{}/v1", first.config.listen), "api_key": key}))
+                .into_response()
+        }
+        _ => failure(
             StatusCode::BAD_REQUEST,
             "Import a client configuration first.",
         ),
@@ -579,14 +846,28 @@ async fn credentials(State(panel): State<Panel>) -> Response {
 }
 
 async fn test_backend(State(panel): State<Panel>) -> Response {
-    let control = panel.control.lock().await;
-    let Some(config) = control.config.as_ref().filter(|_| control.active.is_some()) else {
+    let listen = {
+        let control = panel.control.lock().await;
+        let Some(first) = control
+            .connections
+            .first()
+            .filter(|_| control.front.is_some())
+        else {
+            return failure(StatusCode::CONFLICT, "Start the connection first.");
+        };
+        first.config.listen
+    };
+    let Some(key) = panel.key() else {
         return failure(StatusCode::CONFLICT, "Start the connection first.");
     };
-    if local_health(&panel, config)
-        .await
-        .is_none_or(|value| value["connected"] != true)
-    {
+    let routes = panel.routes.read().unwrap().clone();
+    let mut connected = false;
+    for route in &routes {
+        connected |= front::health_of(route)
+            .await
+            .is_some_and(|health| health["connected"] == true);
+    }
+    if !connected {
         return failure(
             StatusCode::CONFLICT,
             "The encrypted tunnel is not connected yet. Check the remote host, pairing code and network permissions.",
@@ -595,8 +876,8 @@ async fn test_backend(State(panel): State<Panel>) -> Response {
     let start = Instant::now();
     let response = panel
         .http
-        .get(format!("http://{}/v1/models", config.listen))
-        .bearer_auth(&config.api_key)
+        .get(format!("http://{listen}/v1/models"))
+        .bearer_auth(&key)
         .send()
         .await;
     let Ok(response) = response else {
@@ -611,7 +892,7 @@ async fn test_backend(State(panel): State<Panel>) -> Response {
             "The tunnel is connected, but the backend rejected model discovery. Check its loaded model and required privacy profile.",
         );
     }
-    let Some(body) = limited_body(response, 65536).await else {
+    let Some(body) = limited_body(response, 1024 * 1024).await else {
         return failure(
             StatusCode::BAD_GATEWAY,
             "The model-list response was interrupted or exceeded the size limit.",
@@ -628,7 +909,7 @@ async fn test_backend(State(panel): State<Panel>) -> Response {
     };
     let ids: Vec<_> = models
         .iter()
-        .take(32)
+        .take(64)
         .filter_map(|model| model["id"].as_str())
         .map(|id| id.chars().take(256).collect::<String>())
         .collect();
@@ -755,25 +1036,24 @@ pub async fn run(
     let origin = format!("http://{address}");
     let token = random_secret()?;
     let saved = directory.join("client.toml");
-    let config = if let Some(config) = paired(&directory) {
-        Some(config)
-    } else if saved.is_file() {
-        Config::load(&saved)
+    let mut connections = paired(&directory);
+    if connections.is_empty()
+        && saved.is_file()
+        && let Some(config) = Config::load(&saved)
             .ok()
             .and_then(|cfg| toml::to_string(&cfg).ok())
             .and_then(|text| imported(&text, &directory).ok())
-    } else {
-        None
-    };
+    {
+        connections.push(Connection::new(IMPORTED.into(), config));
+    }
     let updates_off = directory_has(&directory, UPDATES_OFF);
     let panel = Panel {
         token,
         origin,
         directory,
         control: Arc::new(Mutex::new(Control {
-            config,
-            active: None,
-            joining: false,
+            connections,
+            ..Control::default()
         })),
         stop: stop.clone(),
         http: reqwest::Client::builder()
@@ -788,15 +1068,20 @@ pub async fn run(
             writable: std::env::current_exe().is_ok_and(|exe| crate::update::writable(&exe)),
             ..Updates::default()
         })),
+        routes: Default::default(),
+        catalog: Default::default(),
+        key: Default::default(),
     };
     // A pairing by code reconnects without a new code, so the panel starts it right away.
-    let https = panel
-        .control
-        .lock()
-        .await
-        .config
-        .as_ref()
-        .is_some_and(|config| config.transport == crate::config::Transport::Https);
+    let https = {
+        let control = panel.control.lock().await;
+        panel.ensure_key(&control);
+        !control.connections.is_empty()
+            && control
+                .connections
+                .iter()
+                .all(|c| c.config.transport == crate::config::Transport::Https)
+    };
     if https {
         let _ = connect(State(panel.clone())).await;
     }
@@ -940,6 +1225,7 @@ async fn update(
 }
 
 mod chat;
+mod front;
 mod tray;
 
 /// No total timeout: a chat answer streams for as long as the model writes.
@@ -982,6 +1268,9 @@ mod tests {
             stream: streaming_client().unwrap(),
             relay_ca: None,
             updates: Default::default(),
+            routes: Default::default(),
+            catalog: Default::default(),
+            key: Default::default(),
         };
         let app = router(panel.clone());
         let stop = panel.stop.clone();
@@ -1137,12 +1426,13 @@ mod tests {
         let occupied = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut cfg = config();
         cfg.listen = occupied.local_addr().unwrap();
-        panel.control.lock().await.config = Some(cfg.clone());
+        panel.control.lock().await.connections =
+            vec![Connection::new(IMPORTED.into(), cfg.clone())];
         assert_eq!(
             connect(State(panel.clone())).await.status(),
             StatusCode::CONFLICT
         );
-        assert!(panel.control.lock().await.active.is_none());
+        assert!(panel.control.lock().await.front.is_none());
         drop(occupied);
         assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
         assert_eq!(
@@ -1158,7 +1448,7 @@ mod tests {
         .await;
         assert_eq!(response.status(), StatusCode::CONFLICT);
         stop_client(&panel).await;
-        assert!(panel.control.lock().await.active.is_none());
+        assert!(panel.control.lock().await.front.is_none());
         // Parallel crash-matrix children can briefly inherit a listening descriptor
         // until exec closes it. Assert bounded release, not the fork/exec instant.
         tokio::time::timeout(std::time::Duration::from_secs(3), async {
@@ -1262,7 +1552,7 @@ mod tests {
             remote_stop.clone(),
             directory.join("host-state"),
         ));
-        panel.control.lock().await.config = Some(cfg);
+        panel.control.lock().await.connections = vec![Connection::new(IMPORTED.into(), cfg)];
         assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
         tokio::time::timeout(std::time::Duration::from_secs(15), async {
             loop {
@@ -1345,8 +1635,8 @@ mod tests {
         assert_eq!(joined.status(), StatusCode::OK);
         offer.await.unwrap().unwrap();
         // The pairing survives a restart of the panel.
-        let saved = paired(&directory).unwrap();
-        assert!(saved.transport == crate::config::Transport::Https);
+        let saved = paired(&directory);
+        assert!(saved.len() == 1 && saved[0].config.transport == crate::config::Transport::Https);
         let mut host = Config::load(&relay.root.join("pairing/host/host.toml")).unwrap();
         host.upstream = format!("http://{backend_address}");
         let remote_stop = CancellationToken::new();
@@ -1356,7 +1646,7 @@ mod tests {
             relay.root.join("host-pairing-state"),
         ));
         let api = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        panel.control.lock().await.config.as_mut().unwrap().listen = api.local_addr().unwrap();
+        panel.control.lock().await.connections[0].config.listen = api.local_addr().unwrap();
         drop(api);
         assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
         tokio::time::timeout(std::time::Duration::from_secs(15), async {
@@ -1378,7 +1668,7 @@ mod tests {
             .unwrap();
         let result: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(result["models"][0], "relay-test-model");
-        // A second code while connected is refused before anything is contacted.
+        // A second, wrong code while connected fails and leaves the connected computer alone.
         let again = join(
             State(panel.clone()),
             Ok(Json(JoinInput {
@@ -1387,7 +1677,9 @@ mod tests {
             })),
         )
         .await;
-        assert_eq!(again.status(), StatusCode::CONFLICT);
+        assert_eq!(again.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(panel.control.lock().await.connections.len(), 1);
+        assert_eq!(status(State(panel.clone())).await.0["phase"], "connected");
         stop_client(&panel).await;
         remote_stop.cancel();
         let _ = host_task.await.unwrap();
@@ -1456,7 +1748,7 @@ mod tests {
         let paired_now =
             super::scan(State(panel.clone()), frame(crate::qr::picture(&text, 4))).await;
         assert_eq!(paired_now.status(), StatusCode::OK);
-        assert!(paired(&directory).is_some());
+        assert_eq!(paired(&directory).len(), 1);
         let mut host = Config::load(&relay.root.join("pairing/host/host.toml")).unwrap();
         host.upstream = format!("http://{backend_address}");
         let remote_stop = CancellationToken::new();
@@ -1466,7 +1758,7 @@ mod tests {
             relay.root.join("host-pairing-state"),
         ));
         let api = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        panel.control.lock().await.config.as_mut().unwrap().listen = api.local_addr().unwrap();
+        panel.control.lock().await.connections[0].config.listen = api.local_addr().unwrap();
         drop(api);
         assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
         tokio::time::timeout(std::time::Duration::from_secs(15), async {
@@ -1493,6 +1785,188 @@ mod tests {
         remote_stop.cancel();
         let _ = host_task.await.unwrap();
         backend.abort();
+        cleanup(panel, ui_task, directory).await;
+    }
+
+    /// A model computer for the multi-host test: its own relay, host and backend that
+    /// names itself in every answer.
+    async fn computer(
+        name: &'static str,
+        models: &'static [&'static str],
+    ) -> (
+        crate::mailbox::couple::tests::Fixture,
+        String,
+        CancellationToken,
+        JoinHandle<()>,
+        JoinHandle<anyhow::Result<()>>,
+    ) {
+        let relay = crate::mailbox::couple::tests::fixture().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let backend = Router::new()
+            .route(
+                "/health",
+                get(|| async {
+                    Json(json!({"link_privacy": {
+                        "version": 1, "application_logs": false, "request_history": false,
+                        "diagnostics": false, "remote_images": false
+                    }}))
+                }),
+            )
+            .route(
+                "/v1/models",
+                get(move || async move {
+                    Json(json!({"data": models.iter().map(|id| json!({"id": id})).collect::<Vec<_>>()}))
+                }),
+            )
+            .route(
+                "/v1/chat/completions",
+                post(move |Json(body): Json<Value>| async move {
+                    Json(json!({"computer": name, "model": body["model"]}))
+                }),
+            );
+        let backend = tokio::spawn(async move { axum::serve(listener, backend).await.unwrap() });
+        let text = relay.offer_qr();
+        let mut host = Config::load(&relay.root.join("pairing/host/host.toml")).unwrap();
+        host.upstream = format!("http://{address}");
+        let stop = CancellationToken::new();
+        let task = tokio::spawn(crate::host::run(
+            host,
+            stop.clone(),
+            relay.root.join("host-pairing-state"),
+        ));
+        (relay, text, stop, backend, task)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn several_computers_share_one_local_api_and_never_take_each_others_requests() {
+        let (mut panel, ui_task, directory) = fixture().await;
+        let (relay_a, qr_a, stop_a, backend_a, host_a) =
+            computer("A", &["model-a", "shared"]).await;
+        let (relay_b, qr_b, stop_b, backend_b, host_b) =
+            computer("B", &["model-b", "shared"]).await;
+        // Both test relays have their own CA; the panel trusts both.
+        let bundle = directory.join("relays.pem");
+        let pems = std::fs::read_to_string(&relay_a.ca).unwrap()
+            + &std::fs::read_to_string(&relay_b.ca).unwrap();
+        std::fs::write(&bundle, pems).unwrap();
+        panel.relay_ca = Some(bundle);
+        let frame = |text: &str| {
+            let (width, height, pixels) = crate::qr::picture(text, 4);
+            let mut frame = width.to_le_bytes().to_vec();
+            frame.extend(height.to_le_bytes());
+            frame.extend(pixels);
+            axum::body::Bytes::from(frame)
+        };
+        let paired_a = super::scan(State(panel.clone()), frame(&qr_a)).await;
+        assert_eq!(paired_a.status(), StatusCode::OK);
+        let api = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listen = api.local_addr().unwrap();
+        panel.control.lock().await.connections[0].config.listen = listen;
+        drop(api);
+        assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
+        // The key an AI app got for the first computer stays the key of the shared API.
+        let first_key = panel.control.lock().await.connections[0]
+            .config
+            .api_key
+            .clone();
+        assert_eq!(panel.key().as_deref(), Some(first_key.as_str()));
+        // A second computer joins while the first stays connected.
+        let paired_b = super::scan(State(panel.clone()), frame(&qr_b)).await;
+        assert_eq!(paired_b.status(), StatusCode::OK);
+        let again = super::scan(State(panel.clone()), frame(&qr_b)).await;
+        assert_eq!(again.status(), StatusCode::CONFLICT);
+        assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
+        assert_eq!(paired(&directory).len(), 2);
+        tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                let state = status(State(panel.clone())).await.0;
+                let computers = state["computers"].as_array().cloned().unwrap_or_default();
+                if computers.len() == 2 && computers.iter().all(|c| c["phase"] == "connected") {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("both computers connect");
+        let http = &panel.http;
+        let models: Value = http
+            .get(format!("http://{listen}/v1/models"))
+            .bearer_auth(&first_key)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let mut ids: Vec<_> = models["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].as_str().unwrap().to_owned())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, ["model-a", "model-b", "shared", "shared@2"]);
+        let ask = |model: &'static str| {
+            http.post(format!("http://{listen}/v1/chat/completions"))
+                .bearer_auth(&first_key)
+                .json(&json!({"model": model, "messages": [{"role": "user", "content": "hi"}]}))
+                .send()
+        };
+        let answer = |response: reqwest::Response| async move {
+            let value: Value = response.json().await.unwrap();
+            (
+                value["computer"].as_str().unwrap_or_default().to_owned(),
+                value["model"].clone(),
+            )
+        };
+        assert_eq!(answer(ask("model-b").await.unwrap()).await.0, "B");
+        assert_eq!(answer(ask("model-a").await.unwrap()).await.0, "A");
+        assert_eq!(
+            answer(ask("shared").await.unwrap()).await,
+            ("A".into(), json!("shared"))
+        );
+        // The second computer's copy of a shared model, under its own name there.
+        assert_eq!(
+            answer(ask("shared@2").await.unwrap()).await,
+            ("B".into(), json!("shared"))
+        );
+        // Unknown models go to the first computer, as with one connection.
+        assert_eq!(answer(ask("unlisted").await.unwrap()).await.0, "A");
+        let wrong_key = http
+            .get(format!("http://{listen}/v1/models"))
+            .bearer_auth("not-the-key")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(wrong_key.status(), StatusCode::UNAUTHORIZED);
+        // B goes away: its model is not answered by A.
+        stop_b.cancel();
+        let _ = host_b.await;
+        backend_b.abort();
+        // It waits for B to come back, then fails; it is never answered by A.
+        match ask("model-b").await {
+            Err(error) => assert!(error.is_timeout()),
+            Ok(response) => assert!(response.status().is_server_error(), "{}", response.status()),
+        }
+        assert_eq!(answer(ask("model-a").await.unwrap()).await.0, "A");
+        // Removing B deletes its pairing; A keeps running.
+        let b = panel.control.lock().await.connections[1].id.clone();
+        let removed = remove(
+            State(panel.clone()),
+            Ok(Json(RemoveInput { id: b.clone() })),
+        )
+        .await;
+        assert_eq!(removed.status(), StatusCode::OK);
+        assert!(!directory.join(&b).exists());
+        assert_eq!(paired(&directory).len(), 1);
+        assert_eq!(answer(ask("model-a").await.unwrap()).await.0, "A");
+        stop_client(&panel).await;
+        stop_a.cancel();
+        let _ = host_a.await;
+        backend_a.abort();
+        drop((relay_a, relay_b));
         cleanup(panel, ui_task, directory).await;
     }
 
@@ -1524,7 +1998,7 @@ mod tests {
         let api = TcpListener::bind("127.0.0.1:0").await.unwrap();
         config.listen = api.local_addr().unwrap();
         drop(api);
-        panel.control.lock().await.config = Some(config);
+        panel.control.lock().await.connections = vec![Connection::new(IMPORTED.into(), config)];
         assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
         tokio::time::timeout(std::time::Duration::from_secs(15), async {
             while status(State(panel.clone())).await.0["phase"] != "denied" {
@@ -1594,9 +2068,10 @@ mod tests {
         let backend = tokio::spawn(async move { axum::serve(gateway, echo).await.unwrap() });
         let stop = panel.stop.child_token();
         let waiting = stop.clone();
+        *panel.key.write().unwrap() = Some(cfg.api_key.clone());
         let mut control = panel.control.lock().await;
-        control.config = Some(cfg);
-        control.active = Some(Active {
+        control.connections = vec![Connection::new(IMPORTED.into(), cfg)];
+        control.front = Some(Active {
             stop,
             task: tokio::spawn(async move { waiting.cancelled().await }),
         });

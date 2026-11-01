@@ -42,7 +42,7 @@ function confirmed(button, question, work) {
   setTimeout(() => { if (button.dataset.sure) { delete button.dataset.sure; button.textContent = label; } }, 3000);
 }
 // "/models/Name-Q8_0.gguf" → "Name-Q8_0"
-const short = (model) => model.replace(/^.*[\\/]/, '').replace(/\.gguf$/i, '');
+const short = (model) => model.replace(/^.*[\\/]/, '').replace(/\.gguf(@\d+)?$/i, '$1');
 const thousands = (n) => n >= 10000 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 
 /* ---- saved chats in the panel ---- */

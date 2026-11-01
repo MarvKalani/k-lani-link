@@ -25,6 +25,10 @@ const texts = {
     updateInfo: 'Twice a day, k-lani-link asks GitHub whether a newer version exists; only its own version number goes along. A new version must carry the k-lani-link signature. It is downloaded and installed at the next start.',
     sUpdating: 'Updating…', updatingTitle: 'Updating',
     updatingDetail: 'k-lani-link restarts with the new version and opens a new tab. You can close this one.',
+    computersTitle: 'Model computers', addComputer: '+ Add another model computer', back: 'Back',
+    computersNote: 'The models of all computers appear under the same base URL and key. Each request goes only to the computer that offers its model.',
+    removeComputer: 'Remove', removeSure: 'Really remove?', noModels: 'no models yet',
+    pDenied: 'access refused', pUsed: 'new code needed', pRejected: 'not verified', pStopped: 'stopped',
     cancel: 'Cancel', readyTitle: 'Connected',
     readyIntro: 'In your AI app, add an “OpenAI-compatible” provider and copy in these three values:',
     base: 'Base URL', key: 'API key', model: 'Model', copy: 'Copy', copied: 'Copied',
@@ -95,6 +99,10 @@ const texts = {
     updateInfo: 'Zweimal am Tag fragt k-lani-link bei GitHub, ob es eine neuere Version gibt; mitgeschickt wird nur die eigene Versionsnummer. Eine neue Version muss die k-lani-link-Signatur tragen. Sie wird geladen und beim nächsten Start installiert.',
     sUpdating: 'Aktualisiere…', updatingTitle: 'Wird aktualisiert',
     updatingDetail: 'k-lani-link startet mit der neuen Version neu und öffnet einen neuen Tab. Diesen kannst du schließen.',
+    computersTitle: 'Modellrechner', addComputer: '+ Weiteren Modellrechner hinzufügen', back: 'Zurück',
+    computersNote: 'Die Modelle aller Rechner erscheinen unter derselben Basis-URL und demselben Schlüssel. Jede Anfrage geht nur an den Rechner, der ihr Modell anbietet.',
+    removeComputer: 'Entfernen', removeSure: 'Wirklich entfernen?', noModels: 'noch keine Modelle',
+    pDenied: 'Zugang verweigert', pUsed: 'neuer Code nötig', pRejected: 'nicht geprüft', pStopped: 'angehalten',
     cancel: 'Abbrechen', readyTitle: 'Verbunden',
     readyIntro: 'Lege in deiner KI-App einen „OpenAI-kompatiblen“ Anbieter an und kopiere diese drei Werte hinein:',
     base: 'Basis-URL', key: 'API-Schlüssel', model: 'Modell', copy: 'Kopieren', copied: 'Kopiert',
@@ -171,6 +179,12 @@ const serverDe = {
   'This is not a camera picture.': 'Das ist kein Kamerabild.',
   'Disconnect before pairing again.': 'Trenne zuerst die Verbindung, dann koppeln.',
   'No update is ready yet.': 'Es ist noch kein Update bereit.',
+  'Unknown model computer.': 'Unbekannter Modellrechner.',
+  'Cannot save the pairing list.': 'Die Liste der Modellrechner ließ sich nicht speichern.',
+  'Cannot save the pairing.': 'Die Kopplung ließ sich nicht speichern.',
+  'The pairing was removed, but its folder could not be deleted.': 'Die Kopplung ist entfernt, ihr Ordner ließ sich aber nicht löschen.',
+  'Eight model computers are the most. Remove one before adding another.': 'Mehr als acht Modellrechner gehen nicht. Entferne zuerst einen.',
+  'This QR code was already used. Show a new one with offer-https --qr.': 'Dieser QR-Code wurde schon benutzt. Lass dir mit offer-https --qr einen neuen zeigen.',
   'Unknown update action.': 'Unbekannte Update-Aktion.',
   'The setting could not be saved.': 'Die Einstellung ließ sich nicht speichern.',
   'A pairing is already waiting.': 'Eine Kopplung läuft bereits.',
@@ -242,8 +256,10 @@ function render(state) {
   for (const id of ['pair', 'fix', 'cancel', 'repair', 'disconnect', 'quit']) byId(id).disabled = busy;
   if (state.phase !== 'connected') forget();
   if (state.joining) { light('joining', t('sPairing')); wait('waitPairTitle', 'waitPairDetail', false); return; }
-  if (!state.configured || (wantPair && !state.running)) {
-    light('', t('sUnpaired'));
+  showComputers(state.computers || []);
+  byId('pair-back').hidden = !state.configured;
+  if (!state.configured || wantPair) {
+    if (!state.configured) light('', t('sUnpaired'));
     if (byId('step-pair').hidden) { show('pair'); byId(byId('relay-row').hidden || byId('relay').value ? 'code' : 'relay').focus(); }
     return;
   }
@@ -276,7 +292,44 @@ function showUpdate(update) {
   byId('update-link').hidden = key !== 'updateManual';
   byId('update-now').hidden = key !== 'updateReady';
 }
-async function newCode() { if (current && current.running) await api('disconnect', {}); wantPair = true; byId('code').value = ''; }
+// A computer that needs a new code is removed first; the others stay connected.
+async function newCode() {
+  for (const computer of (current && current.computers) || []) {
+    if (['denied', 'rejected', 'new_code_required'].includes(computer.phase)) await api('remove', { id: computer.id });
+  }
+  wantPair = true; byId('code').value = '';
+}
+const computerPhase = { connected: 'sConnected', connecting: 'sConnecting', recovering: 'sRecovering', disconnected: 'sProblem',
+  denied: 'pDenied', rejected: 'pRejected', new_code_required: 'pUsed', stopped: 'pStopped' };
+let computerCount = 0;
+function showComputers(computers) {
+  // Another computer brings other models.
+  if (computers.length !== computerCount) { computerCount = computers.length; models = null; lastTest = 0; }
+  const list = byId('computer-list');
+  if (list.contains(document.activeElement) || list.querySelector('[data-sure]')) return;
+  list.replaceChildren(...computers.map((computer, index) => {
+    const row = document.createElement('li');
+    const dot = document.createElement('span'); dot.className = 'light ' + (computer.phase === 'connected' ? 'connected' : ['connecting', 'recovering'].includes(computer.phase) ? 'connecting' : 'rejected');
+    const name = document.createElement('span'); name.className = 'computer-name';
+    name.textContent = (computers.length > 1 ? (index + 1) + ' · ' : '') + computer.label;
+    const detail = document.createElement('small');
+    const shown = (computer.models || []).map((id) => id.replace(/^.*[\\/]/, '').replace(/\.gguf(@\d+)?$/i, '$1'));
+    detail.textContent = t(computerPhase[computer.phase] || 'sProblem') + ' · ' + (shown.length ? shown.slice(0, 3).join(', ') + (shown.length > 3 ? ' …' : '') : t('noModels'));
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary small'; remove.textContent = t('removeComputer');
+    remove.addEventListener('click', () => {
+      if (!remove.dataset.sure) {
+        remove.dataset.sure = '1'; remove.textContent = t('removeSure');
+        setTimeout(() => { delete remove.dataset.sure; remove.textContent = t('removeComputer'); }, 3000);
+        return;
+      }
+      delete remove.dataset.sure;
+      action(() => api('remove', { id: computer.id }));
+    });
+    const text = document.createElement('span'); text.className = 'computer-text'; text.append(name, detail);
+    row.append(dot, text, remove);
+    return row;
+  }));
+}
 // Fetches what the AI app needs once per connection; retries the model list while none is loaded.
 async function ready() {
   if (busy || checking) return;
@@ -344,6 +397,8 @@ byId('pair').addEventListener('click', () => action(async () => {
   await api('connect', {});
 }));
 for (const id of ['code', 'relay']) byId(id).addEventListener('keydown', (event) => { if (event.key === 'Enter') byId('pair').click(); });
+byId('add-computer').addEventListener('click', () => { wantPair = true; byId('code').value = ''; if (current) render(current); });
+byId('pair-back').addEventListener('click', () => { wantPair = false; error(''); if (current) render(current); });
 byId('relay-change').addEventListener('click', () => {
   relayChosen = true; byId('relay-preset').hidden = true; byId('relay-row').hidden = false; byId('relay').focus();
 });

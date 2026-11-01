@@ -31,13 +31,15 @@ pub fn routes() -> Router<Panel> {
 /// Forwards one chat request to the local gateway and streams its answer back. The page
 /// never sees the API key, and the panel lock is not held while the answer streams.
 async fn chat(State(panel): State<Panel>, body: Bytes) -> Response {
+    // Through the front, like any AI app: the model picks the computer.
     let target = {
         let control = panel.control.lock().await;
         control
-            .config
-            .as_ref()
-            .filter(|_| control.active.is_some())
-            .map(|config| (config.listen, config.api_key.clone()))
+            .connections
+            .first()
+            .filter(|_| control.front.is_some())
+            .map(|first| first.config.listen)
+            .zip(panel.key())
     };
     let Some((listen, key)) = target else {
         return failure(StatusCode::CONFLICT, "Start the connection first.");

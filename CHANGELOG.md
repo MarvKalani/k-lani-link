@@ -7,6 +7,15 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Several model computers at once: the control panel pairs up to eight hosts and puts
+  one local API in front of them, with one base URL and one key. The models of all
+  hosts appear in one list; each request goes only to the host that lists its model,
+  never to another one when that host is down. A model offered by two hosts appears
+  for the second one as `<name>@2`. **+ Add another model computer** pairs one more
+  while the others stay connected, **Remove** deletes one pairing. The key an AI app
+  already uses keeps working. Each connection now lets eight requests run at once on
+  this side; the host's own `max_concurrent_requests` still decides. A QR code pairs
+  only once.
 - Signed automatic updates: the control panel looks for a newer release on GitHub twice
   a day, downloads it in the background and installs it at the next start, or at once
   with **Update now**. Only releases whose `SHA256SUMS` carry the k-lani-link release

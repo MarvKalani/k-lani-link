@@ -17,6 +17,7 @@
       <p id="relay-preset" class="muted" hidden><span data-t="relay">Relay address</span>: <span id="relay-name"></span> · <button id="relay-change" class="link" type="button" data-t="change">change</button></p>
       <label><span data-t="code">Pairing code</span><input id="code" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="472-1234-5678" maxlength="20"></label>
       <button id="pair" class="big" data-t="connect">Connect</button>
+      <button id="pair-back" class="secondary" type="button" data-t="back" hidden>Back</button>
       <p class="muted" data-t="pairNote">A code works once and for ten minutes. If it fails, ask for a new one.</p>
       <div id="qr-start">
         <p class="or"><span data-t="or">or</span></p>
@@ -51,6 +52,12 @@
       <div class="row"><span data-t="model">Model</span><select id="model" hidden></select><input id="model-one" readonly><button class="secondary copy" data-copy="model" data-t="copy">Copy</button></div>
       <p id="model-problem" class="warn" hidden></p>
       <p id="ready-note" class="muted" data-t="readyNote">These values only work on this computer. You can close this page; the connection stays on.</p>
+      <div id="computers">
+        <h3 data-t="computersTitle">Model computers</h3>
+        <ul id="computer-list" class="computer-list"></ul>
+        <button id="add-computer" class="secondary" type="button" data-t="addComputer">+ Add another model computer</button>
+        <p class="muted" data-t="computersNote">The models of all computers appear under the same base URL and key. Each request goes only to the computer that offers its model.</p>
+      </div>
       <div id="chat-start">
         <h3 data-t="chatTitle">Chat with the model</h3>
         <p class="muted" data-t="chatIntro">Try the model right here. Every window is its own conversation.</p>

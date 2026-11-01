@@ -79,6 +79,21 @@ transport natively and do not isolate the AI application's network access.
    OpenAI-compatible provider in the app and paste them. The model ID comes from a
    model-list request through the real encrypted tunnel; no prompt is sent.
 
+### Several model computers at once
+
+Below the three values, **Model computers** lists every computer the panel is paired
+with and its state. **+ Add another model computer** pairs one more by code or QR code
+while the others stay connected (up to eight). The AI app keeps one base URL and one
+API key: the models of all computers appear in one list, and each request goes only
+to the computer that offers its model, never to another one, even when that one is
+down. A request without a model, or with one no computer lists, goes to the first
+computer. When two computers offer a model of the same name, the second one's appears
+as `<name>@2` (the computer's place in the list). **Remove** ends one computer's
+connection and deletes its pairing; a computer that needs a new code is removed when
+you pair again from its problem notice. For several requests at once, raise
+`max_concurrent_requests` (at most 8) in each host's `host.toml` to what its model
+server runs in parallel, e.g. Basalt's `--parallel`; the panel's side lets eight run.
+
 ### Chat with the model
 
 Below the three values, **New chat** opens a small window inside the panel page.
