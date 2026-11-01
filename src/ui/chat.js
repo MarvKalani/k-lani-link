@@ -7,6 +7,8 @@ chatLayer.id = 'chats';
 document.body.append(chatLayer);
 const chats = new Map();
 const efforts = ['', 'none', 'low', 'medium', 'high'];
+// The panel stores up to 120 characters; the page offers fewer.
+const TITLE_CHARS = 80;
 let chatFront = 10;
 let chatCount = 0;
 let savedLoaded = false;
@@ -71,7 +73,8 @@ async function listSaved() {
     return row;
   }));
   byId('chat-where').textContent = t('chatWhere') + ' ' + value.directory;
-  byId('chat-saved').hidden = !value.chats.length;
+  byId('chat-empty').hidden = value.chats.length > 0;
+  byId('chat-open-hint').hidden = !value.chats.length;
 }
 async function reopen(id) {
   if (chats.has(id)) { front(chats.get(id)); return; }
@@ -90,26 +93,35 @@ function openChat(data = {}) {
   const box = el('div', 'chat'); box.setAttribute('role', 'dialog');
   const bar = el('div', 'chat-bar');
   const title = el('span', 'chat-title');
+  const rename = el('button', 'chat-rename', '✎'); rename.type = 'button';
   const save = el('button', 'chat-save'); save.type = 'button';
-  const close = el('button', 'chat-close', '×'); close.type = 'button'; close.title = t('chatClose'); close.setAttribute('aria-label', t('chatClose'));
-  bar.append(title, save, close);
+  const close = el('button', 'chat-close', '×'); close.type = 'button';
+  bar.append(title, rename, save, close);
   const log = el('div', 'chat-log'); log.setAttribute('role', 'log');
   const note = el('p', 'chat-note');
   const form = el('form', 'chat-form');
   const options = el('div', 'chat-options');
-  const modelLabel = el('label'); modelLabel.append(el('span', '', t('chatModel')));
+  const modelName = el('span'), modelLabel = el('label'); modelLabel.append(modelName);
   const model = el('select'); modelLabel.append(model);
-  const effortLabel = el('label'); effortLabel.append(el('span', '', t('chatEffort')));
+  const effortName = el('span'), effortLabel = el('label'); effortLabel.append(effortName);
   const effort = el('select'); effortLabel.append(effort);
-  effort.replaceChildren(...efforts.map((level) => new Option(t(level ? 'effort_' + level : 'effortAuto'), level)));
+  effort.replaceChildren(...efforts.map((level) => new Option('', level)));
   effort.value = chat.effort;
   options.append(modelLabel, effortLabel);
-  const input = el('textarea'); input.rows = 2; input.placeholder = t('chatPlaceholder');
-  const send = el('button', 'chat-send', t('chatSend')); send.type = 'submit';
+  const input = el('textarea'); input.rows = 2;
+  const send = el('button', 'chat-send'); send.type = 'submit';
   form.append(options, input, send);
   box.append(bar, log, note, form);
   chat.view = {
     box, log, input, model, effort, send,
+    // The texts that change only with the language.
+    relabel() {
+      close.title = t('chatClose'); close.setAttribute('aria-label', t('chatClose'));
+      rename.title = t('chatRenameHint'); rename.setAttribute('aria-label', t('chatRename'));
+      modelName.textContent = t('chatModel'); effortName.textContent = t('chatEffort');
+      for (const option of effort.options) option.textContent = t(option.value ? 'effort_' + option.value : 'effortAuto');
+      input.placeholder = t('chatPlaceholder'); send.textContent = t(chat.busy ? 'chatStop' : 'chatSend');
+    },
     mark() {
       title.textContent = chat.title || t('chatUntitled'); box.setAttribute('aria-label', title.textContent);
       save.textContent = chat.saved ? '✓ ' + t('chatIsSaved') : t('chatSave'); save.setAttribute('aria-pressed', String(chat.saved));
@@ -119,6 +131,7 @@ function openChat(data = {}) {
   };
   fillModels(chat);
   model.addEventListener('focus', () => { fillModels(chat); freshModels(); });
+  chat.view.relabel();
   chat.view.mark();
   draw(chat);
 
@@ -131,13 +144,38 @@ function openChat(data = {}) {
 
   box.addEventListener('pointerdown', () => front(chat));
   bar.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('button') || narrow()) return;
+    if (event.button !== 0 || event.target.closest('button, input') || narrow()) return;
     const start = box.getBoundingClientRect(), dx = event.clientX - start.left, dy = event.clientY - start.top;
     bar.setPointerCapture(event.pointerId);
     const move = (next) => place(box, next.clientX - dx, next.clientY - dy);
     const end = () => { bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', end); bar.removeEventListener('pointercancel', end); };
     bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
   });
+  // The title becomes a text field; Enter or leaving it keeps the new title, Escape the old one.
+  const renaming = () => {
+    if (bar.querySelector('.chat-title-input')) return;
+    const field = el('input', 'chat-title-input'); field.type = 'text'; field.maxLength = TITLE_CHARS;
+    field.value = chat.title; field.placeholder = t('chatUntitled'); field.setAttribute('aria-label', t('chatRename'));
+    let done = false;
+    const finish = (keep) => {
+      if (done) return;
+      done = true;
+      const next = field.value.replace(/\s+/g, ' ').trim().slice(0, TITLE_CHARS);
+      field.replaceWith(title);
+      if (!keep || !next || next === chat.title) return;
+      chat.title = next; chat.view.mark();
+      if (chat.saved) { chat.updated = Date.now(); store(chat); }
+    };
+    field.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); finish(true); }
+      else if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+    });
+    field.addEventListener('blur', () => finish(true));
+    title.replaceWith(field);
+    field.focus(); field.select();
+  };
+  rename.addEventListener('click', renaming);
+  title.addEventListener('dblclick', renaming);
   close.addEventListener('click', () => {
     if (chat.busy) chat.busy.abort();
     chats.delete(chat.id); box.remove();
@@ -160,6 +198,7 @@ function openChat(data = {}) {
     if (!text) return;
     tidy(chat);
     chat.messages.push({ role: 'user', content: text });
+    // Only an untitled chat is named after its first message; a title set by hand stays.
     if (!chat.title) { chat.title = text.replace(/\s+/g, ' ').slice(0, 48); chat.view.mark(); }
     input.value = ''; input.style.height = '';
     answer(chat);
@@ -193,6 +232,14 @@ async function freshModels() {
 // Open windows whose conversation would be lost by a restart.
 function unsavedChats() { return [...chats.values()].filter((chat) => !chat.saved && chat.messages.length).length; }
 function chatModels() { for (const chat of chats.values()) fillModels(chat); }
+// After a language switch. A window that is still answering is redrawn once its answer ends.
+function relabelChats() {
+  for (const chat of chats.values()) {
+    chat.view.relabel(); chat.view.mark();
+    if (!chat.busy) draw(chat);
+  }
+  if (savedLoaded) listSaved();
+}
 // Errors and empty answers are not part of the conversation the model sees.
 function tidy(chat) {
   chat.messages = chat.messages.filter((m) => m.role !== 'error' && !(m.role === 'assistant' && !m.content && !m.reasoning));
@@ -268,7 +315,7 @@ async function store(chat) {
   chat.updated = chat.updated || Date.now();
   try {
     await chatApi('PUT', 'chats/' + chat.id, {
-      title: chat.title || t('chatUntitled'), created: chat.created, updated: chat.updated,
+      title: chat.title, created: chat.created, updated: chat.updated,
       model: chat.model, effort: chat.effort, messages: chat.messages.filter((m) => m.role !== 'error')
     });
   } catch (cause) { chat.view.mark(); chat.view.box.querySelector('.chat-note').textContent = cause.message; return; }

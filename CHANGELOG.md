@@ -7,6 +7,15 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The control panel has a **DE** / **EN** switch in its header. It changes the language
+  at once, open chat windows included, and the panel keeps the choice in its data
+  directory; without a choice the panel follows the browser language as before.
+- Chat titles can be changed: **✎** in a chat window's title bar, or a double-click on
+  the title. A saved chat keeps the new title, and later messages never overwrite it.
+  The panel accepts titles of up to 120 characters.
+- **Saved chats** is always shown below **New chat** once the panel is connected,
+  with a hint while it is empty and how to reopen a chat when it is not.
+
 ## 1.2611.1-preview.2 — 1 November 2026 (several model computers, QR pairing, signed updates)
 
 - Several model computers at once: the control panel pairs up to eight hosts and puts

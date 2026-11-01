@@ -157,6 +157,10 @@ struct Updates {
     wake: Arc<tokio::sync::Notify>,
 }
 const UPDATES_OFF: &str = "updates-off";
+/// The page language chosen in the panel. The page's own storage is lost at every start,
+/// because each start serves the page from another port.
+const LANGUAGE: &str = "language";
+const LANGUAGES: [&str; 2] = ["de", "en"];
 const STAGE: &str = "update";
 /// The most model computers one panel connects to at once.
 const MAX_COMPUTERS: usize = 8;
@@ -257,6 +261,7 @@ fn router(panel: Panel) -> Router {
         .route("/api/credentials", post(credentials))
         .route("/api/quit", post(quit))
         .route("/api/update", post(update))
+        .route("/api/language", post(choose_language))
         .layer(DefaultBodyLimit::max(64 * 1024))
         .merge(chat::routes())
         .layer(middleware::from_fn_with_state(panel.clone(), protect))
@@ -652,6 +657,11 @@ async fn snapshot(panel: &Panel) -> Value {
             "enabled": updates.enabled, "available": updates.available,
             "staged": updates.staged, "writable": updates.writable,
         });
+    }
+    if let Ok(chosen) = std::fs::read_to_string(panel.directory.join(LANGUAGE))
+        && LANGUAGES.contains(&chosen.trim())
+    {
+        result["language"] = json!(chosen.trim());
     }
     if let Some(first) = control.connections.first() {
         result["api_base"] = json!(format!("http://{}/v1", first.config.listen));
@@ -1174,6 +1184,38 @@ pub fn install_staged(directory: &std::path::Path) -> Option<PathBuf> {
     // Installed or not, the same download is not tried again at every start.
     let _ = std::fs::remove_dir_all(&stage);
     result.ok().map(|()| exe)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LanguageInput {
+    language: String,
+}
+async fn choose_language(
+    State(panel): State<Panel>,
+    input: Result<Json<LanguageInput>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let Ok(Json(input)) = input else {
+        return failure(StatusCode::BAD_REQUEST, "Unknown language.");
+    };
+    if !LANGUAGES.contains(&input.language.as_str()) {
+        return failure(StatusCode::BAD_REQUEST, "Unknown language.");
+    }
+    let file = panel.directory.join(LANGUAGE);
+    // A new private file replaces the old one whole.
+    let written = random_secret().and_then(|suffix| {
+        let partial = file.with_extension(format!("{suffix}.part"));
+        private_file(&partial, &format!("{}\n", input.language))?;
+        std::fs::rename(&partial, &file)?;
+        Ok(())
+    });
+    if written.is_err() {
+        return failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "The setting could not be saved.",
+        );
+    }
+    Json(json!({"language": input.language})).into_response()
 }
 
 #[derive(Deserialize)]
@@ -2149,6 +2191,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_chosen_language_outlives_the_page_and_only_known_ones_are_kept() {
+        let (panel, task, directory) = fixture().await;
+        let send = |request: reqwest::RequestBuilder| request.bearer_auth(&panel.token).send();
+        let status = || async {
+            send(panel.http.get(format!("{}/api/status", panel.origin)))
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        };
+        let choose = |language: &str| {
+            send(
+                panel
+                    .http
+                    .post(format!("{}/api/language", panel.origin))
+                    .json(&json!({ "language": language })),
+            )
+        };
+        // Nothing chosen: the page follows the browser.
+        assert!(status().await.get("language").is_none());
+        for language in ["en", "de"] {
+            assert_eq!(choose(language).await.unwrap().status(), StatusCode::OK);
+            assert_eq!(status().await["language"], language);
+        }
+        assert_eq!(
+            std::fs::read_to_string(directory.join(LANGUAGE)).unwrap(),
+            "de\n"
+        );
+        for unknown in ["fr", "", "../de"] {
+            let response = choose(unknown).await.unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{unknown}");
+        }
+        assert_eq!(status().await["language"], "de");
+        cleanup(panel, task, directory).await;
+    }
+
+    #[tokio::test]
     async fn a_saved_chat_is_a_private_file_until_it_is_deleted() {
         let (panel, task, directory) = fixture().await;
         let chat = |id: &str| format!("{}/api/chats/{id}", panel.origin);
@@ -2203,6 +2283,26 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+        // A renamed chat keeps its new title; a title the page would never send is refused.
+        let renamed =
+            json!({"title": "Ü".repeat(chat::MAX_TITLE_CHARS), "updated": 4, "messages": []});
+        let response = send(panel.http.put(chat("0a1b")).json(&renamed))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let too_long =
+            json!({"title": "a".repeat(chat::MAX_TITLE_CHARS + 1), "updated": 5, "messages": []});
+        let response = send(panel.http.put(chat("0a1b")).json(&too_long))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let loaded: Value = send(panel.http.get(chat("0a1b")))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(loaded, renamed);
         let deleted = send(panel.http.delete(chat("0a1b"))).await.unwrap();
         assert_eq!(deleted.status(), StatusCode::OK);
         assert!(!file.exists());

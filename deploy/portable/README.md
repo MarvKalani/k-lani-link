@@ -65,7 +65,8 @@ transport natively and do not isolate the AI application's network access.
 1. Download the current x64 EXE for Intel/AMD Windows, or ARM64 for Windows on ARM.
 2. Double-click it. The local control panel opens in your default browser; no
    command-line arguments are needed. It listens on a random loopback-only port and
-   follows the browser language (German or English).
+   follows the browser language (German or English) until you pick **DE** or **EN** in
+   its header; that choice is kept in the panel's data directory.
 3. On the model computer, `k-lani-link offer-https` prints a **relay address** and a
    **pairing code**. Type both into the panel and click **Connect**. The panel waits
    while the model computer confirms, then connects by itself; `k-lani-link host`
@@ -105,15 +106,18 @@ context size so far. **Model** and **Thinking** (default, off, low, medium, high
 change between messages of the same chat; **Retry** asks again for the last answer
 and **Stop** ends one early. When the model computer is busy with another request, a
 window waits its turn. The panel sends the requests through the same local API as
-your AI app, so the API key never reaches the page.
+your AI app, so the API key never reaches the page. A chat is named after its first
+message; **✎** in the title bar, or a double-click on the title, renames it (Enter
+keeps the new title, Escape the old one), and a saved chat keeps the new title.
 
 A chat is kept only while its window is open. **Save** writes it, and every later
 answer, to a private file in the `chats` folder of the panel's data directory
 (`%LOCALAPPDATA%\k-lani-link\control-panel\chats` on Windows,
 `~/.config/k-lani-link/control-panel/chats` on macOS and Linux, or below
-`$XDG_CONFIG_HOME` when set). Saved chats are listed under the chat button for
-reopening, with the folder shown below the list; **Delete** there, or clicking
-**Saved** twice in the window, removes the file. Nothing is saved without that click.
+`$XDG_CONFIG_HOME` when set). **Saved chats**, below **New chat** once the panel is
+connected, lists them; click a title to open that chat again and continue it. The
+folder is shown below the list; **Delete** there, or clicking **Saved** twice in the
+window, removes the file. Nothing is saved without that click.
 
 Everything else sits under **More options and help**: pair again with a new code,
 disconnect, quit, troubleshooting, and importing a `client.toml` file from the

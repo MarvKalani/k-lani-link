@@ -18,6 +18,8 @@ use serde_json::{Value, json};
 /// A long chat is sent whole with every message; the gateway accepts the same size.
 pub const MAX_CHAT_BYTES: usize = k_lani_link_protocol::MAX_BODY_BYTES;
 const MAX_SAVED: usize = 200;
+/// The page offers 80 characters; the panel accepts some slack, never a whole document.
+pub const MAX_TITLE_CHARS: usize = 120;
 const DIRECTORY: &str = "chats";
 
 pub fn routes() -> Router<Panel> {
@@ -131,9 +133,12 @@ async fn save(State(panel): State<Panel>, Path(id): Path<String>, body: Bytes) -
     let Some(path) = file(&panel, &id) else {
         return failure(StatusCode::NOT_FOUND, "This chat does not exist.");
     };
-    let valid = serde_json::from_slice::<Value>(&body)
-        .ok()
-        .filter(|chat| chat["messages"].is_array() && chat["title"].is_string());
+    let valid = serde_json::from_slice::<Value>(&body).ok().filter(|chat| {
+        chat["messages"].is_array()
+            && chat["title"]
+                .as_str()
+                .is_some_and(|title| title.chars().count() <= MAX_TITLE_CHARS)
+    });
     let Some(chat) = valid else {
         return failure(StatusCode::BAD_REQUEST, "This is not a valid chat.");
     };

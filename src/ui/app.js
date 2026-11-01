@@ -48,6 +48,9 @@ const texts = {
     privacy: 'This page controls the connection. A chat is kept only while its window is open, unless you save it.',
     chatTitle: 'Chat with the model', chatIntro: 'Try the model right here. Every window is its own conversation.',
     chatNew: 'New chat', chatSavedTitle: 'Saved chats', chatWhere: 'Saved on this computer only, in:',
+    chatEmpty: 'No saved chats yet. Click Save in a chat window, and the chat appears here.',
+    chatOpenHint: 'Click a title to open the chat again.',
+    chatRename: 'Rename', chatRenameHint: 'Rename this chat (or double-click its title)', languages: 'Language',
     chatMessages: 'messages', chatDelete: 'Delete', chatSure: 'Really delete?', chatUntitled: 'New chat',
     chatSave: 'Save', chatIsSaved: 'Saved', chatUnsave: 'Delete saved copy?',
     chatSaveHint: 'Keep this chat on this computer', chatUnsaveHint: 'Click twice to delete the saved copy',
@@ -122,6 +125,9 @@ const texts = {
     privacy: 'Diese Seite steuert die Verbindung. Ein Chat bleibt nur, solange sein Fenster offen ist, außer du speicherst ihn.',
     chatTitle: 'Chat mit dem Modell', chatIntro: 'Probiere das Modell direkt hier aus. Jedes Fenster ist ein eigenes Gespräch.',
     chatNew: 'Neuer Chat', chatSavedTitle: 'Gespeicherte Chats', chatWhere: 'Nur auf diesem Computer gespeichert, in:',
+    chatEmpty: 'Noch keine gespeicherten Chats. Klicke in einem Chatfenster auf „Speichern“, dann erscheint der Chat hier.',
+    chatOpenHint: 'Klicke auf einen Titel, um den Chat wieder zu öffnen.',
+    chatRename: 'Umbenennen', chatRenameHint: 'Chat umbenennen (oder doppelt auf den Titel klicken)', languages: 'Sprache',
     chatMessages: 'Nachrichten', chatDelete: 'Löschen', chatSure: 'Wirklich löschen?', chatUntitled: 'Neuer Chat',
     chatSave: 'Speichern', chatIsSaved: 'Gespeichert', chatUnsave: 'Gespeicherte Kopie löschen?',
     chatSaveHint: 'Diesen Chat auf diesem Computer behalten', chatUnsaveHint: 'Zweimal klicken löscht die gespeicherte Kopie',
@@ -193,6 +199,8 @@ const serverDe = {
   'The connection did not answer. Try again.': 'Die Verbindung hat nicht geantwortet. Versuche es erneut.',
   'Too many saved chats. Delete some first.': 'Zu viele gespeicherte Chats. Lösche zuerst einige.',
   'The chat could not be saved.': 'Der Chat ließ sich nicht speichern.',
+  'This is not a valid chat.': 'Das ist kein gültiger Chat.',
+  'Unknown language.': 'Unbekannte Sprache.',
   'The chat could not be deleted.': 'Der Chat ließ sich nicht löschen.',
   'This chat does not exist.': 'Diesen Chat gibt es nicht.',
   'request capacity exhausted': 'Der Modellrechner ist gerade ausgelastet. Versuche es gleich noch einmal.',
@@ -201,10 +209,35 @@ const serverDe = {
   'upstream response timed out': 'Der Modellrechner hat nicht rechtzeitig geantwortet.',
   'request body unavailable or too large': 'Dieser Chat ist zu lang. Starte einen neuen Chat.'
 };
-const language = (navigator.languages || [navigator.language || 'en']).some((tag) => /^de\b/i.test(tag)) ? 'de' : 'en';
+// The browser's language until the panel reports the one chosen in the header. The panel
+// keeps that choice in its folder: the page gets another address at every start.
+let language = (navigator.languages || [navigator.language || 'en']).some((tag) => /^de\b/i.test(tag)) ? 'de' : 'en';
+let languageSending = 0;
 const t = (key) => texts[language][key] || texts.en[key] || key;
-document.documentElement.lang = language;
-for (const element of document.querySelectorAll('[data-t]')) element.textContent = t(element.dataset.t);
+function applyTexts() {
+  document.documentElement.lang = language;
+  for (const element of document.querySelectorAll('[data-t]')) element.textContent = t(element.dataset.t);
+  byId('languages').setAttribute('aria-label', t('languages'));
+  for (const button of document.querySelectorAll('[data-language]')) button.setAttribute('aria-pressed', String(button.dataset.language === language));
+}
+applyTexts();
+// Switches without reloading, so open chat windows stay.
+function useLanguage(next) {
+  if (next === language || !Object.hasOwn(texts, next)) return;
+  language = next;
+  applyTexts();
+  if (byId('model-problem').textContent) { models = null; lastTest = 0; }
+  if (current) render(current);
+  if (typeof relabelChats === 'function') relabelChats();
+}
+for (const button of document.querySelectorAll('[data-language]')) {
+  button.addEventListener('click', async () => {
+    const next = button.dataset.language;
+    useLanguage(next);
+    languageSending++;
+    try { await api('language', { language: next }); } catch (cause) { error(cause.message); } finally { languageSending--; }
+  });
+}
 let closed = false;
 let busy = false;
 let current = null;
@@ -243,6 +276,8 @@ function problem(name, button, work) {
 function forget() { apiKey = ''; models = null; lastTest = 0; byId('key').value = '••••••••••••'; byId('key').type = 'password'; }
 function render(state) {
   current = state;
+  // A choice still on its way to the panel wins over the status that was sent before it.
+  if (state.language && !languageSending && state.language !== language) { useLanguage(state.language); return; }
   byId('version').textContent = state.version ? 'v' + state.version : '';
   if (state.default_relay && !relayChosen) {
     byId('relay-name').textContent = state.default_relay; byId('relay-preset').hidden = false; byId('relay-row').hidden = true;
