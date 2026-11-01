@@ -1668,10 +1668,8 @@ async fn an_http3_upload_without_a_token_is_refused_before_it_is_read() {
         .body(())
         .unwrap();
     let mut stream = sender.send_request(request).await.unwrap();
-    stream
-        .send_data(Bytes::from(vec![0u8; 1024]))
-        .await
-        .unwrap();
+    // The relay may refuse and stop the upload before these bytes leave; that is a pass.
+    let _ = stream.send_data(Bytes::from(vec![0u8; 1024])).await;
     // The upload is not finished; the refusal must not wait for it.
     let response = tokio::time::timeout(Duration::from_secs(5), stream.recv_response())
         .await
