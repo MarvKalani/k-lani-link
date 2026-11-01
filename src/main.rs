@@ -445,6 +445,7 @@ async fn run(cli: Cli) -> Result<()> {
             upstream_socket,
         } => {
             let cwd = std::env::current_dir()?;
+            let shown_relay = relay_url.clone();
             let options = k_lani_link::mailbox::Options {
                 relays: vec![relay_url],
                 state_dir: cwd.join("unused"),
@@ -475,7 +476,10 @@ async fn run(cli: Cli) -> Result<()> {
                 },
                 |code| {
                     println!("Pairing code: {code}");
-                    println!("Enter it on the other computer within ten minutes.");
+                    println!("Relay address: {shown_relay}");
+                    println!(
+                        "On the other computer, open k-lani-link and enter both within ten minutes."
+                    );
                 },
             )
             .await?;

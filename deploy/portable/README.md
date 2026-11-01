@@ -64,23 +64,28 @@ transport natively and do not isolate the AI application's network access.
 
 1. Download the current x64 EXE for Intel/AMD Windows, or ARM64 for Windows on ARM.
 2. Double-click it. The local control panel opens in your default browser; no
-   command-line arguments are needed. It listens on a random loopback-only port.
-3. Choose your fresh private **client.toml** file. The panel validates it and saves
-   a private copy under `%LOCALAPPDATA%\k-lani-link\control-panel`. It normalizes
-   container paths, retains consumed-code markers and never imports operator keys.
-4. Start the matching host on the model computer and click **Connect**. The live
-   status distinguishes waiting, connected, recovering, rejected and used codes.
-5. Click **Test backend** after connecting. It requests `/v1/models` through the
-   real encrypted tunnel and reports model IDs and the full model-list round trip.
-   It does not send prompts or benchmark token generation.
-6. For a native AI app, use the displayed base URL and **Show local API key**.
-   This is the inference key, not the one-time pairing code.
+   command-line arguments are needed. It listens on a random loopback-only port and
+   follows the browser language (German or English).
+3. On the model computer, `k-lani-link offer-https` prints a **relay address** and a
+   **pairing code**. Type both into the panel and click **Connect**. The panel waits
+   while the model computer confirms, then connects by itself; `k-lani-link host`
+   must be running there.
+4. When the panel shows **Connected**, it lists the three values for your AI app,
+   each with a **Copy** button: base URL, local API key and model ID. Add an
+   OpenAI-compatible provider in the app and paste them. The model ID comes from a
+   model-list request through the real encrypted tunnel; no prompt is sent.
 
-Closing the browser tab leaves the transport running. Double-clicking the EXE
-again reopens the same panel. **Quit application** stops the transport and panel;
-**Disconnect** stops only the transport. A fully ended tunnel needs a new pairing
-code on both computers. Closing the tab is not a disconnect. No autostart or system
-service is installed, and no tray icon is claimed for this preview.
+Everything else sits under **More options and help**: pair again with a new code,
+disconnect, quit, troubleshooting, and importing a `client.toml` file from the
+operator instead of a code. An imported file is validated and saved privately under
+`%LOCALAPPDATA%\k-lani-link\control-panel`; container paths are normalized,
+consumed-code markers kept and operator keys never imported.
+
+Closing the browser tab leaves the connection running, and the panel reconnects by
+itself when the application starts again. Double-clicking the EXE again reopens the
+same panel. **Quit** stops the transport and panel; **Disconnect** stops only the
+transport. No autostart or system service is installed, and no tray icon is
+claimed for this preview.
 
 The panel uses an unpredictable local access token, checks Host and Origin, has no
 external scripts, and stores no conversation history or connection logs. The
@@ -89,8 +94,8 @@ address file is deleted on orderly exit. The browser, clipboard and local user
 account remain trusted. Keep the data directory private; Windows uses its inherited
 NTFS permissions. Do not put it inside the agent's workspace.
 
-This first panel controls the **native client only**, supports direct connections
-with TURN disabled, and does not start Docker or manage a host/model supervisor.
+The panel controls the **native client only**, keeps TURN disabled for direct
+connections, and does not start Docker or manage a host/model supervisor.
 The OpenCode Docker profile has its own transport and status checks. Do not run
 both modes using the same one-time code. Use the Docker instructions above when
 application network/file isolation is required.

@@ -61,8 +61,8 @@ Arbeitsspeicher, bevor das Relay Daten annimmt.
      --client-admission-token-file client-token
    ```
 
-   ausführen. Das zeigt einen Code wie `472-1234-5678`. Am Laptop im Kontrollfeld unter
-   „Enter the pairing code“ eintippen, fertig. Der Code gilt einmal und zehn Minuten; ein
+   ausführen. Das zeigt einen Code wie `472-1234-5678` und die Relay-Adresse. Am Laptop
+   beides ins Kontrollfeld eintippen und „Verbinden“ klicken, fertig. Der Code gilt einmal und zehn Minuten; ein
    falsch eingegebener Code ist verbraucht, dann einfach einen neuen erzeugen. Ohne
    Kontrollfeld geht es mit `k-lani-link join-https --dir mein-client --relay-url …`.
 

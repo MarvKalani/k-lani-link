@@ -169,9 +169,9 @@ umfasst jetzt 63 kontrollierte Fälle mit 50/100 Token pro Sekunde, 1/10 Tunneln
 60 Sekunden Last, Proxy-Pufferung und Wiederverbindung. Die ausgewählte Mailbox mit
 bestätigten Mehrfachabrufen ist jetzt als **ausdrückliche Quellcode-Vorschau** eingebunden:
 mit TLS-Prüfung, dauerhaftem Kopplungszustand und SSE-Weiterleitung durch Host/Gateway.
-[Privates HTTPS-Setup, Tests und Grenzen](deploy/https/README.md). Die veröffentlichten
-preview.3-Downloads und das Verbindungspanel verwenden weiterhin WebRTC; HTTPS ist
-kein automatischer Fallback. Die Vorschau ist weder ein öffentlicher Relay-Dienst
+[Privates HTTPS-Setup, Tests und Grenzen](deploy/https/README.md). Das Verbindungspanel
+koppelt per Code über HTTPS; eine WebRTC-Kopplung wechselt nie von selbst zu
+HTTPS. Die Vorschau ist weder ein öffentlicher Relay-Dienst
 noch eine Durchsatzzusage. [Umsetzungscheckliste](docs/HTTPS-IMPLEMENTATION.md)
 · [Unveränderter Übertragungsvertrag](docs/DESIGN-MAILBOX.md) · [Changelog](CHANGELOG.md).
 Die [Lasttests des tatsächlichen Anwendungspfads](deploy/https/RESULTS.md) zeigten zunächst

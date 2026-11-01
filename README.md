@@ -160,8 +160,8 @@ now includes 63 controlled cases: 50/100 tokens per second, 1/10 tunnels,
 60-second workloads, proxy buffering and reconnection. The selected acknowledged
 multi-record mailbox is now wired as an **explicit source preview** with verified TLS,
 durable paired-state folders and host/gateway SSE forwarding. [Private HTTPS setup,
-tests and limits](deploy/https/README.md). Published preview.3 downloads and the browser
-connection panel still use WebRTC; HTTPS is not an automatic fallback. This preview
+tests and limits](deploy/https/README.md). The browser connection panel pairs over HTTPS
+by code; a WebRTC pairing never falls back to HTTPS by itself. This preview
 is not a public relay or a throughput guarantee. [Implementation checklist](docs/HTTPS-IMPLEMENTATION.md)
 · [Original delivery contract](docs/DESIGN-MAILBOX.md) · [Changelog](CHANGELOG.md).
 The [actual application-path load tests](deploy/https/RESULTS.md) first exposed a
@@ -198,8 +198,8 @@ or supply a TURN service. There is no automatic relay fallback.
 Prefer a native program? The portable variants use one executable, with no
 installer: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64/ARM64.
 Starting the new UI preview without arguments opens a local connection panel;
-PowerShell/terminal commands remain available. It includes configuration import,
-live connection status and a real backend/model-list test.
+PowerShell/terminal commands remain available. It asks for the relay address and
+pairing code, connects by itself and then shows the three values for your AI app.
 The initial downloads are unsigned previews; security software or company policy
 may block them. Native operation does not provide Docker's application isolation.
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)

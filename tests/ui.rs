@@ -41,7 +41,7 @@ async fn native_panel_serves_local_ui_reopens_one_instance_and_quits_without_log
         .build()
         .unwrap();
     let page = http.get(&base).send().await.unwrap().text().await.unwrap();
-    assert!(page.contains("Test backend") && page.contains("client.toml"));
+    assert!(page.contains("Pairing code") && page.contains("client.toml"));
     assert!(!page.contains(&token));
     let reopened = Command::new(env!("CARGO_BIN_EXE_k-lani-link"))
         .args(["ui", "--no-open", "--data-dir"])

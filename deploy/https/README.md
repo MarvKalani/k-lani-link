@@ -205,9 +205,10 @@ target/release/k-lani-link offer-https \
   --relay-url https://relay.example.com \
   --admission-token-file /private/relay/host-token \
   --client-admission-token-file /private/relay/client-token
-# Shows e.g. "Pairing code: 472-1234-5678" and waits up to ten minutes.
+# Shows e.g. "Pairing code: 472-1234-5678" and the relay address, then waits up to
+# ten minutes.
 
-# On the client computer (or in the control panel: "Enter the pairing code"):
+# On the client computer (or type both into the control panel):
 k-lani-link join-https --dir /private/client --relay-url https://relay.example.com
 ```
 

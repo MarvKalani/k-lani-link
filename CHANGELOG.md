@@ -7,6 +7,13 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The browser control panel is a short guided flow: type the relay address and pairing
+  code, click **Connect**, and the panel waits, connects and then shows the base URL,
+  local API key and model ID with **Copy** buttons. Only the current step is shown;
+  disconnect, quit, troubleshooting and `client.toml` import sit under **More options
+  and help**. The panel follows the browser language (German or English).
+- `offer-https` prints the relay address next to the pairing code, so the operator can
+  pass on both at once.
 - Pin Basalt to `9175e7a3`: the elastic KV arena hands a deep request's cells back,
   parallel tool results are ordered by call id before the template renders, a
   one-token prompt no longer ends empty, and DirectFile reads files mapped elsewhere
