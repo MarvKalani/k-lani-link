@@ -14,6 +14,7 @@ pub mod routing;
 pub mod shutdown;
 pub mod signal;
 pub mod ui;
+pub mod update;
 
 pub mod mailbox;
 pub mod management;

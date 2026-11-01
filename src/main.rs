@@ -134,6 +134,13 @@ enum Command {
         #[arg(long)]
         data_dir: Option<PathBuf>,
     },
+    /// Look for a newer signed release on GitHub and replace this program with it. Running
+    /// hosts and clients keep the old version until they are restarted.
+    Update {
+        /// Only say whether a newer version exists.
+        #[arg(long)]
+        check: bool,
+    },
     /// Generate a new pair directory with random credentials. Keep these files private.
     Init {
         #[arg(long, default_value = "pair")]
@@ -612,12 +619,70 @@ async fn run(cli: Cli) -> Result<()> {
             store.revoke()?;
         }
         Command::Ui { no_open, data_dir } => {
-            k_lani_link::ui::run(
-                data_dir.map_or_else(k_lani_link::ui::default_directory, Ok)?,
-                stop,
-                !no_open,
-            )
-            .await?;
+            let directory = data_dir.map_or_else(k_lani_link::ui::default_directory, Ok)?;
+            if let Ok(exe) = std::env::current_exe() {
+                k_lani_link::update::tidy(&exe);
+            }
+            // An update downloaded earlier is installed before the panel starts, and the
+            // panel's "update now" ends it so that the same happens at once.
+            let mut installed = k_lani_link::ui::install_staged(&directory);
+            if installed.is_none()
+                && k_lani_link::ui::run(directory.clone(), stop, !no_open).await?
+            {
+                installed = k_lani_link::ui::install_staged(&directory);
+            }
+            if let Some(exe) = installed {
+                std::process::Command::new(exe)
+                    .args(std::env::args_os().skip(1))
+                    .stdin(std::process::Stdio::null())
+                    .spawn()
+                    .map_err(|_| {
+                        Diagnostic::err("the updated program could not be started; open it again")
+                    })?;
+            }
+        }
+        Command::Update { check } => {
+            let http = k_lani_link::update::client()
+                .map_err(|_| Diagnostic::err("the update check could not start"))?;
+            if !k_lani_link::update::BUILT_IN || k_lani_link::update::PLATFORM.is_none() {
+                return Err(Diagnostic::err("this build does not update itself"));
+            }
+            let Some(release) = k_lani_link::update::latest(&http).await? else {
+                println!("k-lani-link {} is up to date.", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            };
+            if check {
+                println!(
+                    "Version {} is available. Run k-lani-link update to install it.",
+                    release.version
+                );
+                return Ok(());
+            }
+            let exe = std::env::current_exe()?;
+            if !k_lani_link::update::writable(&exe) {
+                return Err(Diagnostic::err(format!(
+                    "cannot replace {}: no write access to its folder; download version {} from GitHub instead",
+                    exe.display(),
+                    release.version
+                )));
+            }
+            let stage = std::env::temp_dir().join(format!(
+                "k-lani-link-update-{}",
+                k_lani_link::config::random_id()?
+            ));
+            let result = async {
+                k_lani_link::update::download(&http, &release, &stage).await?;
+                let staged = k_lani_link::update::staged(&stage)
+                    .ok_or_else(|| Diagnostic::err("the downloaded update did not verify"))?;
+                k_lani_link::update::install(&staged, &exe)
+            }
+            .await;
+            let _ = std::fs::remove_dir_all(&stage);
+            result?;
+            println!(
+                "Updated to {}. Restart running k-lani-link programs (host, client or panel) to use it.",
+                release.version
+            );
         }
         Command::Init {
             dir,

@@ -40,6 +40,15 @@ check enabled by default.
 - Local HTTP paths are restricted to loopback. The gateway requires its own API
   key. Basalt credentials stay on the host. Environment proxies and HTTP redirects
   are not used.
+- The one outbound request besides the tunnel: the control panel asks GitHub's public
+  release list twice a day whether a newer version exists, sending only a user agent
+  with its own version number (switch it off under **More options and help**; a
+  distribution built with `K_LANI_LINK_NO_UPDATES` set never asks). This request may
+  use an environment proxy and follows redirects to GitHub's download hosts only. An
+  update is installed only if its `SHA256SUMS` carries the k-lani-link release
+  signature (Ed25519, key compiled in), the executable matches it and the version is
+  newer. Hosts and clients never check by themselves; `k-lani-link update` does it on
+  request.
 - k-lani-link writes no application, connection or error logs and has no telemetry.
   Transport and HTTP logging is compiled out, even in debug builds; `RUST_LOG`
   cannot enable it. Successful starts are silent. Command-line mistakes, an invalid

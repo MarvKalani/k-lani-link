@@ -7,6 +7,7 @@
 <body>
   <main>
     <header><h1>k-lani-link</h1><p class="state"><span id="light" class="light"></span><span id="status">…</span></p></header>
+    <p id="update-note" class="update" hidden><span id="update-text"></span> <a id="update-link" href="https://github.com/MarvKalani/k-lani-link/releases" target="_blank" rel="noreferrer" hidden>GitHub</a> <button id="update-now" class="small" type="button" data-t="updateNow" hidden>Update now</button></p>
 
     <section id="step-pair" hidden>
       <p class="step" data-t="step1">Step 1 of 3</p>
@@ -75,6 +76,11 @@
         <button id="repair" class="secondary" data-t="repair">Pair again with a new code</button>
         <button id="disconnect" class="secondary" data-t="disconnect">Disconnect</button>
         <button id="quit" class="secondary" data-t="quit">Quit k-lani-link</button>
+      </div>
+      <div id="update-setting" hidden>
+        <h3 data-t="updateTitle">Updates</h3>
+        <label class="check"><input id="update-auto" type="checkbox"><span data-t="updateAuto">Look for new versions by itself</span></label>
+        <p class="muted" data-t="updateInfo">Twice a day, k-lani-link asks GitHub whether a newer version exists; only its own version number goes along. A new version must carry the k-lani-link signature. It is downloaded and installed at the next start.</p>
       </div>
       <h3 data-t="helpTitle">If it does not connect</h3>
       <ul>

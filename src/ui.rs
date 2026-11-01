@@ -58,7 +58,25 @@ struct Panel {
     stream: reqwest::Client,
     /// A private CA for the relay; only tests set one, a real relay needs a public certificate.
     relay_ca: Option<PathBuf>,
+    updates: Arc<std::sync::Mutex<Updates>>,
 }
+/// What the panel knows about updates; see `crate::update`.
+#[derive(Default)]
+struct Updates {
+    /// Looking for updates by itself is on (the default) or switched off in the panel.
+    enabled: bool,
+    /// A newer release, and whether it is downloaded, verified and waiting.
+    available: Option<String>,
+    staged: bool,
+    /// This program's folder takes the new file.
+    writable: bool,
+    /// The user asked to install it now: the panel ends, then the update is installed.
+    install: bool,
+    /// Wakes the checker after the setting was switched on.
+    wake: Arc<tokio::sync::Notify>,
+}
+const UPDATES_OFF: &str = "updates-off";
+const STAGE: &str = "update";
 
 fn failure(status: StatusCode, message: &'static str) -> Response {
     (status, Json(json!({"error": message}))).into_response()
@@ -154,6 +172,7 @@ fn router(panel: Panel) -> Router {
         .route("/api/test", post(test_backend))
         .route("/api/credentials", post(credentials))
         .route("/api/quit", post(quit))
+        .route("/api/update", post(update))
         .layer(DefaultBodyLimit::max(64 * 1024))
         .merge(chat::routes())
         .layer(middleware::from_fn_with_state(panel.clone(), protect))
@@ -448,6 +467,14 @@ async fn snapshot(panel: &Panel) -> Value {
         "running": control.active.is_some(), "phase": "not_configured", "relay": "disabled",
         "joining": control.joining, "default_relay": crate::mailbox::couple::DEFAULT_RELAY,
         "tray": cfg!(any(windows, target_os = "macos"))});
+    {
+        let updates = panel.updates.lock().unwrap();
+        result["update"] = json!({
+            "supported": crate::update::BUILT_IN && crate::update::PLATFORM.is_some(),
+            "enabled": updates.enabled, "available": updates.available,
+            "staged": updates.staged, "writable": updates.writable,
+        });
+    }
     if let Some(config) = &control.config {
         result["api_base"] = json!(format!("http://{}/v1", config.listen));
         result["transport"] = json!(config.transport);
@@ -685,11 +712,12 @@ fn saved_address(text: &str) -> Option<String> {
     Some(url.to_string())
 }
 
+/// Runs the panel until it is quit. True: the user asked to install a downloaded update.
 pub async fn run(
     directory: PathBuf,
     stop: CancellationToken,
     launch_browser: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     std::fs::create_dir_all(
         directory
             .parent()
@@ -719,7 +747,7 @@ pub async fn run(
                 Diagnostic::err("cannot reopen the control panel in the default browser")
             })?;
         }
-        return Ok(());
+        return Ok(false);
     }
     let instance = Instance { lock, address_file };
     let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -737,6 +765,7 @@ pub async fn run(
     } else {
         None
     };
+    let updates_off = directory_has(&directory, UPDATES_OFF);
     let panel = Panel {
         token,
         origin,
@@ -754,6 +783,11 @@ pub async fn run(
             .build()?,
         stream: streaming_client()?,
         relay_ca: None,
+        updates: Arc::new(std::sync::Mutex::new(Updates {
+            enabled: !updates_off,
+            writable: std::env::current_exe().is_ok_and(|exe| crate::update::writable(&exe)),
+            ..Updates::default()
+        })),
     };
     // A pairing by code reconnects without a new code, so the panel starts it right away.
     let https = panel
@@ -784,16 +818,125 @@ pub async fn run(
     }
     #[cfg(any(windows, target_os = "macos"))]
     let tray = tray::start(panel.clone(), address.clone());
+    let checker = tokio::spawn(check_updates(panel.clone()));
     let server = axum::serve(listener, router(panel.clone()))
         .with_graceful_shutdown(stop.clone().cancelled_owned());
     let _ = shutdown::with_grace(&stop, shutdown::GRACE, server.into_future()).await;
     stop.cancel();
+    checker.abort();
     stop_client(&panel).await;
     #[cfg(any(windows, target_os = "macos"))]
     if let Some(tray) = tray {
         tray.close().await;
     }
-    Ok(())
+    let install = panel.updates.lock().unwrap().install;
+    Ok(install)
+}
+
+fn directory_has(directory: &std::path::Path, name: &str) -> bool {
+    directory.join(name).exists()
+}
+
+/// Looks for a signed update shortly after the start and then twice a day, while the
+/// setting is on. A found update is downloaded and verified, then waits for the next start.
+/// Failures (offline, a proxy, GitHub's rate limit) are quiet: the next round tries again.
+async fn check_updates(panel: Panel) {
+    if !crate::update::BUILT_IN || crate::update::PLATFORM.is_none() {
+        return;
+    }
+    let wake = panel.updates.lock().unwrap().wake.clone();
+    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+    loop {
+        let (enabled, writable) = {
+            let updates = panel.updates.lock().unwrap();
+            (updates.enabled, updates.writable)
+        };
+        if enabled && let Ok(http) = crate::update::client() {
+            let stage = panel.directory.join(STAGE);
+            if let Ok(Some(release)) = crate::update::latest(&http).await {
+                let version = release.version.to_string();
+                let ready = crate::update::staged(&stage)
+                    .is_some_and(|staged| staged.version == release.version);
+                let staged = ready
+                    || writable
+                        && crate::update::download(&http, &release, &stage)
+                            .await
+                            .is_ok();
+                let mut updates = panel.updates.lock().unwrap();
+                updates.available = Some(version);
+                updates.staged = staged;
+            }
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(12 * 3600)) => {}
+            _ = wake.notified() => {}
+        }
+    }
+}
+
+/// Installs an update an earlier run downloaded, unless another panel is running from the
+/// same folder. Returns the executable to start instead of this one.
+pub fn install_staged(directory: &std::path::Path) -> Option<PathBuf> {
+    let stage = directory.join(STAGE);
+    let staged = crate::update::staged(&stage)?;
+    let lock = File::open(directory.join("panel.lock")).ok();
+    if lock.as_ref().is_some_and(|lock| lock.try_lock().is_err()) {
+        return None;
+    }
+    drop(lock);
+    let exe = std::env::current_exe().ok()?;
+    let result = crate::update::install(&staged, &exe);
+    // Installed or not, the same download is not tried again at every start.
+    let _ = std::fs::remove_dir_all(&stage);
+    result.ok().map(|()| exe)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateInput {
+    action: String,
+}
+/// `install`: end the panel and install the waiting update. `on` / `off`: the setting.
+async fn update(
+    State(panel): State<Panel>,
+    input: Result<Json<UpdateInput>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let Ok(Json(input)) = input else {
+        return failure(StatusCode::BAD_REQUEST, "Unknown update action.");
+    };
+    let marker = panel.directory.join(UPDATES_OFF);
+    let mut updates = panel.updates.lock().unwrap();
+    match input.action.as_str() {
+        "install" if updates.staged => {
+            updates.install = true;
+            panel.stop.cancel();
+            Json(json!({"restarting": true})).into_response()
+        }
+        "install" => failure(StatusCode::CONFLICT, "No update is ready yet."),
+        "on" => {
+            let _ = std::fs::remove_file(&marker);
+            updates.enabled = true;
+            updates.wake.notify_one();
+            Json(json!({"enabled": true})).into_response()
+        }
+        "off" => {
+            if private_file(
+                &marker,
+                "Looking for updates was switched off in the panel.\n",
+            )
+            .is_err()
+                && !marker.exists()
+            {
+                return failure(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "The setting could not be saved.",
+                );
+            }
+            updates.enabled = false;
+            Json(json!({"enabled": false})).into_response()
+        }
+        _ => failure(StatusCode::BAD_REQUEST, "Unknown update action."),
+    }
 }
 
 mod chat;
@@ -838,6 +981,7 @@ mod tests {
                 .unwrap(),
             stream: streaming_client().unwrap(),
             relay_ca: None,
+            updates: Default::default(),
         };
         let app = router(panel.clone());
         let stop = panel.stop.clone();

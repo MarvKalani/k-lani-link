@@ -77,7 +77,8 @@ on one machine for testing.
 
 This arrangement lets you work with a remote model without exposing its raw API
 as a public service. The supplied local-model profile keeps inference on your
-chosen computers. k-lani-link has no traffic logging or telemetry. Fixed startup diagnostics help
+chosen computers. k-lani-link has no traffic logging or telemetry; the control panel's
+update check sends GitHub only its version number and can be switched off. Fixed startup diagnostics help
 with invalid configuration and pairing errors without echoing keys or supplied
 values. Optional resource measurements record counters, not prompts or answers.
 

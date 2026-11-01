@@ -17,6 +17,14 @@ const texts = {
     qrDenied: 'The camera was not allowed. Allow it in the browser, or choose a picture of the QR code.',
     qrNoCamera: 'No camera found. Choose a picture of the QR code instead, e.g. a screenshot.',
     qrNotFound: 'No QR code found in this picture.',
+    updateNow: 'Update now', updateReady: 'Version {v} is ready and is installed at the next start.',
+    updateLoading: 'Version {v} is available and is being downloaded.',
+    updateManual: 'Version {v} is available, but this program’s folder is read-only. Download it from',
+    updateSure: '{n} unsaved chat window(s) will close. Click again to update',
+    updateTitle: 'Updates', updateAuto: 'Look for new versions by itself',
+    updateInfo: 'Twice a day, k-lani-link asks GitHub whether a newer version exists; only its own version number goes along. A new version must carry the k-lani-link signature. It is downloaded and installed at the next start.',
+    sUpdating: 'Updating…', updatingTitle: 'Updating',
+    updatingDetail: 'k-lani-link restarts with the new version and opens a new tab. You can close this one.',
     cancel: 'Cancel', readyTitle: 'Connected',
     readyIntro: 'In your AI app, add an “OpenAI-compatible” provider and copy in these three values:',
     base: 'Base URL', key: 'API key', model: 'Model', copy: 'Copy', copied: 'Copied',
@@ -79,6 +87,14 @@ const texts = {
     qrDenied: 'Die Kamera wurde nicht erlaubt. Erlaube sie im Browser oder wähle ein Bild des QR-Codes.',
     qrNoCamera: 'Keine Kamera gefunden. Wähle stattdessen ein Bild des QR-Codes, z. B. ein Bildschirmfoto.',
     qrNotFound: 'In diesem Bild ist kein QR-Code zu finden.',
+    updateNow: 'Jetzt aktualisieren', updateReady: 'Version {v} ist bereit und wird beim nächsten Start installiert.',
+    updateLoading: 'Version {v} ist verfügbar und wird geladen.',
+    updateManual: 'Version {v} ist verfügbar, aber der Programmordner ist schreibgeschützt. Lade sie herunter von',
+    updateSure: '{n} ungespeicherte Chatfenster gehen zu. Zum Aktualisieren nochmal klicken',
+    updateTitle: 'Updates', updateAuto: 'Selbst nach neuen Versionen suchen',
+    updateInfo: 'Zweimal am Tag fragt k-lani-link bei GitHub, ob es eine neuere Version gibt; mitgeschickt wird nur die eigene Versionsnummer. Eine neue Version muss die k-lani-link-Signatur tragen. Sie wird geladen und beim nächsten Start installiert.',
+    sUpdating: 'Aktualisiere…', updatingTitle: 'Wird aktualisiert',
+    updatingDetail: 'k-lani-link startet mit der neuen Version neu und öffnet einen neuen Tab. Diesen kannst du schließen.',
     cancel: 'Abbrechen', readyTitle: 'Verbunden',
     readyIntro: 'Lege in deiner KI-App einen „OpenAI-kompatiblen“ Anbieter an und kopiere diese drei Werte hinein:',
     base: 'Basis-URL', key: 'API-Schlüssel', model: 'Modell', copy: 'Kopieren', copied: 'Kopiert',
@@ -154,6 +170,9 @@ const serverDe = {
   'This QR code is not a valid k-lani-link pairing code.': 'Dieser QR-Code ist kein gültiger k-lani-link-Kopplungscode.',
   'This is not a camera picture.': 'Das ist kein Kamerabild.',
   'Disconnect before pairing again.': 'Trenne zuerst die Verbindung, dann koppeln.',
+  'No update is ready yet.': 'Es ist noch kein Update bereit.',
+  'Unknown update action.': 'Unbekannte Update-Aktion.',
+  'The setting could not be saved.': 'Die Einstellung ließ sich nicht speichern.',
   'A pairing is already waiting.': 'Eine Kopplung läuft bereits.',
   'Start the connection first.': 'Stelle zuerst die Verbindung her.',
   'This is not a valid chat request.': 'Diese Chat-Anfrage ist ungültig.',
@@ -216,6 +235,7 @@ function render(state) {
   }
   if (state.api_base) byId('base').value = state.api_base;
   byId('ready-note').textContent = t(state.tray ? 'readyNoteTray' : 'readyNote');
+  showUpdate(state.update);
   byId('disconnect').hidden = !state.running;
   byId('repair').hidden = !state.configured || state.joining;
   byId('config').disabled = busy || state.running || state.joining;
@@ -242,6 +262,19 @@ function render(state) {
       return;
     default: light('', t('sProblem')); problem('stopped', 'fixReconnect', async () => { await api('disconnect', {}); await api('connect', {}); });
   }
+}
+// A downloaded update, and the setting that lets the panel look for one.
+function showUpdate(update) {
+  const supported = !!(update && update.supported);
+  byId('update-setting').hidden = !supported;
+  if (!supported) { byId('update-note').hidden = true; return; }
+  byId('update-auto').checked = update.enabled;
+  const version = update.available || '';
+  const key = !version ? '' : update.staged ? 'updateReady' : update.writable ? 'updateLoading' : 'updateManual';
+  byId('update-note').hidden = !key;
+  byId('update-text').textContent = key ? t(key).replace('{v}', version) : '';
+  byId('update-link').hidden = key !== 'updateManual';
+  byId('update-now').hidden = key !== 'updateReady';
 }
 async function newCode() { if (current && current.running) await api('disconnect', {}); wantPair = true; byId('code').value = ''; }
 // Fetches what the AI app needs once per connection; retries the model list while none is loaded.
@@ -335,6 +368,22 @@ byId('config').addEventListener('change', () => action(async () => {
   await api('config', { toml: await file.text() });
   byId('config').value = ''; forget(); wantPair = false; byId('more').open = false;
 }));
+byId('update-auto').addEventListener('change', () => action(() => api('update', { action: byId('update-auto').checked ? 'on' : 'off' })));
+byId('update-now').addEventListener('click', () => {
+  const button = byId('update-now'), open = typeof unsavedChats === 'function' ? unsavedChats() : 0;
+  if (open && !button.dataset.sure) {
+    button.dataset.sure = '1'; button.textContent = t('updateSure').replace('{n}', open);
+    setTimeout(() => { delete button.dataset.sure; button.textContent = t('updateNow'); }, 4000);
+    return;
+  }
+  action(async () => {
+    await api('update', { action: 'install' }); closed = true; sessionStorage.removeItem('link-control-token'); forget();
+    light('connecting', t('sUpdating')); byId('problem-title').textContent = t('updatingTitle');
+    byId('problem-detail').textContent = t('updatingDetail'); byId('fix').hidden = true; show('problem');
+    byId('update-note').hidden = true;
+    for (const element of document.querySelectorAll('button')) element.disabled = true;
+  });
+});
 byId('quit').addEventListener('click', () => action(async () => {
   await api('quit', {}); closed = true; sessionStorage.removeItem('link-control-token'); forget();
   light('', t('sClosed')); byId('problem-title').textContent = t('sClosed');

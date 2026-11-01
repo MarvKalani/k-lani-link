@@ -118,7 +118,7 @@ function openChat(data = {}) {
     }
   };
   fillModels(chat);
-  model.addEventListener('focus', () => fillModels(chat));
+  model.addEventListener('focus', () => { fillModels(chat); freshModels(); });
   chat.view.mark();
   draw(chat);
 
@@ -182,7 +182,16 @@ function fillModels(chat) {
   select.replaceChildren(...(list.length ? list.map((id) => new Option(short(id), id)) : [new Option(t('chatDefaultModel'), '')]));
   select.value = chosen && list.includes(chosen) ? chosen : list[0] || '';
 }
+// A model loaded on the model computer later shows up when a model list is opened again.
+let modelsAsked = 0;
+async function freshModels() {
+  if (Date.now() - modelsAsked < 15000) return;
+  modelsAsked = Date.now();
+  try { const list = (await api('test', {})).models; if (list.length) { models = list; chatModels(); } } catch { /* the ready step shows the problem */ }
+}
 // The model list arrives with the connection test, after a window may have opened.
+// Open windows whose conversation would be lost by a restart.
+function unsavedChats() { return [...chats.values()].filter((chat) => !chat.saved && chat.messages.length).length; }
 function chatModels() { for (const chat of chats.values()) fillModels(chat); }
 // Errors and empty answers are not part of the conversation the model sees.
 function tidy(chat) {

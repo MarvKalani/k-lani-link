@@ -78,7 +78,8 @@ Für Tests können beide Seiten auch auf demselben Rechner laufen.
 
 So lässt sich ein entferntes Modell nutzen, ohne seine eigentliche API als
 öffentlichen Dienst freizugeben. Im mitgelieferten Profil für lokale Modelle
-findet die Inferenz auf deinen gewählten Rechnern statt. k-lani-link erzeugt keine Verkehrslogs oder Telemetrie.
+findet die Inferenz auf deinen gewählten Rechnern statt. k-lani-link erzeugt keine Verkehrslogs oder Telemetrie;
+die Update-Prüfung des Kontrollfelds schickt GitHub nur die Versionsnummer und ist abschaltbar.
 Feste Startmeldungen helfen
 bei Konfigurations- und Kopplungsfehlern, ohne Schlüssel oder übergebene Werte
 auszugeben. Die optionale Ressourcenmessung erfasst Zähler, keine Prompts oder

@@ -60,8 +60,10 @@ def main():
                 entry.external_attr = (0o100755 if member == name else 0o100644) << 16
                 entry.compress_type = zipfile.ZIP_DEFLATED
                 archive.writestr(entry, content)
-        if platform.startswith("windows-"):
-            (args.output / (stem + ".exe")).write_bytes(data)
+        # The bare executable as well: what the built-in updater downloads.
+        bare = args.output / (stem + (".exe" if platform.startswith("windows-") else ""))
+        bare.write_bytes(data)
+        bare.chmod(0o755)
     (args.output / "RUST-LICENSES.txt").write_bytes(notices)
     sums = "".join(hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.name + "\n" for path in sorted(args.output.iterdir()))
     (args.output / "SHA256SUMS").write_text(sums, encoding="ascii")

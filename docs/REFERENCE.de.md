@@ -39,6 +39,15 @@ bleibt standardmäßig bei aktivierter Datenschutzprüfung.
 - Lokale HTTP-Strecken sind auf Loopback beschränkt. Der Gateway benötigt einen
   eigenen API-Schlüssel. Basalt-Zugangsdaten bleiben im Host. Umgebungs-Proxys und
   HTTP-Weiterleitungen werden nicht verwendet.
+- Die einzige ausgehende Anfrage neben dem Tunnel: Das Kontrollfeld fragt zweimal am
+  Tag die öffentliche Release-Liste von GitHub, ob es eine neuere Version gibt, und
+  schickt dabei nur ein Kennzeichen mit der eigenen Versionsnummer mit (abschaltbar
+  unter **Weitere Optionen und Hilfe**; eine mit `K_LANI_LINK_NO_UPDATES` gebaute
+  Distribution fragt nie). Diese Anfrage darf einen Umgebungs-Proxy nutzen und folgt
+  Weiterleitungen nur zu GitHubs Download-Servern. Installiert wird ein Update nur, wenn
+  seine `SHA256SUMS` die k-lani-link-Release-Signatur tragen (Ed25519, Schlüssel fest
+  eingebaut), die Programmdatei dazu passt und die Version neuer ist. Host und Client
+  prüfen nie von selbst; `k-lani-link update` tut es auf Anfrage.
 - k-lani-link erzeugt keine Anwendungs-, Verbindungs- oder Fehlerlogs und keine
   Telemetrie. Transport-/HTTP-Logging ist auch in Debug-Builds herauskompiliert;
   `RUST_LOG` kann es nicht einschalten. Erfolgreiche Starts bleiben still.

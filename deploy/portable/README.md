@@ -118,6 +118,19 @@ connection needs a new code; a pause lasts until you resume or the application
 starts again. Linux has no icon yet; use the panel there. On macOS the menu-bar item
 appears when the panel starts with its browser page, not with `ui --no-open`.
 
+### Updates
+
+The panel looks for a newer version twice a day and downloads it in the background.
+It is installed at the next start of k-lani-link, or at once with **Update now** in the
+note at the top of the panel; the panel then restarts and opens a new tab. An update is
+accepted only if it carries the k-lani-link release signature and is newer than the
+running version; anything else is ignored. The check sends GitHub nothing but a user
+agent with the running version number. Switch it off under **More options and help**
+→ **Updates**. On a host, or without the panel, run `k-lani-link update` (or
+`k-lani-link update --check`); it replaces the program and the running host keeps the
+old version until it is restarted. When the program's folder is read-only, the panel
+says so and points to the download page instead.
+
 Closing the browser tab leaves the connection running, and the panel reconnects by
 itself when the application starts again. Double-clicking the EXE again reopens the
 same panel. **Quit** stops the transport, the panel and the icon; **Disconnect**
@@ -260,7 +273,11 @@ after all required jobs pass; a failed platform must not be advertised as tested
 Use `deploy/portable/package.py` on the downloaded artifacts to verify each
 binary's hash, version and source revision before making ZIPs and checksums.
 The source bundle, project license, Rust dependency notices and commit-specific
-workflow URL accompany the release. Building from pinned source makes the build
+workflow URL accompany the release. Sign the checksums for the updater with
+`python3 -B deploy/portable/sign.py --key <private key> <output>/SHA256SUMS` and upload
+`SHA256SUMS.sig` with them; a release without it is never installed by the updater.
+The private key stays offline and outside the repository: losing it ends automatic
+updates for every installed copy, and anyone holding it can ship code to them. Building from pinned source makes the build
 auditable; byte-for-byte reproducibility across machines has not been established.
 
 ## Keep README downloads current

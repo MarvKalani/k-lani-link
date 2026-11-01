@@ -7,6 +7,16 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Signed automatic updates: the control panel looks for a newer release on GitHub twice
+  a day, downloads it in the background and installs it at the next start, or at once
+  with **Update now**. Only releases whose `SHA256SUMS` carry the k-lani-link release
+  signature (Ed25519) and are newer than the running version are installed. The check
+  sends only the running version number and can be switched off in the panel; hosts
+  update on request with `k-lani-link update`. Releases now also contain the bare macOS
+  and Linux executables, which the updater downloads. Versions up to 1.2611.1-preview.1
+  have no updater and need one more manual download.
+- The chat's model list refreshes when it is opened, so a model loaded on the model
+  computer later shows up without reconnecting.
 - Pairing by QR code, without the relay: `offer-https --qr` shows a QR code in the
   terminal, and **Scan QR code** in the control panel reads it with the camera, or a
   photo or screenshot via **Use a picture instead**. The code carries the client side
