@@ -237,6 +237,23 @@ k-lani-link join-https --dir /private/client --relay-url https://relay.example.c
   Tokenless reads never wait, and requests without a token draw on their own budget of
   20 per second, never on the tunnels' budgets. Unknown, expired and used slots answer `404` and count
   against the failure brake; every other route still answers `401` without a token.
+- **Pair by QR code, without the relay:** add `--qr` to `offer-https`. It writes the host
+  folder, prints the exact `host` command to start and shows a QR code in the terminal
+  (explicit black on white, so the terminal theme does not matter), then returns. On the
+  other computer, **Scan QR code** in the control panel reads it with the camera, or
+  **Use a picture instead** reads a photo or screenshot (handy over remote desktop). The
+  QR code carries the client side only: the relay address, the client's own relay token,
+  the starting secret of the pairing chain and the transport settings. The local API key
+  is made on the client. The relay plays no part in the pairing; it carries the tunnel
+  afterwards as usual.
+  - `--qr` needs `--client-admission-token-file`, so the host's own relay token never
+    appears on the screen.
+  - The starting secret counts only until the first connection replaces it; after that a
+    photo of the QR code is useless. Until then, whoever scans it first is paired, so
+    `--qr` defaults to ten minutes of unused lifetime (`--unused-seconds` changes it).
+    Start the host first, scan right away and close the window afterwards.
+  - The panel decodes camera frames locally (greyscale, at most 2000 pixels per side)
+    and never hands the QR code's content back to the page.
 - The PHP relay offers the same slots with the same limits (`pair_slots` in its
   configuration). Behind a web application firewall that refuses binary request bodies,
   pairing by code may fail; use `init-https` and copy the client folder there.

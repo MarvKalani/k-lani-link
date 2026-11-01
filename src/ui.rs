@@ -32,6 +32,7 @@ use tokio_util::sync::CancellationToken;
 const HTML: &str = include_str!("ui/index.html");
 const JS: &str = include_str!("ui/app.js");
 const CHAT_JS: &str = include_str!("ui/chat.js");
+const SCAN_JS: &str = include_str!("ui/scan.js");
 const CSS: &str = include_str!("ui/style.css");
 
 struct Active {
@@ -126,6 +127,15 @@ fn router(panel: Panel) -> Router {
             }),
         )
         .route(
+            "/scan.js",
+            get(|| async {
+                (
+                    [("content-type", "text/javascript; charset=utf-8")],
+                    SCAN_JS,
+                )
+            }),
+        )
+        .route(
             "/style.css",
             get(|| async { ([("content-type", "text/css; charset=utf-8")], CSS) }),
         )
@@ -133,6 +143,12 @@ fn router(panel: Panel) -> Router {
         .route("/api/status", get(status))
         .route("/api/config", post(save))
         .route("/api/join", post(join))
+        .route(
+            "/api/scan",
+            post(scan).layer(DefaultBodyLimit::max(
+                8 + (crate::qr::MAX_SIDE * crate::qr::MAX_SIDE) as usize,
+            )),
+        )
         .route("/api/connect", post(connect))
         .route("/api/disconnect", post(disconnect))
         .route("/api/test", post(test_backend))
@@ -265,7 +281,6 @@ fn paired(directory: &std::path::Path) -> Option<Config> {
 }
 
 /// Pairing by code: receives a client folder from the host and makes it the configuration.
-/// Each pairing gets a new folder; an earlier one is kept, never overwritten.
 async fn join(
     State(panel): State<Panel>,
     input: Result<Json<JoinInput>, axum::extract::rejection::JsonRejection>,
@@ -286,6 +301,29 @@ async fn join(
         },
         relay => relay.to_owned(),
     };
+    let local = panel.relay_ca.clone();
+    pair(&panel, move |dir| async move {
+        crate::mailbox::couple::join(
+            &dir,
+            &code,
+            crate::mailbox::couple::Join {
+                relay: &relay,
+                proxy_url: None,
+                ca_cert_file: local,
+            },
+        )
+        .await
+    })
+    .await
+}
+
+/// Makes a new pairing the configuration: `receive` writes the client folder it is given.
+/// Each pairing gets a new folder; an earlier one is kept, never overwritten.
+async fn pair<F, W>(panel: &Panel, receive: W) -> Response
+where
+    W: FnOnce(PathBuf) -> F + Send + 'static,
+    F: std::future::Future<Output = anyhow::Result<PathBuf>> + Send,
+{
     {
         let mut control = panel.control.lock().await;
         if control.active.is_some() {
@@ -302,16 +340,7 @@ async fn join(
     let task = tokio::spawn(async move {
         let result = async {
             let name = format!("https-{}", crate::config::random_id()?);
-            let config = crate::mailbox::couple::join(
-                &worker.directory.join(&name),
-                &code,
-                crate::mailbox::couple::Join {
-                    relay: &relay,
-                    proxy_url: None,
-                    ca_cert_file: worker.relay_ca.clone(),
-                },
-            )
-            .await?;
+            let config = receive(worker.directory.join(&name)).await?;
             let config = Config::load(&config)?;
             let temporary = worker
                 .directory
@@ -342,6 +371,44 @@ async fn join(
             "Pairing stopped unexpectedly.",
         ),
     }
+}
+
+/// Pairing by QR code: one greyscale camera frame (width and height as little-endian u32,
+/// then one byte per pixel). Without a code in it the answer is `found: false`; a
+/// k-lani-link code pairs at once. The code's content never goes back to the page.
+async fn scan(State(panel): State<Panel>, body: axum::body::Bytes) -> Response {
+    let size = |at: usize| {
+        body.get(at..at + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let (Some(width), Some(height)) = (size(0), size(4)) else {
+        return failure(StatusCode::BAD_REQUEST, "This is not a camera picture.");
+    };
+    let fits = (1..=crate::qr::MAX_SIDE).contains(&width)
+        && (1..=crate::qr::MAX_SIDE).contains(&height)
+        && body.len() - 8 == width as usize * height as usize;
+    if !fits {
+        return failure(StatusCode::BAD_REQUEST, "This is not a camera picture.");
+    }
+    let pixels = body.slice(8..).to_vec();
+    let found = tokio::task::spawn_blocking(move || crate::qr::read(width, height, pixels))
+        .await
+        .ok()
+        .flatten();
+    let Some(text) = found else {
+        return Json(json!({"found": false})).into_response();
+    };
+    if !crate::mailbox::couple::is_qr_pairing(&text) {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "This QR code is not a k-lani-link pairing code. Show the code from offer-https --qr.",
+        );
+    }
+    let local = panel.relay_ca.clone();
+    pair(&panel, move |dir| async move {
+        crate::mailbox::couple::join_qr(&dir, &text, None, local)
+    })
+    .await
 }
 
 async fn limited_body(mut response: reqwest::Response, limit: usize) -> Option<Vec<u8>> {
@@ -1055,7 +1122,8 @@ mod tests {
         assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
         tokio::time::timeout(std::time::Duration::from_secs(15), async {
             loop {
-                if status(State(panel.clone())).await.0["phase"] == "connected" {
+                let state = status(State(panel.clone())).await.0;
+                if state["phase"] == "connected" {
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -1175,6 +1243,107 @@ mod tests {
             })),
         )
         .await;
+        assert_eq!(again.status(), StatusCode::CONFLICT);
+        stop_client(&panel).await;
+        remote_stop.cancel();
+        let _ = host_task.await.unwrap();
+        backend.abort();
+        cleanup(panel, ui_task, directory).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_scanned_qr_code_pairs_without_the_relay_and_connects() {
+        let (mut panel, ui_task, directory) = fixture().await;
+        let relay = crate::mailbox::couple::tests::fixture().await;
+        panel.relay_ca = Some(relay.ca.clone());
+        let backend_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let backend_address = backend_listener.local_addr().unwrap();
+        let backend = Router::new()
+            .route(
+                "/health",
+                get(|| async {
+                    Json(json!({"link_privacy": {
+                        "version": 1, "application_logs": false, "request_history": false,
+                        "diagnostics": false, "remote_images": false
+                    }}))
+                }),
+            )
+            .route(
+                "/v1/models",
+                get(|| async { Json(json!({"data": [{"id": "qr-test-model"}]})) }),
+            );
+        let backend = tokio::spawn(axum::serve(backend_listener, backend).into_future());
+        let scan = |(width, height, pixels): (u32, u32, Vec<u8>)| {
+            let mut frame = width.to_le_bytes().to_vec();
+            frame.extend(height.to_le_bytes());
+            frame.extend(pixels);
+            panel
+                .http
+                .post(format!("{}/api/scan", panel.origin))
+                .bearer_auth(&panel.token)
+                .body(frame)
+                .send()
+        };
+        // Larger than the 64 KiB the other routes accept.
+        let nothing = scan((320, 240, vec![200; 320 * 240])).await.unwrap();
+        assert_eq!(nothing.json::<Value>().await.unwrap()["found"], false);
+        let foreign = scan(crate::qr::picture("https://example.com/menu", 4))
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::BAD_REQUEST);
+        let mismatched = panel
+            .http
+            .post(format!("{}/api/scan", panel.origin))
+            .bearer_auth(&panel.token)
+            .body(vec![9u8; 20])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(mismatched.status(), StatusCode::BAD_REQUEST);
+        // The relay only carries the tunnel afterwards: nothing waits on the host here. The
+        // handler is called directly, with the panel that trusts the test relay's CA.
+        let text = relay.offer_qr();
+        let frame = |(width, height, pixels): (u32, u32, Vec<u8>)| {
+            let mut frame = width.to_le_bytes().to_vec();
+            frame.extend(height.to_le_bytes());
+            frame.extend(pixels);
+            axum::body::Bytes::from(frame)
+        };
+        let paired_now =
+            super::scan(State(panel.clone()), frame(crate::qr::picture(&text, 4))).await;
+        assert_eq!(paired_now.status(), StatusCode::OK);
+        assert!(paired(&directory).is_some());
+        let mut host = Config::load(&relay.root.join("pairing/host/host.toml")).unwrap();
+        host.upstream = format!("http://{backend_address}");
+        let remote_stop = CancellationToken::new();
+        let host_task = tokio::spawn(crate::host::run(
+            host,
+            remote_stop.clone(),
+            relay.root.join("host-pairing-state"),
+        ));
+        let api = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        panel.control.lock().await.config.as_mut().unwrap().listen = api.local_addr().unwrap();
+        drop(api);
+        assert_eq!(connect(State(panel.clone())).await.status(), StatusCode::OK);
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            loop {
+                let state = status(State(panel.clone())).await.0;
+                if state["phase"] == "connected" {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("the tunnel connects from the QR code's material alone");
+        let response = test_backend(State(panel.clone())).await;
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let result: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result["models"][0], "qr-test-model");
+        // Scanning again while connected is refused.
+        let again = super::scan(State(panel.clone()), frame(crate::qr::picture(&text, 4))).await;
         assert_eq!(again.status(), StatusCode::CONFLICT);
         stop_client(&panel).await;
         remote_stop.cancel();

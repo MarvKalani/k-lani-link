@@ -7,7 +7,13 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
-- No changes since 1.2611.1-preview.1.
+- Pairing by QR code, without the relay: `offer-https --qr` shows a QR code in the
+  terminal, and **Scan QR code** in the control panel reads it with the camera, or a
+  photo or screenshot via **Use a picture instead**. The code carries the client side
+  only (relay address, the client's own relay token, the pairing chain's starting secret
+  and transport settings); the local API key is made on the client. It needs a separate
+  client token, so the host's token never appears on screen, and it stays usable for ten
+  minutes by default and only until the first connection replaces the secret.
 
 ## 1.2611.1-preview.1 — 1 November 2026 (taskbar icon and chat preview)
 

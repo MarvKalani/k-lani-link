@@ -66,6 +66,15 @@ Arbeitsspeicher, bevor das Relay Daten annimmt.
    falsch eingegebener Code ist verbraucht, dann einfach einen neuen erzeugen. Ohne
    Kontrollfeld geht es mit `k-lani-link join-https --dir mein-client --relay-url …`.
 
+   **Oder per QR-Code, ganz ohne Relay beim Koppeln:** denselben Befehl mit `--qr`
+   ausführen. Er zeigt den Befehl zum Starten des Hosts und darunter einen QR-Code. Erst
+   den Host in einem zweiten Fenster starten, dann am Laptop im Kontrollfeld auf
+   „QR-Code scannen“ klicken und die Kamera auf den Bildschirm richten. Ohne Kamera geht
+   „Stattdessen ein Bild wählen“ mit einem Foto oder Bildschirmfoto des Codes. Der QR-Code
+   gilt zehn Minuten und nur bis zur ersten Verbindung; wer ihn vorher abfotografiert,
+   könnte sich an deiner Stelle koppeln. Danach ist er wertlos. `--qr` braucht
+   `--client-admission-token-file`, damit das Host-Token nie auf dem Bildschirm steht.
+
    Alternativ das Pairing als Ordner erzeugen und den Client-Ordner sicher übertragen:
 
    ```sh

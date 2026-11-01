@@ -558,5 +558,144 @@ pub async fn join(dir: &Path, code: &Code, local: Join<'_>) -> Result<PathBuf> {
     Ok(dir.join("client.toml"))
 }
 
+/// Pairing by QR code: everything the client needs, shown on the host's screen and read
+/// by the client's camera, so no relay is involved until the tunnel starts. The chain
+/// secret counts only until the first connection replaces it; a short unused lifetime
+/// keeps a photo of the screen from being useful for long.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Card {
+    /// Format tag.
+    k: String,
+    /// Relay address, canonical.
+    r: String,
+    /// The client's relay admission token.
+    t: String,
+    /// The chain secret and when it was issued.
+    s: String,
+    i: u64,
+    /// Lifetimes: unused, idle, absolute.
+    u: u64,
+    d: u64,
+    a: Option<u64>,
+    /// Long-poll wait and transport choices: 1 HTTP/1.1 only, 2 HTTP/3, 4 POST writes.
+    w: u64,
+    f: u8,
+}
+const CARD: &str = "kll-qr1";
+/// How long a QR code stays usable when the host names no other unused lifetime.
+pub const QR_LIFETIME: Duration = CODE_LIFETIME;
+
+/// Host side of a pairing by QR code: writes `dir/host/host.toml` and returns the text to
+/// show as a QR code. The host's own admission token is never part of it.
+pub fn offer_qr(
+    dir: &Path,
+    options: Options,
+    client_token: &str,
+    limits: Lifetimes,
+    upstream: &setup::Upstream,
+) -> Result<String> {
+    options.validate()?;
+    let mut options = options;
+    let relay = canonical(&options.relays[0])?;
+    options.relays = vec![relay.clone()];
+    let host_token = super::secret(&options.admission_token_file)?;
+    if host_token == client_token {
+        return Err(Diagnostic::err(
+            "A QR code is shown on the screen, so it needs the client's own relay token: add --client-admission-token-file.",
+        ));
+    }
+    let certificate = setup::certificate(&options)?;
+    let dir = setup::new_directory(dir)?;
+    let unfinished = Unfinished(Some(dir.clone()));
+    let material = Material::new(limits)?;
+    let folder = dir.join("host");
+    setup::initialize(&folder, EndpointRole::Host, &material)?;
+    setup::export(
+        &folder,
+        "host",
+        &material,
+        &options,
+        &host_token,
+        certificate.as_deref(),
+        Some(upstream),
+    )?;
+    let card = Card {
+        k: CARD.into(),
+        r: relay,
+        t: client_token.to_owned(),
+        s: material.initial,
+        i: material.issued,
+        u: limits.unused_seconds,
+        d: limits.idle_seconds,
+        a: limits.absolute_seconds,
+        w: options.poll_wait_seconds,
+        f: u8::from(options.http1_only)
+            | u8::from(options.http3) << 1
+            | u8::from(options.post_writes) << 2,
+    };
+    let text = serde_json::to_string(&card)?;
+    unfinished.done();
+    Ok(text)
+}
+
+/// Whether a scanned text is meant for k-lani-link at all, before anything else is checked.
+pub fn is_qr_pairing(text: &str) -> bool {
+    text.starts_with(&format!("{{\"k\":\"{CARD}\""))
+}
+
+/// Client side of a pairing by QR code: writes a new client folder `dir` from the scanned
+/// text and returns the path of its `client.toml`. Nothing is contacted.
+pub fn join_qr(
+    dir: &Path,
+    text: &str,
+    proxy_url: Option<String>,
+    ca_cert_file: Option<PathBuf>,
+) -> Result<PathBuf> {
+    const INVALID: &str = "This QR code is not a valid k-lani-link pairing code.";
+    let card: Card = serde_json::from_str(text).map_err(|_| Diagnostic::err(INVALID))?;
+    if card.k != CARD || canonical(&card.r).ok().as_deref() != Some(card.r.as_str()) {
+        return Err(Diagnostic::err(INVALID));
+    }
+    let options = Options {
+        relays: vec![card.r.clone()],
+        state_dir: dir.join("state"),
+        admission_token_file: dir.join("relay-token"),
+        http3: card.f & 2 != 0 && proxy_url.is_none(),
+        proxy_url,
+        ca_cert_file,
+        poll_wait_seconds: card.w,
+        http1_only: card.f & 1 != 0,
+        post_writes: card.f & 4 != 0,
+    };
+    options.validate()?;
+    let certificate = setup::certificate(&options)?;
+    // The local API key never leaves this computer, so it is made here.
+    let material = Material {
+        initial: card.s,
+        issued: card.i,
+        limits: Lifetimes {
+            unused_seconds: card.u,
+            idle_seconds: card.d,
+            absolute_seconds: card.a,
+        },
+        api_key: crate::config::random_secret()?,
+    };
+    let dir = setup::new_directory(dir)?;
+    let unfinished = Unfinished(Some(dir.clone()));
+    setup::initialize(&dir, EndpointRole::Client, &material)?;
+    setup::export(
+        &dir,
+        "client",
+        &material,
+        &options,
+        &card.t,
+        certificate.as_deref(),
+        None,
+    )?;
+    unfinished.done();
+    Ok(dir.join("client.toml"))
+}
+
 #[cfg(test)]
 pub(crate) mod tests;

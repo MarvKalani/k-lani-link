@@ -99,6 +99,21 @@ impl Fixture {
             ca_cert_file: Some(self.ca.clone()),
         }
     }
+    /// Issues a pairing by QR code and returns the text the QR code carries.
+    pub(crate) fn offer_qr(&self) -> String {
+        let limits = Lifetimes {
+            unused_seconds: QR_LIFETIME.as_secs(),
+            ..Lifetimes::default()
+        };
+        offer_qr(
+            &self.root.join("pairing"),
+            self.options(),
+            &self.client_token,
+            limits,
+            &Default::default(),
+        )
+        .unwrap()
+    }
     /// Starts the host side and returns its task and the code it showed.
     pub(crate) async fn offer(&self) -> (tokio::task::JoinHandle<Result<()>>, String) {
         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -295,4 +310,89 @@ async fn a_relay_with_pairing_turned_off_says_so_and_leaves_no_folder_behind() {
     .unwrap_err();
     assert!(error.to_string().contains("turned off"), "{error}");
     assert!(!dir.exists());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_qr_card_carries_the_client_side_only_and_rejects_anything_else() {
+    let relay = fixture().await;
+    // The host's own relay token never goes on the screen.
+    let same = offer_qr(
+        &relay.root.join("refused"),
+        relay.options(),
+        &std::fs::read_to_string(&relay.host_token).unwrap(),
+        Lifetimes::default(),
+        &Default::default(),
+    );
+    assert!(
+        same.unwrap_err()
+            .to_string()
+            .contains("client's own relay token")
+    );
+    assert!(!relay.root.join("refused").exists());
+    let text = relay.offer_qr();
+    assert!(is_qr_pairing(&text));
+    assert!(text.len() < 300, "{} bytes", text.len());
+    assert!(text.contains(&relay.client_token));
+    let host = std::fs::read_to_string(&relay.host_token).unwrap();
+    assert!(!text.contains(host.trim()));
+    let client = join_qr(
+        &relay.root.join("client"),
+        &text,
+        None,
+        Some(relay.ca.clone()),
+    )
+    .unwrap();
+    let config = Config::load(&client).unwrap();
+    let host_config = Config::load(&relay.root.join("pairing/host/host.toml")).unwrap();
+    // The local API key is made on the client; the relay and the token come from the card.
+    assert_ne!(config.api_key, host_config.api_key);
+    let options = config.https.as_ref().unwrap();
+    assert_eq!(options.relays, vec![relay.relay.clone()]);
+    assert_eq!(
+        super::super::secret(&options.admission_token_file).unwrap(),
+        relay.client_token
+    );
+    // A real encrypted session between the two folders, without any slot or acknowledgement.
+    let open = |config: &Config, role| {
+        let options = config.https.clone().unwrap();
+        let store = crate::chain_state::Store::open(&options.state_dir, role).unwrap();
+        (options, std::sync::Arc::new(std::sync::Mutex::new(store)))
+    };
+    let (client_options, client_store) = open(&config, EndpointRole::Client);
+    let (host_options, host_store) = open(&host_config, EndpointRole::Host);
+    let stop = CancellationToken::new();
+    let (laptop, server) = tokio::time::timeout(Duration::from_secs(20), async {
+        tokio::join!(
+            crate::mailbox::transport::connect(&client_options, client_store, stop.clone()),
+            crate::mailbox::transport::accept(&host_options, host_store, stop.clone()),
+        )
+    })
+    .await
+    .expect("both ends meet");
+    let (laptop, mut server) = (laptop.unwrap(), server.unwrap());
+    laptop
+        .tx
+        .send(k_lani_link_protocol::Frame::Credit { id: 9 })
+        .await
+        .unwrap();
+    let received = tokio::time::timeout(Duration::from_secs(10), server.rx.recv())
+        .await
+        .unwrap();
+    assert!(matches!(
+        received,
+        Some(k_lani_link_protocol::Frame::Credit { id: 9 })
+    ));
+    stop.cancel();
+    let mut tampered: serde_json::Value = serde_json::from_str(&text).unwrap();
+    tampered["r"] = serde_json::json!(format!("{}/", relay.relay.to_uppercase()));
+    for bad in [
+        "https://example.com".to_owned(),
+        text.replace(CARD, "kll-qr9"),
+        tampered.to_string(),
+        format!("{}x", &text[..text.len() - 1]),
+    ] {
+        let dir = relay.root.join(format!("bad-{}", random_id().unwrap()));
+        assert!(join_qr(&dir, &bad, None, None).is_err());
+        assert!(!dir.exists());
+    }
 }

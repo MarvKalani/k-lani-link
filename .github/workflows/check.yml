@@ -37,7 +37,7 @@ jobs:
       - run: python3 -B -m unittest discover -s deploy/portable -p 'test_*.py'
       - run: python3 -B deploy/thinkrail/check-website.py
       - run: node --check website/main.js
-      - run: node --check src/ui/app.js
+      - run: node --check src/ui/app.js && node --check src/ui/chat.js && node --check src/ui/scan.js
       - run: python3 -B deploy/check-names.py
       - run: python3 -B deploy/source-bundle.py
   release-build:

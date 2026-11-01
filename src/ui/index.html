@@ -17,6 +17,20 @@
       <label><span data-t="code">Pairing code</span><input id="code" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="472-1234-5678" maxlength="20"></label>
       <button id="pair" class="big" data-t="connect">Connect</button>
       <p class="muted" data-t="pairNote">A code works once and for ten minutes. If it fails, ask for a new one.</p>
+      <div id="qr-start">
+        <p class="or"><span data-t="or">or</span></p>
+        <p data-t="qrIntro">Does the model computer show a QR code? Scan it with this computer's camera.</p>
+        <div class="buttons">
+          <button id="qr-camera" type="button" data-t="qrCamera">Scan QR code</button>
+          <label class="file"><span data-t="qrPicture">Use a picture instead</span><input id="qr-file" type="file" accept="image/*"></label>
+        </div>
+      </div>
+      <div id="qr-scan" hidden>
+        <video id="qr-video" playsinline muted></video>
+        <p id="qr-status" role="status"></p>
+        <p class="muted" data-t="qrPermission">The browser asks for the camera each time k-lani-link starts. That is normal.</p>
+        <button id="qr-cancel" class="secondary" type="button" data-t="cancel">Cancel</button>
+      </div>
     </section>
 
     <section id="step-wait" hidden>
@@ -76,5 +90,5 @@
       <p class="muted"><span data-t="docker">Using OpenCode in Docker? It has its own launcher and does not use this page.</span> <a href="https://github.com/MarvKalani/k-lani-link/blob/main/deploy/desktop/README.md" target="_blank" rel="noreferrer" data-t="dockerLink">Docker setup</a></p>
       <p class="muted"><span data-t="privacy">This page controls the connection. A chat is kept only while its window is open, unless you save it.</span> <span id="version"></span></p>
     </details>
-  </main><script src="/app.js"></script><script src="/chat.js"></script>
+  </main><script src="/app.js"></script><script src="/chat.js"></script><script src="/scan.js"></script>
 </body></html>

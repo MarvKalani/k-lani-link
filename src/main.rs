@@ -64,7 +64,8 @@ enum Command {
         upstream_socket: Option<PathBuf>,
     },
     /// Issue an HTTPS pairing and hand the client side over by a short code typed on the
-    /// other computer. Waits up to ten minutes, then the code is void.
+    /// other computer. Waits up to ten minutes, then the code is void. With `--qr`, shows a
+    /// QR code for the other computer's camera instead and returns at once.
     OfferHttps {
         #[arg(long)]
         dir: PathBuf,
@@ -81,8 +82,10 @@ enum Command {
         ca_cert_file: Option<PathBuf>,
         #[arg(long)]
         proxy_url: Option<String>,
-        #[arg(long, default_value_t = 86_400)]
-        unused_seconds: u64,
+        /// How long the pairing stays usable before its first connection. Default: a day,
+        /// or ten minutes with `--qr`.
+        #[arg(long)]
+        unused_seconds: Option<u64>,
         #[arg(long, default_value_t = 2_592_000)]
         idle_seconds: u64,
         #[arg(long)]
@@ -93,6 +96,10 @@ enum Command {
         /// Reach the backend through this Unix socket instead, e.g. a container without network.
         #[arg(long)]
         upstream_socket: Option<PathBuf>,
+        /// Show a QR code for the other computer's camera instead of a code to type. No relay
+        /// is involved in the pairing itself; needs --client-admission-token-file.
+        #[arg(long)]
+        qr: bool,
     },
     /// Receive the client side of an HTTPS pairing with the code the host shows.
     JoinHttps {
@@ -461,6 +468,7 @@ async fn run(cli: Cli) -> Result<()> {
             absolute_seconds,
             upstream,
             upstream_socket,
+            qr,
         } => {
             let cwd = std::env::current_dir()?;
             let shown_relay = relay_url.clone();
@@ -479,19 +487,50 @@ async fn run(cli: Cli) -> Result<()> {
                 &cwd.join(client_admission_token_file.unwrap_or(admission_token_file)),
             )?;
             let host = cwd.join(&dir).join("host").join("host.toml");
+            let default_unused = if qr {
+                k_lani_link::mailbox::couple::QR_LIFETIME.as_secs()
+            } else {
+                86_400
+            };
+            let limits = k_lani_link::chain_state::Lifetimes {
+                unused_seconds: unused_seconds.unwrap_or(default_unused),
+                idle_seconds,
+                absolute_seconds,
+            };
+            let upstream = k_lani_link::mailbox::setup::Upstream {
+                url: upstream,
+                socket: upstream_socket,
+            };
+            if qr {
+                let text = k_lani_link::mailbox::couple::offer_qr(
+                    &dir,
+                    options,
+                    &client_token,
+                    limits,
+                    &upstream,
+                )?;
+                let minutes = limits.unused_seconds.div_ceil(60);
+                k_lani_link::qr::enable_colours();
+                println!("1. Start the host now, in a second window:");
+                println!("   k-lani-link host --config {}", host.display());
+                println!();
+                println!(
+                    "2. On the other computer, open k-lani-link, click \"Scan QR code\" and hold its camera to this code within {minutes} minutes:"
+                );
+                println!();
+                print!("{}", k_lani_link::qr::terminal(&text)?);
+                println!();
+                println!(
+                    "Anyone who photographs this code before the other computer connects could pair instead. Close this window once the other computer shows \"Connected\"."
+                );
+                return Ok(());
+            }
             k_lani_link::mailbox::couple::offer(
                 &dir,
                 options,
                 &client_token,
-                k_lani_link::chain_state::Lifetimes {
-                    unused_seconds,
-                    idle_seconds,
-                    absolute_seconds,
-                },
-                &k_lani_link::mailbox::setup::Upstream {
-                    url: upstream,
-                    socket: upstream_socket,
-                },
+                limits,
+                &upstream,
                 |code| {
                     println!("Pairing code: {code}");
                     println!("Relay address: {shown_relay}");

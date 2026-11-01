@@ -69,7 +69,11 @@ transport natively and do not isolate the AI application's network access.
 3. On the model computer, `k-lani-link offer-https` prints a **relay address** and a
    **pairing code**. Type both into the panel and click **Connect**. The panel waits
    while the model computer confirms, then connects by itself; `k-lani-link host`
-   must be running there.
+   must be running there. If the model computer shows a **QR code** instead
+   (`offer-https --qr`), click **Scan QR code** and hold this computer's camera to it;
+   without a camera, **Use a picture instead** reads a photo or screenshot of the code.
+   The browser asks for the camera each time k-lani-link starts, because the panel's
+   local address changes with every start.
 4. When the panel shows **Connected**, it lists the three values for your AI app,
    each with a **Copy** button: base URL, local API key and model ID. Add an
    OpenAI-compatible provider in the app and paste them. The model ID comes from a

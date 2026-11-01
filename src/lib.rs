@@ -9,6 +9,7 @@ pub mod host;
 pub mod local_api;
 pub mod pairing;
 pub mod peer;
+pub mod qr;
 pub mod routing;
 pub mod shutdown;
 pub mod signal;
