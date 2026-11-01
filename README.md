@@ -200,6 +200,8 @@ installer: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64/ARM64.
 Starting the new UI preview without arguments opens a local connection panel;
 PowerShell/terminal commands remain available. It asks for the relay address and
 pairing code, connects by itself and then shows the three values for your AI app.
+Small chat windows in the panel try the model directly; a chat is kept only while its
+window is open, unless you save it on this computer.
 The initial downloads are unsigned previews; security software or company policy
 may block them. Native operation does not provide Docker's application isolation.
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)

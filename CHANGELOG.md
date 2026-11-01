@@ -17,6 +17,14 @@ tagged versions and downloads are listed on
   shows the connection state by colour; its menu opens the panel, pauses or resumes a
   pairing by code and quits the application. Quitting from the panel removes it too.
   The panel's browser tab shows the same icon in the same colour.
+- The control panel has chat windows for trying the model directly: each window is
+  its own conversation, can be dragged, resized and closed with ×, and shows the
+  streamed answer with its thinking, tokens per second, token count, time to the
+  first token and context size. Model and thinking level can change within a chat;
+  **Retry** asks again and **Stop** ends an answer early, and a window waits its turn
+  while the model computer is busy. A chat is gone when its window closes unless the
+  user clicks **Save**; saved chats are private files in the panel's `chats` folder
+  and can be reopened or deleted from the panel.
 - `offer-https` prints the relay address next to the pairing code, so the operator can
   pass on both at once.
 - Pin Basalt to `9175e7a3`: the elastic KV arena hands a deep request's cells back,

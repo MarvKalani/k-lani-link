@@ -210,9 +210,12 @@ keinen TURN-Dienst. Ein automatischer Relay-Fallback findet nicht statt.
 Die nativen Varianten bestehen aus einem Programm ohne Installer:
 Windows x64/ARM64, macOS Intel/Apple Silicon und Linux x64/ARM64. Sie starten in
 PowerShell oder einem Terminal und verwenden denselben verschlüsselten Tunnel.
-Ein Doppelklick öffnet außerdem eine lokale
-Bedienoberfläche mit Konfigurationsimport, Verbindungsstatus und Backend-Test.
-Eine Tray-Anzeige ist in dieser Vorschau noch nicht enthalten.
+Ein Doppelklick öffnet außerdem ein lokales Kontrollfeld im Browser: Es fragt
+Relay-Adresse und Kopplungscode ab, verbindet sich selbst und zeigt dann die drei Werte
+für deine KI-App. Kleine Chatfenster im Kontrollfeld probieren das Modell direkt aus;
+ein Chat bleibt nur, solange sein Fenster offen ist, außer du speicherst ihn auf diesem
+Computer. Unter Windows und macOS zeigt ein Symbol in der Taskleiste bzw. Menüleiste
+den Zustand und bietet Öffnen, Pausieren und Beenden.
 Die ersten Downloads sind unsignierte Vorabversionen; Schutzsoftware oder
 Unternehmensrichtlinien können sie blockieren. Der native Betrieb bietet keine
 Docker-Isolation der KI-Anwendungen.

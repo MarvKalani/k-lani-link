@@ -75,6 +75,27 @@ transport natively and do not isolate the AI application's network access.
    OpenAI-compatible provider in the app and paste them. The model ID comes from a
    model-list request through the real encrypted tunnel; no prompt is sent.
 
+### Chat with the model
+
+Below the three values, **New chat** opens a small window inside the panel page.
+Each window is its own conversation: drag it by its title bar, resize it at the
+bottom-right corner and close it with **×**. Answers stream as they are written,
+with the model's thinking in a collapsible block and, under each answer, the model,
+thinking level, tokens per second, token count, time to the first token and the
+context size so far. **Model** and **Thinking** (default, off, low, medium, high) can
+change between messages of the same chat; **Retry** asks again for the last answer
+and **Stop** ends one early. When the model computer is busy with another request, a
+window waits its turn. The panel sends the requests through the same local API as
+your AI app, so the API key never reaches the page.
+
+A chat is kept only while its window is open. **Save** writes it, and every later
+answer, to a private file in the `chats` folder of the panel's data directory
+(`%LOCALAPPDATA%\k-lani-link\control-panel\chats` on Windows,
+`~/.config/k-lani-link/control-panel/chats` on macOS and Linux, or below
+`$XDG_CONFIG_HOME` when set). Saved chats are listed under the chat button for
+reopening, with the folder shown below the list; **Delete** there, or clicking
+**Saved** twice in the window, removes the file. Nothing is saved without that click.
+
 Everything else sits under **More options and help**: pair again with a new code,
 disconnect, quit, troubleshooting, and importing a `client.toml` file from the
 operator instead of a code. An imported file is validated and saved privately under
@@ -99,7 +120,8 @@ same panel. **Quit** stops the transport, the panel and the icon; **Disconnect**
 stops only the transport. No autostart or system service is installed.
 
 The panel uses an unpredictable local access token, checks Host and Origin, has no
-external scripts, and stores no conversation history or connection logs. The
+external scripts, and keeps no connection logs. It stores a conversation only when
+you save a chat, as described above. The
 bootstrap token is removed from the browser address bar after loading. Its private
 address file is deleted on orderly exit. The browser, clipboard and local user
 account remain trusted. Keep the data directory private; Windows uses its inherited

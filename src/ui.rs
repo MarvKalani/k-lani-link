@@ -1,4 +1,5 @@
-//! Local browser control panel. No telemetry, request logging or inference transcript storage.
+//! Local browser control panel. No telemetry or request logging; a chat is stored only when
+//! the user saves it, in the panel's private directory (see `chat`).
 use crate::{
     config::{Config, RelayPolicy, private_file, random_secret, token_matches},
     diagnostic::Diagnostic,
@@ -30,6 +31,7 @@ use tokio_util::sync::CancellationToken;
 
 const HTML: &str = include_str!("ui/index.html");
 const JS: &str = include_str!("ui/app.js");
+const CHAT_JS: &str = include_str!("ui/chat.js");
 const CSS: &str = include_str!("ui/style.css");
 
 struct Active {
@@ -51,6 +53,8 @@ struct Panel {
     control: Arc<Mutex<Control>>,
     stop: CancellationToken,
     http: reqwest::Client,
+    /// For chat answers, which stream for as long as the model writes.
+    stream: reqwest::Client,
     /// A private CA for the relay; only tests set one, a real relay needs a public certificate.
     relay_ca: Option<PathBuf>,
 }
@@ -113,6 +117,15 @@ fn router(panel: Panel) -> Router {
             get(|| async { ([("content-type", "text/javascript; charset=utf-8")], JS) }),
         )
         .route(
+            "/chat.js",
+            get(|| async {
+                (
+                    [("content-type", "text/javascript; charset=utf-8")],
+                    CHAT_JS,
+                )
+            }),
+        )
+        .route(
             "/style.css",
             get(|| async { ([("content-type", "text/css; charset=utf-8")], CSS) }),
         )
@@ -126,6 +139,7 @@ fn router(panel: Panel) -> Router {
         .route("/api/credentials", post(credentials))
         .route("/api/quit", post(quit))
         .layer(DefaultBodyLimit::max(64 * 1024))
+        .merge(chat::routes())
         .layer(middleware::from_fn_with_state(panel.clone(), protect))
         .with_state(panel)
 }
@@ -683,6 +697,7 @@ pub async fn run(
             .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(5))
             .build()?,
+        stream: streaming_client()?,
         relay_ca: None,
     };
     // A pairing by code reconnects without a new code, so the panel starts it right away.
@@ -726,7 +741,17 @@ pub async fn run(
     Ok(())
 }
 
+mod chat;
 mod tray;
+
+/// No total timeout: a chat answer streams for as long as the model writes.
+fn streaming_client() -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()
+}
 
 /// macOS: runs `work` (the panel) beside the menu-bar item; see `tray`.
 #[cfg(target_os = "macos")]
@@ -756,6 +781,7 @@ mod tests {
                 .timeout(std::time::Duration::from_secs(3))
                 .build()
                 .unwrap(),
+            stream: streaming_client().unwrap(),
             relay_ca: None,
         };
         let app = router(panel.clone());
@@ -1237,5 +1263,175 @@ mod tests {
         .await
         .expect("the pairing finishes and the panel stops waiting");
         cleanup(panel, ui_task, directory).await;
+    }
+
+    /// A stand-in for the local gateway: it checks the key and echoes the request it got.
+    async fn chat_fixture() -> (Panel, JoinHandle<()>, PathBuf, JoinHandle<()>) {
+        let (panel, task, directory) = fixture().await;
+        let gateway = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut cfg = config();
+        cfg.listen = gateway.local_addr().unwrap();
+        let key = cfg.api_key.clone();
+        let echo = Router::new().route(
+            "/v1/chat/completions",
+            post(
+                move |headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                    let authorized = headers["authorization"] == format!("Bearer {key}").as_str()
+                        && !headers.contains_key("origin");
+                    if !authorized {
+                        return StatusCode::UNAUTHORIZED.into_response();
+                    }
+                    let request: Value = serde_json::from_slice(&body).unwrap();
+                    let reply = format!(
+                        "data: {}\n\ndata: [DONE]\n\n",
+                        json!({"echo": request, "size": body.len()})
+                    );
+                    ([("content-type", "text/event-stream")], reply).into_response()
+                },
+            ),
+        );
+        let backend = tokio::spawn(async move { axum::serve(gateway, echo).await.unwrap() });
+        let stop = panel.stop.child_token();
+        let waiting = stop.clone();
+        let mut control = panel.control.lock().await;
+        control.config = Some(cfg);
+        control.active = Some(Active {
+            stop,
+            task: tokio::spawn(async move { waiting.cancelled().await }),
+        });
+        drop(control);
+        (panel, task, directory, backend)
+    }
+
+    #[tokio::test]
+    async fn a_chat_streams_through_the_gateway_with_its_key_and_long_histories_fit() {
+        let (panel, task, directory, backend) = chat_fixture().await;
+        let url = format!("{}/api/chat", panel.origin);
+        for path in ["chat", "chats", "chats/00ff"] {
+            let request = panel.http.get(format!("{}/api/{path}", panel.origin));
+            assert_eq!(
+                request.send().await.unwrap().status(),
+                StatusCode::UNAUTHORIZED
+            );
+        }
+        // Longer than the 64 KiB every other panel route accepts.
+        let history = "x".repeat(200 * 1024);
+        let response = panel
+            .http
+            .post(&url)
+            .bearer_auth(&panel.token)
+            .json(&json!({"messages": [{"role": "user", "content": history}],
+                "reasoning_effort": "low", "chat_template_kwargs": {"reasoning_effort": "low"}}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "text/event-stream");
+        let text = response.text().await.unwrap();
+        let echo: Value =
+            serde_json::from_str(text.lines().next().unwrap().strip_prefix("data: ").unwrap())
+                .unwrap();
+        assert_eq!(echo["echo"]["stream"], true);
+        assert_eq!(echo["echo"]["stream_options"]["include_usage"], true);
+        assert_eq!(echo["echo"]["reasoning_effort"], "low");
+        assert_eq!(
+            echo["echo"]["chat_template_kwargs"]["reasoning_effort"],
+            "low"
+        );
+        assert!(echo["size"].as_u64().unwrap() > 200 * 1024);
+        assert!(text.ends_with("data: [DONE]\n\n"));
+        let too_long_elsewhere = panel
+            .http
+            .post(format!("{}/api/config", panel.origin))
+            .bearer_auth(&panel.token)
+            .json(&json!({"toml": history}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(too_long_elsewhere.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let invalid = panel
+            .http
+            .post(&url)
+            .bearer_auth(&panel.token)
+            .json(&json!({"prompt": "no messages"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+        stop_client(&panel).await;
+        let stopped = panel
+            .http
+            .post(&url)
+            .bearer_auth(&panel.token)
+            .json(&json!({"messages": []}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(stopped.status(), StatusCode::CONFLICT);
+        backend.abort();
+        cleanup(panel, task, directory).await;
+    }
+
+    #[tokio::test]
+    async fn a_saved_chat_is_a_private_file_until_it_is_deleted() {
+        let (panel, task, directory) = fixture().await;
+        let chat = |id: &str| format!("{}/api/chats/{id}", panel.origin);
+        let send = |request: reqwest::RequestBuilder| request.bearer_auth(&panel.token).send();
+        let saved = json!({"title": "Primes", "updated": 2, "messages": [{"role": "user", "content": "hi"}]});
+        let response = send(panel.http.put(chat("0a1b")).json(&saved))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let file = directory.join("chats/0a1b.json");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode =
+                |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode();
+            assert_eq!(mode(&file) & 0o777, 0o600);
+            assert_eq!(mode(&directory.join("chats")) & 0o777, 0o700);
+        }
+        // Saving again replaces the copy whole.
+        let newer = json!({"title": "Primes", "updated": 3, "messages": []});
+        send(panel.http.put(chat("0a1b")).json(&newer))
+            .await
+            .unwrap();
+        let older = json!({"title": "Older", "updated": 1, "messages": []});
+        send(panel.http.put(chat("ff")).json(&older)).await.unwrap();
+        let list: Value = send(panel.http.get(format!("{}/api/chats", panel.origin)))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(list["chats"][0]["id"], "0a1b");
+        assert_eq!(list["chats"][0]["messages"], 0);
+        assert_eq!(list["chats"][1]["title"], "Older");
+        let loaded: Value = send(panel.http.get(chat("0a1b")))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(loaded, newer);
+        for id in ["..%2Fclient", "not-hex", &"a".repeat(33)] {
+            let response = send(panel.http.put(chat(id)).json(&saved)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{id}");
+        }
+        let invalid = send(
+            panel
+                .http
+                .put(chat("0a1b"))
+                .json(&json!({"messages": "no"})),
+        )
+        .await
+        .unwrap();
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+        let deleted = send(panel.http.delete(chat("0a1b"))).await.unwrap();
+        assert_eq!(deleted.status(), StatusCode::OK);
+        assert!(!file.exists());
+        let gone = send(panel.http.get(chat("0a1b"))).await.unwrap();
+        assert_eq!(gone.status(), StatusCode::NOT_FOUND);
+        cleanup(panel, task, directory).await;
     }
 }

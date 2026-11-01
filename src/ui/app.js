@@ -26,7 +26,19 @@ const texts = {
     fileNote: 'Only if the operator gave you a file. Keep it out of Git, chats and screenshots.',
     fileChoose: 'Choose client.toml', fileTooLarge: 'This file is too large.',
     docker: 'Using OpenCode in Docker? It has its own launcher and does not use this page.', dockerLink: 'Docker setup',
-    privacy: 'This page only controls the connection. It stores no conversations.',
+    privacy: 'This page controls the connection. A chat is kept only while its window is open, unless you save it.',
+    chatTitle: 'Chat with the model', chatIntro: 'Try the model right here. Every window is its own conversation.',
+    chatNew: 'New chat', chatSavedTitle: 'Saved chats', chatWhere: 'Saved on this computer only, in:',
+    chatMessages: 'messages', chatDelete: 'Delete', chatSure: 'Really delete?', chatUntitled: 'New chat',
+    chatSave: 'Save', chatIsSaved: 'Saved', chatUnsave: 'Delete saved copy?',
+    chatSaveHint: 'Keep this chat on this computer', chatUnsaveHint: 'Click twice to delete the saved copy',
+    chatClose: 'Close', chatLoose: 'Not saved: closing this window ends the conversation.',
+    chatKept: 'Saved on this computer. Every answer is saved as well.',
+    chatModel: 'Model', chatEffort: 'Thinking', chatDefaultModel: 'Default model',
+    effortAuto: 'Default', effort_none: 'Off', effort_low: 'Low', effort_medium: 'Medium', effort_high: 'High',
+    chatPlaceholder: 'Message … (Enter sends, Shift+Enter for a new line)', chatSend: 'Send', chatStop: 'Stop',
+    chatRetry: 'Retry', chatThinking: 'Thinking', chatFirst: 'first token', chatRead: 'reading', chatCache: 'cache', chatContext: 'context',
+    chatStopped: 'stopped', chatLength: 'length limit reached', chatWriting: 'writing …', chatWaiting: 'waiting for the model computer …', chatCut: 'The connection was interrupted. Try again.',
     sUnpaired: 'Not paired', sPairing: 'Pairing…', sConnecting: 'Connecting…', sConnected: 'Connected',
     sRecovering: 'Reconnecting…', sProblem: 'Not connected', sOffline: 'Not running', sClosed: 'Closed',
     waitPairTitle: 'Waiting for the model computer…',
@@ -69,7 +81,19 @@ const texts = {
     fileNote: 'Nur wenn du vom Betreiber eine Datei bekommen hast. Nicht in Git, Chats oder Screenshots ablegen.',
     fileChoose: 'client.toml auswählen', fileTooLarge: 'Diese Datei ist zu groß.',
     docker: 'OpenCode in Docker? Das hat einen eigenen Starter und nutzt diese Seite nicht.', dockerLink: 'Docker-Anleitung',
-    privacy: 'Diese Seite steuert nur die Verbindung. Sie speichert keine Gespräche.',
+    privacy: 'Diese Seite steuert die Verbindung. Ein Chat bleibt nur, solange sein Fenster offen ist, außer du speicherst ihn.',
+    chatTitle: 'Chat mit dem Modell', chatIntro: 'Probiere das Modell direkt hier aus. Jedes Fenster ist ein eigenes Gespräch.',
+    chatNew: 'Neuer Chat', chatSavedTitle: 'Gespeicherte Chats', chatWhere: 'Nur auf diesem Computer gespeichert, in:',
+    chatMessages: 'Nachrichten', chatDelete: 'Löschen', chatSure: 'Wirklich löschen?', chatUntitled: 'Neuer Chat',
+    chatSave: 'Speichern', chatIsSaved: 'Gespeichert', chatUnsave: 'Gespeicherte Kopie löschen?',
+    chatSaveHint: 'Diesen Chat auf diesem Computer behalten', chatUnsaveHint: 'Zweimal klicken löscht die gespeicherte Kopie',
+    chatClose: 'Schließen', chatLoose: 'Nicht gespeichert: Mit dem X ist dieses Gespräch weg.',
+    chatKept: 'Auf diesem Computer gespeichert. Jede Antwort wird mitgespeichert.',
+    chatModel: 'Modell', chatEffort: 'Denken', chatDefaultModel: 'Standardmodell',
+    effortAuto: 'Standard', effort_none: 'Aus', effort_low: 'Wenig', effort_medium: 'Mittel', effort_high: 'Viel',
+    chatPlaceholder: 'Nachricht … (Enter sendet, Umschalt+Enter für neue Zeile)', chatSend: 'Senden', chatStop: 'Stopp',
+    chatRetry: 'Nochmal', chatThinking: 'Denkprozess', chatFirst: 'erstes Token', chatRead: 'Lesen', chatCache: 'Cache', chatContext: 'Kontext',
+    chatStopped: 'abgebrochen', chatLength: 'Längengrenze erreicht', chatWriting: 'schreibt …', chatWaiting: 'wartet auf den Modellrechner …', chatCut: 'Die Verbindung wurde unterbrochen. Versuche es erneut.',
     sUnpaired: 'Nicht gekoppelt', sPairing: 'Koppeln…', sConnecting: 'Verbinde…', sConnected: 'Verbunden',
     sRecovering: 'Verbinde neu…', sProblem: 'Nicht verbunden', sOffline: 'Läuft nicht', sClosed: 'Beendet',
     waitPairTitle: 'Warte auf den Modellrechner…',
@@ -111,7 +135,19 @@ const serverDe = {
   'The encrypted tunnel is not connected yet. Check the remote host, pairing code and network permissions.': 'Die verschlüsselte Verbindung steht noch nicht.',
   'The backend did not respond before the test timeout.': 'Das Modell hat nicht rechtzeitig geantwortet.',
   'The tunnel is connected, but the backend rejected model discovery. Check its loaded model and required privacy profile.': 'Die Verbindung steht, aber der Modellrechner liefert keine Modellliste. Ist dort ein Modell geladen?',
-  'This is not a valid client.toml configuration.': 'Das ist keine gültige client.toml-Datei.'
+  'This is not a valid client.toml configuration.': 'Das ist keine gültige client.toml-Datei.',
+  'Start the connection first.': 'Stelle zuerst die Verbindung her.',
+  'This is not a valid chat request.': 'Diese Chat-Anfrage ist ungültig.',
+  'The connection did not answer. Try again.': 'Die Verbindung hat nicht geantwortet. Versuche es erneut.',
+  'Too many saved chats. Delete some first.': 'Zu viele gespeicherte Chats. Lösche zuerst einige.',
+  'The chat could not be saved.': 'Der Chat ließ sich nicht speichern.',
+  'The chat could not be deleted.': 'Der Chat ließ sich nicht löschen.',
+  'This chat does not exist.': 'Diesen Chat gibt es nicht.',
+  'request capacity exhausted': 'Der Modellrechner ist gerade ausgelastet. Versuche es gleich noch einmal.',
+  'home peer is not connected': 'Die Verbindung zum Modellrechner steht gerade nicht.',
+  'peer disconnected': 'Die Verbindung zum Modellrechner wurde unterbrochen.',
+  'upstream response timed out': 'Der Modellrechner hat nicht rechtzeitig geantwortet.',
+  'request body unavailable or too large': 'Dieser Chat ist zu lang. Starte einen neuen Chat.'
 };
 const language = (navigator.languages || [navigator.language || 'en']).some((tag) => /^de\b/i.test(tag)) ? 'de' : 'en';
 const t = (key) => texts[language][key] || texts.en[key] || key;
@@ -194,6 +230,7 @@ async function ready() {
   if (busy || checking) return;
   checking = true;
   try { await check(); } finally { checking = false; }
+  chatsReady();
 }
 async function check() {
   if (!apiKey) {
@@ -214,6 +251,7 @@ async function check() {
   select.replaceChildren(...list.map((id) => new Option(id, id)));
   select.hidden = list.length < 2; byId('model-one').hidden = list.length > 1;
   byId('model-one').value = list[0] || '';
+  chatModels();
 }
 async function refresh() {
   if (closed) return;

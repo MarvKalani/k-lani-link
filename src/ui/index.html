@@ -36,6 +36,16 @@
       <div class="row"><span data-t="model">Model</span><select id="model" hidden></select><input id="model-one" readonly><button class="secondary copy" data-copy="model" data-t="copy">Copy</button></div>
       <p id="model-problem" class="warn" hidden></p>
       <p id="ready-note" class="muted" data-t="readyNote">These values only work on this computer. You can close this page; the connection stays on.</p>
+      <div id="chat-start">
+        <h3 data-t="chatTitle">Chat with the model</h3>
+        <p class="muted" data-t="chatIntro">Try the model right here. Every window is its own conversation.</p>
+        <button id="chat-new" type="button" data-t="chatNew">New chat</button>
+        <div id="chat-saved" hidden>
+          <h3 data-t="chatSavedTitle">Saved chats</h3>
+          <ul id="chat-list" class="chat-list"></ul>
+          <p id="chat-where" class="muted"></p>
+        </div>
+      </div>
     </section>
 
     <section id="step-problem" hidden>
@@ -64,7 +74,7 @@
       <p class="muted" data-t="fileNote">Only if the operator gave you a file. Keep it out of Git, chats and screenshots.</p>
       <label class="file"><span data-t="fileChoose">Choose client.toml</span><input id="config" type="file" accept=".toml,text/plain"></label>
       <p class="muted"><span data-t="docker">Using OpenCode in Docker? It has its own launcher and does not use this page.</span> <a href="https://github.com/MarvKalani/k-lani-link/blob/main/deploy/desktop/README.md" target="_blank" rel="noreferrer" data-t="dockerLink">Docker setup</a></p>
-      <p class="muted"><span data-t="privacy">This page only controls the connection. It stores no conversations.</span> <span id="version"></span></p>
+      <p class="muted"><span data-t="privacy">This page controls the connection. A chat is kept only while its window is open, unless you save it.</span> <span id="version"></span></p>
     </details>
-  </main><script src="/app.js"></script>
+  </main><script src="/app.js"></script><script src="/chat.js"></script>
 </body></html>
