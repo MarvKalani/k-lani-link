@@ -7,6 +7,13 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- No changes since 1.2611.1-preview.1.
+
+## 1.2611.1-preview.1 — 1 November 2026 (taskbar icon and chat preview)
+
+- Build with Rust 1.99.1 (was 1.96.0), also in the Docker image and the minimum
+  supported version; small code cleanups follow its newer idioms (`let … else`,
+  lossless `From` conversions, no redundant clones).
 - The browser control panel is a short guided flow: type the relay address and pairing
   code, click **Connect**, and the panel waits, connects and then shows the base URL,
   local API key and model ID with **Copy** buttons. Only the current step is shown;
