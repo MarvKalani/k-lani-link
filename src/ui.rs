@@ -351,10 +351,16 @@ async fn local_health(panel: &Panel, config: &Config) -> Option<Value> {
 }
 
 async fn status(State(panel): State<Panel>) -> Json<Value> {
+    Json(snapshot(&panel).await)
+}
+
+/// The panel's state, for the page and the notification-area icon.
+async fn snapshot(panel: &Panel) -> Value {
     let control = panel.control.lock().await;
     let mut result = json!({"version": env!("CARGO_PKG_VERSION"), "configured": control.config.is_some(),
         "running": control.active.is_some(), "phase": "not_configured", "relay": "disabled",
-        "joining": control.joining, "default_relay": crate::mailbox::couple::DEFAULT_RELAY});
+        "joining": control.joining, "default_relay": crate::mailbox::couple::DEFAULT_RELAY,
+        "tray": cfg!(windows)});
     if let Some(config) = &control.config {
         result["api_base"] = json!(format!("http://{}/v1", config.listen));
         result["transport"] = json!(config.transport);
@@ -363,7 +369,7 @@ async fn status(State(panel): State<Panel>) -> Json<Value> {
             result["phase"] = json!("connecting");
             if active.task.is_finished() {
                 result["phase"] = json!("stopped");
-            } else if let Some(health) = local_health(&panel, config).await {
+            } else if let Some(health) = local_health(panel, config).await {
                 result["phase"] = json!(if health["connected"] == true {
                     "connected"
                 } else if health["recovering"] == true {
@@ -383,7 +389,7 @@ async fn status(State(panel): State<Panel>) -> Json<Value> {
     if control.joining {
         result["phase"] = json!("joining");
     }
-    Json(result)
+    result
 }
 
 async fn connect(State(panel): State<Panel>) -> Response {
@@ -694,13 +700,21 @@ pub async fn run(
             let _ = browser.wait();
         });
     }
+    #[cfg(windows)]
+    let tray = tray::start(panel.clone(), address.clone());
     let server = axum::serve(listener, router(panel.clone()))
         .with_graceful_shutdown(stop.clone().cancelled_owned());
     let _ = shutdown::with_grace(&stop, shutdown::GRACE, server.into_future()).await;
     stop.cancel();
     stop_client(&panel).await;
+    #[cfg(windows)]
+    if let Some(tray) = tray {
+        tray.close().await;
+    }
     Ok(())
 }
+
+mod tray;
 
 #[cfg(test)]
 mod tests {

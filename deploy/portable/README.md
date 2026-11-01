@@ -4,7 +4,7 @@ k-lani-link runs without an installer, administrator installation, bundled LLM o
 additional WASM runtime. Starting the executable without arguments opens a local
 browser control panel. On Windows, double-click the EXE. Explicit `client`, `host`,
 pairing and operator commands remain available in PowerShell or a terminal.
-A tray icon is not included yet.
+On Windows an icon in the notification area of the taskbar opens, pauses and quits it.
 
 Get versioned downloads from [GitHub Releases](https://github.com/MarvKalani/k-lani-link/releases).
 Use the processor architecture of your operating system:
@@ -81,11 +81,19 @@ operator instead of a code. An imported file is validated and saved privately un
 `%LOCALAPPDATA%\k-lani-link\control-panel`; container paths are normalized,
 consumed-code markers kept and operator keys never imported.
 
+On Windows, k-lani-link shows a square icon in the notification area of the taskbar
+(bottom right; Windows may first place it under the arrow). Its colour shows the
+state: cyan connected, yellow connecting, magenta a problem, grey paused or not
+paired. Click it to open the panel; right-click for **Pause connection** /
+**Resume connection** and **Quit k-lani-link**. Pause is offered for a pairing by
+code only, because an ended direct (WebRTC) connection needs a new code; a pause
+lasts until you resume or the application starts again. macOS and Linux have no
+icon yet; use the panel there.
+
 Closing the browser tab leaves the connection running, and the panel reconnects by
 itself when the application starts again. Double-clicking the EXE again reopens the
-same panel. **Quit** stops the transport and panel; **Disconnect** stops only the
-transport. No autostart or system service is installed, and no tray icon is
-claimed for this preview.
+same panel. **Quit** stops the transport, the panel and the icon; **Disconnect**
+stops only the transport. No autostart or system service is installed.
 
 The panel uses an unpredictable local access token, checks Host and Origin, has no
 external scripts, and stores no conversation history or connection logs. The

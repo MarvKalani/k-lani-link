@@ -14,6 +14,7 @@ const texts = {
     readyIntro: 'In your AI app, add an “OpenAI-compatible” provider and copy in these three values:',
     base: 'Base URL', key: 'API key', model: 'Model', copy: 'Copy', copied: 'Copied',
     readyNote: 'These values only work on this computer. You can close this page; the connection stays on.',
+    readyNoteTray: 'These values only work on this computer. You can close this page: k-lani-link stays in the notification area of the taskbar (bottom right), where you can also pause or quit it.',
     more: 'More options and help', repair: 'Pair again with a new code', disconnect: 'Disconnect', quit: 'Quit k-lani-link',
     helpTitle: 'If it does not connect',
     help1: 'Waiting a long time: k-lani-link must be running on the model computer (“host”).',
@@ -56,6 +57,7 @@ const texts = {
     readyIntro: 'Lege in deiner KI-App einen „OpenAI-kompatiblen“ Anbieter an und kopiere diese drei Werte hinein:',
     base: 'Basis-URL', key: 'API-Schlüssel', model: 'Modell', copy: 'Kopieren', copied: 'Kopiert',
     readyNote: 'Diese Werte funktionieren nur auf diesem Computer. Du kannst die Seite schließen, die Verbindung bleibt bestehen.',
+    readyNoteTray: 'Diese Werte funktionieren nur auf diesem Computer. Du kannst die Seite schließen: k-lani-link bleibt unten rechts im Infobereich der Taskleiste. Dort kannst du es auch pausieren oder beenden.',
     more: 'Weitere Optionen und Hilfe', repair: 'Mit neuem Code neu koppeln', disconnect: 'Trennen', quit: 'k-lani-link beenden',
     helpTitle: 'Wenn es nicht verbindet',
     help1: 'Es dauert lange: Auf dem Modellrechner muss k-lani-link laufen („host“).',
@@ -153,6 +155,7 @@ function render(state) {
     byId('relay-name').textContent = state.default_relay; byId('relay-preset').hidden = false; byId('relay-row').hidden = true;
   }
   if (state.api_base) byId('base').value = state.api_base;
+  byId('ready-note').textContent = t(state.tray ? 'readyNoteTray' : 'readyNote');
   byId('disconnect').hidden = !state.running;
   byId('repair').hidden = !state.configured || state.joining;
   byId('config').disabled = busy || state.running || state.joining;
