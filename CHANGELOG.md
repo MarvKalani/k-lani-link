@@ -11,7 +11,8 @@ tagged versions and downloads are listed on
   code, click **Connect**, and the panel waits, connects and then shows the base URL,
   local API key and model ID with **Copy** buttons. Only the current step is shown;
   disconnect, quit, troubleshooting and `client.toml` import sit under **More options
-  and help**. The panel follows the browser language (German or English).
+  and help**. The panel follows the browser language (German or English) and takes
+  the k-lani.com look: square edges, hard offset shadows, numbered steps.
 - `offer-https` prints the relay address next to the pairing code, so the operator can
   pass on both at once.
 - Pin Basalt to `9175e7a3`: the elastic KV arena hands a deep request's cells back,

@@ -5,6 +5,7 @@ if (bootstrap) { sessionStorage.setItem('link-control-token', bootstrap); histor
 const token = sessionStorage.getItem('link-control-token') || '';
 const texts = {
   en: {
+    step1: 'Step 1 of 3', step2: 'Step 2 of 3', step3: 'Step 3 of 3',
     pairTitle: 'Connect to the model computer',
     pairIntro: 'The model computer shows a relay address and a pairing code. Type both in here.',
     relay: 'Relay address', change: 'change', code: 'Pairing code', connect: 'Connect',
@@ -46,6 +47,7 @@ const texts = {
     unexpected: 'k-lani-link returned an unexpected answer.'
   },
   de: {
+    step1: 'Schritt 1 von 3', step2: 'Schritt 2 von 3', step3: 'Schritt 3 von 3',
     pairTitle: 'Mit dem Modellrechner verbinden',
     pairIntro: 'Der Modellrechner zeigt eine Relay-Adresse und einen Kopplungscode. Gib beides hier ein.',
     relay: 'Relay-Adresse', change: 'ändern', code: 'Kopplungscode', connect: 'Verbinden',

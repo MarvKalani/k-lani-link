@@ -9,6 +9,7 @@
     <header><h1>k-lani-link</h1><p class="state"><span id="light" class="light"></span><span id="status">…</span></p></header>
 
     <section id="step-pair" hidden>
+      <p class="step" data-t="step1">Step 1 of 3</p>
       <h2 data-t="pairTitle">Connect to the model computer</h2>
       <p data-t="pairIntro">The model computer shows a relay address and a pairing code. Type both in here.</p>
       <label id="relay-row"><span data-t="relay">Relay address</span><input id="relay" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="relay.example.com"></label>
@@ -19,6 +20,7 @@
     </section>
 
     <section id="step-wait" hidden>
+      <p class="step" data-t="step2">Step 2 of 3</p>
       <div class="spinner" aria-hidden="true"></div>
       <h2 id="wait-title"></h2>
       <p id="wait-detail"></p>
@@ -26,6 +28,7 @@
     </section>
 
     <section id="step-ready" hidden>
+      <p class="step" data-t="step3">Step 3 of 3</p>
       <h2 class="ok" data-t="readyTitle">Connected</h2>
       <p data-t="readyIntro">In your AI app, add an “OpenAI-compatible” provider and copy in these three values:</p>
       <div class="row"><span data-t="base">Base URL</span><input id="base" readonly value="http://127.0.0.1:8787/v1"><button class="secondary copy" data-copy="base" data-t="copy">Copy</button></div>
