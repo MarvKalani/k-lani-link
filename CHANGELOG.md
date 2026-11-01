@@ -13,9 +13,10 @@ tagged versions and downloads are listed on
   disconnect, quit, troubleshooting and `client.toml` import sit under **More options
   and help**. The panel follows the browser language (German or English) and takes
   the k-lani.com look: square edges, hard offset shadows, numbered steps.
-- Windows: a square icon in the notification area of the taskbar shows the
-  connection state by colour; a click opens the panel, its menu pauses or resumes a
+- A square icon in the Windows taskbar's notification area and in the macOS menu bar
+  shows the connection state by colour; its menu opens the panel, pauses or resumes a
   pairing by code and quits the application. Quitting from the panel removes it too.
+  The panel's browser tab shows the same icon in the same colour.
 - `offer-https` prints the relay address next to the pairing code, so the operator can
   pass on both at once.
 - Pin Basalt to `9175e7a3`: the elastic KV arena hands a deep request's cells back,

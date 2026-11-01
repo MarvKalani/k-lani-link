@@ -60,6 +60,12 @@ strip = true
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
+# The menu-bar icon; AppKit has no C-style API to call directly.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSDate", "NSGeometry", "NSLocale", "NSObject", "NSString", "NSTimer"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSButton", "NSControl", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView", "objc2-core-foundation"] }
+
 [dev-dependencies]
 rcgen = "0.14"
 tokio = { version = "1", features = ["test-util"] }

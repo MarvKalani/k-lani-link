@@ -139,7 +139,12 @@ async function api(path, data) {
 }
 function error(message) { byId('error').textContent = message; byId('error').hidden = !message; }
 function show(step) { for (const id of ['pair', 'wait', 'ready', 'problem']) byId('step-' + id).hidden = id !== step; }
-function light(phase, label) { byId('light').className = 'light ' + phase; byId('status').textContent = label; document.title = label + ' · k-lani-link'; }
+const icons = { connected: 'connected', joining: 'waiting', connecting: 'waiting', recovering: 'waiting', rejected: 'problem', offline: 'problem' };
+function light(phase, label) {
+  byId('light').className = 'light ' + phase; byId('status').textContent = label; document.title = label + ' · k-lani-link';
+  const icon = '/icon/' + (icons[phase] || 'idle') + '.png';
+  if (byId('favicon').getAttribute('href') !== icon) byId('favicon').setAttribute('href', icon);
+}
 function wait(title, detail, cancel) {
   byId('wait-title').textContent = t(title); byId('wait-detail').textContent = t(detail); byId('cancel').hidden = !cancel; show('wait');
 }

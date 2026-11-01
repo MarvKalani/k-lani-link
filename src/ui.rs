@@ -116,6 +116,7 @@ fn router(panel: Panel) -> Router {
             "/style.css",
             get(|| async { ([("content-type", "text/css; charset=utf-8")], CSS) }),
         )
+        .route("/icon/{light}", get(icon))
         .route("/api/status", get(status))
         .route("/api/config", post(save))
         .route("/api/join", post(join))
@@ -127,6 +128,17 @@ fn router(panel: Panel) -> Router {
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(middleware::from_fn_with_state(panel.clone(), protect))
         .with_state(panel)
+}
+
+/// The page's icon: the same square as the notification-area icon, in the state colour.
+async fn icon(axum::extract::Path(light): axum::extract::Path<String>) -> Response {
+    let light = match light.as_str() {
+        "connected.png" => tray::Light::Connected,
+        "waiting.png" => tray::Light::Waiting,
+        "problem.png" => tray::Light::Problem,
+        _ => tray::Light::Idle,
+    };
+    ([("content-type", "image/png")], tray::png(64, light)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -360,7 +372,7 @@ async fn snapshot(panel: &Panel) -> Value {
     let mut result = json!({"version": env!("CARGO_PKG_VERSION"), "configured": control.config.is_some(),
         "running": control.active.is_some(), "phase": "not_configured", "relay": "disabled",
         "joining": control.joining, "default_relay": crate::mailbox::couple::DEFAULT_RELAY,
-        "tray": cfg!(windows)});
+        "tray": cfg!(any(windows, target_os = "macos"))});
     if let Some(config) = &control.config {
         result["api_base"] = json!(format!("http://{}/v1", config.listen));
         result["transport"] = json!(config.transport);
@@ -700,14 +712,14 @@ pub async fn run(
             let _ = browser.wait();
         });
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     let tray = tray::start(panel.clone(), address.clone());
     let server = axum::serve(listener, router(panel.clone()))
         .with_graceful_shutdown(stop.clone().cancelled_owned());
     let _ = shutdown::with_grace(&stop, shutdown::GRACE, server.into_future()).await;
     stop.cancel();
     stop_client(&panel).await;
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     if let Some(tray) = tray {
         tray.close().await;
     }
@@ -715,6 +727,12 @@ pub async fn run(
 }
 
 mod tray;
+
+/// macOS: runs `work` (the panel) beside the menu-bar item; see `tray`.
+#[cfg(target_os = "macos")]
+pub fn with_menu_bar(work: impl FnOnce() -> bool + Send + 'static) -> bool {
+    tray::main_thread(work)
+}
 
 #[cfg(test)]
 mod tests {

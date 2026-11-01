@@ -285,19 +285,37 @@ fn main() -> std::process::ExitCode {
             };
         }
     };
-    let result = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(anyhow::Error::from)
-        .and_then(|runtime| runtime.block_on(run(cli)));
-    match result {
-        Ok(()) => std::process::ExitCode::SUCCESS,
-        Err(error) => {
-            if let Some(message) = diagnostic::printable(&error) {
-                let _ = writeln!(std::io::stderr(), "error: {message}");
+    // An interactive panel on macOS needs the main thread for its menu-bar item.
+    #[cfg(target_os = "macos")]
+    let menu_bar = matches!(cli.command, Command::Ui { no_open: false, .. });
+    let work = move || {
+        let result = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(anyhow::Error::from)
+            .and_then(|runtime| runtime.block_on(run(cli)));
+        match result {
+            Ok(()) => true,
+            Err(error) => {
+                if let Some(message) = diagnostic::printable(&error) {
+                    let _ = writeln!(std::io::stderr(), "error: {message}");
+                }
+                false
             }
-            std::process::ExitCode::FAILURE
         }
+    };
+    #[cfg(target_os = "macos")]
+    let ok = if menu_bar {
+        k_lani_link::ui::with_menu_bar(work)
+    } else {
+        work()
+    };
+    #[cfg(not(target_os = "macos"))]
+    let ok = work();
+    if ok {
+        std::process::ExitCode::SUCCESS
+    } else {
+        std::process::ExitCode::FAILURE
     }
 }
 

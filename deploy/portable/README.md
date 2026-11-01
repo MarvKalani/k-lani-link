@@ -4,7 +4,7 @@ k-lani-link runs without an installer, administrator installation, bundled LLM o
 additional WASM runtime. Starting the executable without arguments opens a local
 browser control panel. On Windows, double-click the EXE. Explicit `client`, `host`,
 pairing and operator commands remain available in PowerShell or a terminal.
-On Windows an icon in the notification area of the taskbar opens, pauses and quits it.
+An icon in the Windows taskbar or the macOS menu bar opens, pauses and quits it.
 
 Get versioned downloads from [GitHub Releases](https://github.com/MarvKalani/k-lani-link/releases).
 Use the processor architecture of your operating system:
@@ -82,13 +82,16 @@ operator instead of a code. An imported file is validated and saved privately un
 consumed-code markers kept and operator keys never imported.
 
 On Windows, k-lani-link shows a square icon in the notification area of the taskbar
-(bottom right; Windows may first place it under the arrow). Its colour shows the
-state: cyan connected, yellow connecting, magenta a problem, grey paused or not
-paired. Click it to open the panel; right-click for **Pause connection** /
-**Resume connection** and **Quit k-lani-link**. Pause is offered for a pairing by
-code only, because an ended direct (WebRTC) connection needs a new code; a pause
-lasts until you resume or the application starts again. macOS and Linux have no
-icon yet; use the panel there.
+(bottom right; Windows may first place it under the arrow); on macOS it sits in the
+menu bar (top right) without a Dock icon. Its colour shows the state: cyan
+connected, yellow connecting, magenta a problem, grey paused or not paired; the
+panel's browser tab uses the same icon. On Windows a click opens the panel and a
+right-click the menu; on macOS a click opens the menu. The menu has **Open control
+panel**, **Pause connection** / **Resume connection** and **Quit k-lani-link**.
+Pause is offered for a pairing by code only, because an ended direct (WebRTC)
+connection needs a new code; a pause lasts until you resume or the application
+starts again. Linux has no icon yet; use the panel there. On macOS the menu-bar item
+appears when the panel starts with its browser page, not with `ui --no-open`.
 
 Closing the browser tab leaves the connection running, and the panel reconnects by
 itself when the application starts again. Double-clicking the EXE again reopens the

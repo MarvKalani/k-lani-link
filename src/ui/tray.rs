@@ -1,8 +1,9 @@
-//! The notification-area icon (Windows): open the panel, pause or resume the connection,
-//! quit. Its colour shows the connection state. The menu logic is portable and tested;
-//! only the Win32 glue below is Windows-only.
+//! The notification-area icon (Windows) and menu-bar item (macOS): open the panel, pause or
+//! resume the connection, quit. Its colour shows the connection state; the page uses the
+//! same square as its icon. The menu logic is portable and tested; only the Win32 and
+//! AppKit glue below is platform-specific.
 // Elsewhere only the tests use the portable part.
-#![cfg_attr(not(windows), allow(dead_code))]
+#![cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 
 use super::{Panel, State, connect, open_browser, snapshot, stop_client};
 use serde_json::Value;
@@ -134,6 +135,99 @@ pub(super) async fn act(panel: &Panel, address: &str, action: Action) {
     }
 }
 
+/// Keeps `view` in step with the panel (calling `changed` after each change) and carries
+/// out the actions sent to the returned channel, until the panel stops.
+pub(super) fn follow(
+    panel: Panel,
+    address: String,
+    view: std::sync::Arc<std::sync::Mutex<View>>,
+    changed: impl Fn() + Send + 'static,
+) -> tokio::sync::mpsc::UnboundedSender<Action> {
+    let (actions, mut chosen) = tokio::sync::mpsc::unbounded_channel();
+    let worker = panel.clone();
+    tokio::spawn(async move {
+        while let Some(action) = chosen.recv().await {
+            act(&worker, &address, action).await;
+        }
+    });
+    tokio::spawn(async move {
+        loop {
+            let next = View::from_status(&snapshot(&panel).await);
+            let previous = {
+                let mut current = view.lock().unwrap_or_else(|e| e.into_inner());
+                std::mem::replace(&mut *current, next)
+            };
+            if previous != next {
+                changed();
+            }
+            tokio::select! {
+                _ = panel.stop.cancelled() => break,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(1500)) => {}
+            }
+        }
+    });
+    actions
+}
+
+/// A PNG of the square icon (stored, uncompressed), for the page and the macOS menu bar.
+pub(super) fn png(size: usize, light: Light) -> Vec<u8> {
+    fn crc(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    0xedb8_8320 ^ (crc >> 1)
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+    fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+        out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        let start = out.len();
+        out.extend_from_slice(kind);
+        out.extend_from_slice(data);
+        let sum = crc(&out[start..]);
+        out.extend_from_slice(&sum.to_be_bytes());
+    }
+    let mut raw = Vec::with_capacity(size * (size * 4 + 1));
+    for row in pixels(size, light).chunks(size) {
+        raw.push(0);
+        for pixel in row {
+            let [a, r, g, b] = pixel.to_be_bytes();
+            raw.extend_from_slice(&[r, g, b, a]);
+        }
+    }
+    // zlib with stored deflate blocks of at most 65535 bytes, then the Adler-32 sum.
+    let mut zlib = vec![0x78, 0x01];
+    let blocks = raw.chunks(65535).count();
+    for (index, block) in raw.chunks(65535).enumerate() {
+        zlib.push(u8::from(index + 1 == blocks));
+        let length = block.len() as u16;
+        zlib.extend_from_slice(&length.to_le_bytes());
+        zlib.extend_from_slice(&(!length).to_le_bytes());
+        zlib.extend_from_slice(block);
+    }
+    let (mut a, mut b) = (1u32, 0u32);
+    for byte in &raw {
+        a = (a + u32::from(*byte)) % 65521;
+        b = (b + a) % 65521;
+    }
+    zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+    let mut header = Vec::with_capacity(13);
+    header.extend_from_slice(&(size as u32).to_be_bytes());
+    header.extend_from_slice(&(size as u32).to_be_bytes());
+    header.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    chunk(&mut out, b"IHDR", &header);
+    chunk(&mut out, b"IDAT", &zlib);
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
 /// The square icon in the k-lani colours: a paper frame around night, with a centre
 /// square in the state colour. Pixels are BGRA, top row first.
 pub(super) fn pixels(size: usize, light: Light) -> Vec<u32> {
@@ -167,8 +261,8 @@ pub(super) use win::start;
 
 #[cfg(windows)]
 mod win {
-    use super::{Action, Light, View, act, pixels};
-    use crate::ui::{Panel, snapshot};
+    use super::{Action, Light, View, follow, pixels};
+    use crate::ui::Panel;
     use std::cell::RefCell;
     use std::sync::{
         Arc, Mutex,
@@ -240,37 +334,18 @@ mod win {
         let view = Arc::new(Mutex::new(View::default()));
         let window = Arc::new(AtomicUsize::new(0));
         let closing = Arc::new(AtomicBool::new(false));
-        let (actions, mut chosen) = tokio::sync::mpsc::unbounded_channel();
+        let refresh = window.clone();
+        let actions = follow(panel, address, view.clone(), move || {
+            post(&refresh, REFRESH)
+        });
         let thread = {
-            let (view, window, closing) = (view.clone(), window.clone(), closing.clone());
+            let window = window.clone();
+            let closing = closing.clone();
             std::thread::Builder::new()
                 .name("tray".into())
                 .spawn(move || run(view, window, closing, actions))
                 .ok()?
         };
-        let worker = panel.clone();
-        tokio::spawn(async move {
-            while let Some(action) = chosen.recv().await {
-                act(&worker, &address, action).await;
-            }
-        });
-        let (stop, shown, refresh) = (panel.stop.clone(), view, window.clone());
-        tokio::spawn(async move {
-            loop {
-                let next = View::from_status(&snapshot(&panel).await);
-                let changed = {
-                    let mut current = shown.lock().unwrap_or_else(|e| e.into_inner());
-                    std::mem::replace(&mut *current, next) != next
-                };
-                if changed {
-                    post(&refresh, REFRESH);
-                }
-                tokio::select! {
-                    _ = stop.cancelled() => break,
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(1500)) => {}
-                }
-            }
-        });
         Some(Tray {
             window,
             closing,
@@ -487,6 +562,194 @@ mod win {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub(super) use mac::{main_thread, start};
+
+/// macOS: AppKit runs on the main thread, so the panel's runtime moves to a thread of its
+/// own and the main thread runs the application loop with a menu-bar item.
+#[cfg(target_os = "macos")]
+mod mac {
+    use super::{Action, View, follow, png};
+    use crate::ui::Panel;
+    use objc2::{
+        AnyThread, MainThreadMarker, MainThreadOnly, define_class, msg_send, rc::Retained, sel,
+    };
+    use objc2_app_kit::{
+        NSApplication, NSApplicationActivationPolicy, NSImage, NSMenu, NSMenuItem, NSStatusBar,
+        NSStatusItem,
+    };
+    use objc2_foundation::{NSData, NSLocale, NSObject, NSSize, NSString, NSTimer};
+    use std::cell::RefCell;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    struct Bridge {
+        view: Arc<Mutex<View>>,
+        actions: tokio::sync::mpsc::UnboundedSender<Action>,
+    }
+
+    static BRIDGE: Mutex<Option<Bridge>> = Mutex::new(None);
+    static DONE: OnceLock<bool> = OnceLock::new();
+
+    struct Shown {
+        item: Retained<NSStatusItem>,
+        menu: Retained<NSMenu>,
+        view: Option<View>,
+    }
+
+    thread_local! {
+        static SHOWN: RefCell<Option<Shown>> = const { RefCell::new(None) };
+    }
+
+    define_class!(
+        #[unsafe(super(NSObject))]
+        #[thread_kind = MainThreadOnly]
+        #[name = "KLaniLinkMenuBar"]
+        struct Handler;
+
+        impl Handler {
+            #[unsafe(method(choose:))]
+            fn choose(&self, sender: &NSMenuItem) {
+                let action = match sender.tag() {
+                    0 => Action::Open,
+                    1 => Action::Pause,
+                    2 => Action::Resume,
+                    _ => Action::Quit,
+                };
+                if let Some(bridge) = BRIDGE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                    let _ = bridge.actions.send(action);
+                }
+            }
+
+            #[unsafe(method(tick:))]
+            fn tick(&self, _timer: &NSTimer) {
+                tick(self);
+            }
+        }
+    );
+
+    impl Handler {
+        fn new(mtm: MainThreadMarker) -> Retained<Self> {
+            let this = Self::alloc(mtm).set_ivars(());
+            unsafe { msg_send![super(this), init] }
+        }
+    }
+
+    /// Ties the menu-bar item to the panel until `close`.
+    pub struct Tray;
+
+    impl Tray {
+        pub async fn close(self) {
+            *BRIDGE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+    }
+
+    pub fn start(panel: Panel, address: String) -> Option<Tray> {
+        let view = Arc::new(Mutex::new(View::default()));
+        let actions = follow(panel, address, view.clone(), || {});
+        *BRIDGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(Bridge { view, actions });
+        Some(Tray)
+    }
+
+    /// Runs `work` on another thread while the main thread shows the menu-bar item; exits
+    /// the process with `work`'s outcome once it returns.
+    pub fn main_thread(work: impl FnOnce() -> bool + Send + 'static) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return work();
+        };
+        let started = std::thread::Builder::new()
+            .name("panel".into())
+            .spawn(move || {
+                let _ = DONE.set(work());
+            });
+        if started.is_err() {
+            return false;
+        }
+        let app = NSApplication::sharedApplication(mtm);
+        // A menu-bar item only: no Dock icon and no menu bar of its own.
+        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+        let handler = Handler::new(mtm);
+        unsafe {
+            NSTimer::scheduledTimerWithTimeInterval_target_selector_userInfo_repeats(
+                0.3,
+                &handler,
+                sel!(tick:),
+                None,
+                true,
+            );
+        }
+        app.run();
+        DONE.get().copied().unwrap_or(false)
+    }
+
+    fn german() -> bool {
+        NSLocale::preferredLanguages()
+            .firstObject()
+            .is_some_and(|language| language.to_string().starts_with("de"))
+    }
+
+    fn tick(handler: &Handler) {
+        if let Some(ok) = DONE.get() {
+            std::process::exit(if *ok { 0 } else { 1 });
+        }
+        let view = BRIDGE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|bridge| *bridge.view.lock().unwrap_or_else(|e| e.into_inner()));
+        let mtm = handler.mtm();
+        SHOWN.with(|shown| {
+            let mut shown = shown.borrow_mut();
+            let Some(view) = view else {
+                if let Some(old) = shown.take() {
+                    NSStatusBar::systemStatusBar().removeStatusItem(&old.item);
+                }
+                return;
+            };
+            let current = shown.get_or_insert_with(|| {
+                // -2 is NSSquareStatusItemLength: as wide as the menu bar is high.
+                let item = NSStatusBar::systemStatusBar().statusItemWithLength(-2.0);
+                let menu = NSMenu::new(mtm);
+                item.setMenu(Some(&menu));
+                Shown {
+                    item,
+                    menu,
+                    view: None,
+                }
+            });
+            if current.view == Some(view) {
+                return;
+            }
+            current.view = Some(view);
+            let german = german();
+            if let Some(button) = current.item.button(mtm) {
+                let data = NSData::with_bytes(&png(36, view.light));
+                if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+                    image.setSize(NSSize::new(18.0, 18.0));
+                    button.setImage(Some(&image));
+                }
+                button.setToolTip(Some(&NSString::from_str(&view.tooltip(german))));
+            }
+            current.menu.removeAllItems();
+            for (action, text) in view.menu(german) {
+                if action == Action::Quit {
+                    current.menu.addItem(&NSMenuItem::separatorItem(mtm));
+                }
+                let item = unsafe {
+                    NSMenuItem::initWithTitle_action_keyEquivalent(
+                        NSMenuItem::alloc(mtm),
+                        &NSString::from_str(text),
+                        Some(sel!(choose:)),
+                        &NSString::from_str(""),
+                    )
+                };
+                unsafe { item.setTarget(Some(handler)) };
+                item.setTag(action as isize);
+                current.menu.addItem(&item);
+            }
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -519,6 +782,15 @@ mod tests {
             "configured": false, "joining": false}));
         assert_eq!(unpaired.menu(false).len(), 2);
         assert_eq!(unpaired.tooltip(false), "k-lani-link: not paired");
+    }
+
+    #[test]
+    fn the_icon_png_is_well_formed() {
+        let image = png(36, Light::Connected);
+        assert_eq!(&image[..8], b"\x89PNG\r\n\x1a\n");
+        // Signature, IHDR, the IDAT header and the end chunk around 36 rows of 1 + 144 bytes.
+        assert_eq!(image.len(), 8 + 25 + 12 + 2 + 5 + 36 * 145 + 4 + 12);
+        assert_eq!(&image[image.len() - 8..], b"IEND\xae\x42\x60\x82");
     }
 
     #[test]
