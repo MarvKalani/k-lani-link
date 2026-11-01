@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: deploy/basalt.Dockerfile
       additional_contexts:
-        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#5d28effbc0dfe9f8a554cc895e6de8858cbc4bb0}
+        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#9175e7a3211bda355c02e804c7c107b15b8ea89f}
       args:
         BUILD_JOBS: ${BASALT_BUILD_JOBS:-2}
     network_mode: none

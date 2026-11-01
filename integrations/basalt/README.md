@@ -83,4 +83,5 @@ The health response now includes the actual `parallel` value for this check.
 The patch also keeps the answer-room calculation silent in privacy mode, and since
 `5d28effb` it refuses Basalt's disk tier for conversations (`--conversation-cache-dir`,
 `--conversation-cache-disk-mib`), which would write conversation state to disk.
-No CUDA kernels or model weights are changed by these integration patches.
+No CUDA kernels or model weights are changed by these integration patches. With both
+patches applied, Basalt's own serve tests pass (657 at `9175e7a3`).

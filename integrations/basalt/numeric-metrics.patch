@@ -137,7 +137,7 @@ index 0000000..3714e56
 +        self.service.performance_last = None
 +        self.path.unlink(missing_ok=True)
 diff --git a/serve/server.py b/serve/server.py
-index 9ec0511..48660de 100644
+index 9ec0511..9d2c35c 100644
 --- a/serve/server.py
 +++ b/serve/server.py
 @@ -241,6 +241,11 @@ def main() -> int:
@@ -152,13 +152,12 @@ index 9ec0511..48660de 100644
      httpd = serve(svc, host=a.host, port=a.port, unix_socket=a.unix_socket)
      svc.start_idle_unload()
      svc.start_idle_sleep()
-@@ -297,7 +302,8 @@ def main() -> int:
-     except KeyboardInterrupt:
+@@ -298,6 +303,8 @@ def main() -> int:
          if not rc:
              print("[server] stopping (Ctrl+C again to force)", flush=True)
--        closers = [svc.stop, httpd.shutdown, httpd.server_close, getattr(engine, "close", None), vision.close if vision else None]
-+        closers = [metrics.stop if metrics else None, svc.stop, httpd.shutdown, httpd.server_close,
-+                   getattr(engine, "close", None), vision.close if vision else None]
+         closers = [svc.stop, httpd.shutdown, httpd.server_close, getattr(engine, "close", None), vision.close if vision else None]
++        if metrics:
++            closers.insert(0, metrics.stop)                # the metrics file is closed first
          for close in filter(None, closers):
              try:
                  close()
@@ -203,6 +202,22 @@ index 96b6df1..47df0ca 100644
                              if not self.privacy:
                                  now = time.time()
                                  rate = n / max(1e-6, now - ft) if ft else 0.0
+diff --git a/serve/tests/test_config.py b/serve/tests/test_config.py
+index b123c30..01ba259 100644
+--- a/serve/tests/test_config.py
++++ b/serve/tests/test_config.py
+@@ -362,8 +362,9 @@ class EveryOption(unittest.TestCase):
+     def test_every_server_option_by_both_paths(self):
+         ap = build_parser()
+         for name, act in server_options(ap).items():
+-            # grammar and answer-room are on by default: their no- forms differ (test_grammar, test_answer_room_switch)
+-            if name in ("api-key", "engine-bin", "grammar", "answer-room"):
++            # grammar and answer-room are on by default: their no- forms differ (test_grammar, test_answer_room_switch);
++            # privacy-metrics-file needs --privacy and an absolute path (test_numeric_metrics)
++            if name in ("api-key", "engine-bin", "grammar", "answer-room", "privacy-metrics-file"):
+                 continue
+             v = "localhost" if name == "host" else self.sample(act)
+             if isinstance(act, argparse._AppendAction):
 diff --git a/serve/tests/test_numeric_metrics.py b/serve/tests/test_numeric_metrics.py
 new file mode 100644
 index 0000000..83614f5

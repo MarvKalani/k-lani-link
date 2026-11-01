@@ -98,8 +98,8 @@ the total `--max-context` is shared across slots: 262,144 / 4 gives 65,536 token
 per slot. `--slot-full-context` gives every slot the full capacity, at greater
 memory cost. Its normal server has load/unload and status routes, but our privacy
 patch disables them. k-lani-link's route allowlist also rejects management calls.
-Sources: [pinned serving code](https://github.com/jesdga95/basalt/tree/5d28effbc0dfe9f8a554cc895e6de8858cbc4bb0/serve)
-and [configuration](https://github.com/jesdga95/basalt/blob/5d28effbc0dfe9f8a554cc895e6de8858cbc4bb0/docs/configuration/index.md).
+Sources: [pinned serving code](https://github.com/jesdga95/basalt/tree/9175e7a3211bda355c02e804c7c107b15b8ea89f/serve)
+and [configuration](https://github.com/jesdga95/basalt/blob/9175e7a3211bda355c02e804c7c107b15b8ea89f/docs/configuration/index.md).
 
 [Maya v1.1.34](https://github.com/mw00/project-maya/releases/tag/v1.1.34) adds
 the CYBER-FROST Qwen3.8 path. Its `--parallel` support applies to GLM, DeepSeek

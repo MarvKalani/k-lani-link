@@ -7,7 +7,14 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
-- No changes since 1.2610.31-preview.1.
+- Pin Basalt to `9175e7a3`: the elastic KV arena hands a deep request's cells back,
+  parallel tool results are ordered by call id before the template renders, a
+  one-token prompt no longer ends empty, and DirectFile reads files mapped elsewhere
+  on Windows. The privacy patch is unchanged; the numeric-metrics patch now keeps
+  Basalt's own option and shutdown-order tests green, so all 657 serve tests pass.
+  Measured on an RTX 5070 Ti with warm file cache, two cold starts each: decode
+  speed is unchanged (82–88 tok/s short requests, 52–57 tok/s at 64k prompt tokens),
+  also for a short request right after a 64k one.
 
 ## 1.2610.31-preview.1 — 31 October 2026 (pairing by code preview)
 
