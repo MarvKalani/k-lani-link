@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - run: rustup show active-toolchain
       # Match rust-toolchain.toml explicitly; avoid cargo-install's implicit override warning.
-      - run: cargo +1.96.0 install cargo-audit --version 0.22.2 --locked
+      - run: cargo +1.99.1 install cargo-audit --version 0.22.2 --locked
       - run: cargo audit
   desktop-launcher:
     runs-on: windows-2022

@@ -57,7 +57,7 @@ async fn chat(State(state): State<Backend>, Json(body): Json<serde_json::Value>)
     let hold = body["hold"] == true;
     let burst = body["burst"] == true;
     let gated = body["gated"] == true;
-    let finish = state.finish.clone();
+    let finish = state.finish;
     let stream = async_stream::stream! {
         let _hold = guard;
         yield Ok::<_,Infallible>(Bytes::from(format!("data: {{\"reasoning\":\"{label}\"}}\n\n")));

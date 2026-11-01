@@ -212,14 +212,11 @@ async fn save(
             "Disconnect before replacing the configuration. A new tunnel needs a fresh pairing code.",
         );
     }
-    let config = match imported(&input.toml, &panel.directory) {
-        Ok(config) => config,
-        Err(_) => {
-            return failure(
-                StatusCode::BAD_REQUEST,
-                "Configuration rejected. Import a fresh client.toml with a valid pairing/API key, loopback API address, HTTPS signaling and TURN disabled.",
-            );
-        }
+    let Ok(config) = imported(&input.toml, &panel.directory) else {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "Configuration rejected. Import a fresh client.toml with a valid pairing/API key, loopback API address, HTTPS signaling and TURN disabled.",
+        );
     };
     let destination = panel.directory.join("client.toml");
     let Ok(nonce) = random_secret() else {
@@ -276,14 +273,11 @@ async fn join(
     let Ok(Json(input)) = input else {
         return failure(StatusCode::BAD_REQUEST, "Enter the pairing code.");
     };
-    let code = match crate::mailbox::couple::Code::parse(&input.code) {
-        Ok(code) => code,
-        Err(_) => {
-            return failure(
-                StatusCode::BAD_REQUEST,
-                "A pairing code has eleven digits, e.g. 472-1234-5678.",
-            );
-        }
+    let Ok(code) = crate::mailbox::couple::Code::parse(&input.code) else {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "A pairing code has eleven digits, e.g. 472-1234-5678.",
+        );
     };
     let relay = match input.relay.trim() {
         "" => match crate::mailbox::couple::DEFAULT_RELAY {
@@ -432,24 +426,18 @@ async fn connect(State(panel): State<Panel>) -> Response {
             "Import your private client.toml first.",
         );
     };
-    let listener = match TcpListener::bind(config.listen).await {
-        Ok(listener) => listener,
-        Err(_) => {
-            return failure(
-                StatusCode::CONFLICT,
-                "The local API port is occupied. Stop the other client or import a configuration with another loopback port.",
-            );
-        }
+    let Ok(listener) = TcpListener::bind(config.listen).await else {
+        return failure(
+            StatusCode::CONFLICT,
+            "The local API port is occupied. Stop the other client or import a configuration with another loopback port.",
+        );
     };
     let state_dir = panel.directory.join("pairing-state");
-    let gateway = match Gateway::new(config) {
-        Ok(gateway) => gateway,
-        Err(_) => {
-            return failure(
-                StatusCode::BAD_REQUEST,
-                "The client configuration cannot be started.",
-            );
-        }
+    let Ok(gateway) = Gateway::new(config) else {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "The client configuration cannot be started.",
+        );
     };
     let stop = panel.stop.child_token();
     let shutdown = stop.clone();

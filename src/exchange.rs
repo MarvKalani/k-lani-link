@@ -199,7 +199,7 @@ mod tests {
                 .unwrap(),
             sdp
         );
-        let mut altered = restored.clone();
+        let mut altered = restored;
         let first = if altered.ciphertext.starts_with('A') {
             "B"
         } else {

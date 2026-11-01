@@ -150,14 +150,12 @@ impl Gateway {
             self.maintain_https(stop).await;
             return;
         }
-        let mut lease =
-            match crate::pairing::PairingLease::reserve(&state_dir, &self.config.pair_key) {
-                Ok(lease) => lease,
-                Err(_) => {
-                    self.code_used.store(true, Ordering::SeqCst);
-                    return;
-                }
-            };
+        let Ok(mut lease) =
+            crate::pairing::PairingLease::reserve(&state_dir, &self.config.pair_key)
+        else {
+            self.code_used.store(true, Ordering::SeqCst);
+            return;
+        };
         loop {
             let result = tokio::select! { _ = stop.cancelled() => return, result = peer::connect(&self.config) => result };
             match result {

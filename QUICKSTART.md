@@ -29,7 +29,7 @@ k-lani-link client ═══ encrypted P2P ═══ k-lani-link host
 On both computers: Linux x86_64, Docker Engine, Docker Compose v2+ with BuildKit,
 Git and Python 3.11+. The reference containers use UID/GID **1000**; adapt users
 and volume ownership together if your account differs. Native builds need
-Rust 1.96.0; building the supplied container does not need host Rust.
+Rust 1.99.1; building the supplied container does not need host Rust.
 
 On the model computer: an NVIDIA GPU supported by the pinned Basalt release,
 a driver compatible with CUDA 13.2, NVIDIA Container Toolkit, and your own

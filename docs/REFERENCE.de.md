@@ -60,7 +60,7 @@ bleibt standardmäßig bei aktivierter Datenschutzprüfung.
 
 ## Bauen
 
-Rust 1.96.0. Das Repository lässt sich ohne private Nachbarprojekte bauen.
+Rust 1.99.1. Das Repository lässt sich ohne private Nachbarprojekte bauen.
 
 Der native WebRTC-Adapter liegt im aktuellen MVP in `src/peer.rs` von k-lani-link;
 das HTTP-/Streaming-Protokoll liegt in `k-lani-link-protocol`. Der native MVP ist

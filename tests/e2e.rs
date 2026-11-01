@@ -53,7 +53,7 @@ async fn mock_chat(State(state): State<Mock>, Json(body): Json<serde_json::Value
         return Json(serde_json::json!({"choices":[{"message":{"content":"complete"}}]}))
             .into_response();
     }
-    let guard = ObserveDrop(state.stopped.clone());
+    let guard = ObserveDrop(state.stopped);
     let infinite = body["model"] == "cancel";
     let stream = async_stream::stream! {
         let _guard = guard;

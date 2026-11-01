@@ -154,7 +154,9 @@ pub(super) fn follow(
         loop {
             let next = View::from_status(&snapshot(&panel).await);
             let previous = {
-                let mut current = view.lock().unwrap_or_else(|e| e.into_inner());
+                let mut current = view
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 std::mem::replace(&mut *current, next)
             };
             if previous != next {

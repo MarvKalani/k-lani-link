@@ -277,14 +277,14 @@ struct Bucket {
 impl Bucket {
     fn new(limits: &Limits) -> Self {
         Self {
-            tokens: limits.request_burst as f64,
+            tokens: f64::from(limits.request_burst),
             updated: Instant::now(),
         }
     }
     fn refill(&mut self, limits: &Limits) {
         self.tokens = (self.tokens
-            + self.updated.elapsed().as_secs_f64() * limits.requests_per_second as f64)
-            .min(limits.request_burst as f64);
+            + self.updated.elapsed().as_secs_f64() * f64::from(limits.requests_per_second))
+        .min(f64::from(limits.request_burst));
         self.updated = Instant::now();
     }
 }

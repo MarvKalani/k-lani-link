@@ -241,10 +241,10 @@ thread_local! {
 }
 #[cfg(test)]
 fn step(at: Step) -> std::io::Result<()> {
-    if EXIT_AT.with(|selected| selected.get()) == Some(at) {
+    if EXIT_AT.with(std::cell::Cell::get) == Some(at) {
         std::process::exit(91);
     }
-    if CRASH.with(|selected| selected.get()) == Some(at) {
+    if CRASH.with(std::cell::Cell::get) == Some(at) {
         return Err(std::io::Error::other("injected persistence failure"));
     }
     Ok(())
