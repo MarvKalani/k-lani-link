@@ -7,6 +7,8 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.2-preview.1 — 2 November 2026 (models on demand, DE/EN switch, chat titles)
+
 - Models on demand: with `load_on_demand = true` next to `model_control_socket`, a host
   lists every model its operator allowlisted, loaded or not, and loads the one a request
   names. The swap waits for running requests; requests for the loaded model may still go

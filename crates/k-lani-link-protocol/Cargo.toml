@@ -1,6 +1,6 @@
 [package]
 name = "k-lani-link-protocol"
-version = "1.2611.1-preview.2"
+version = "1.2611.2-preview.1"
 edition = "2024"
 rust-version = "1.99"
 publish = false
