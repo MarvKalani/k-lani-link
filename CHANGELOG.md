@@ -7,6 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Relay on Cloudflare Workers: `deploy/cloudflare-relay` runs the HTTPS mailbox relay in
+  a free Cloudflare account, without a server. It keeps only sealed ciphertext, in memory
+  only, with the same token rules, limits, pairing by code and failure brake as the PHP
+  relay (address rules excepted). `tokens.js` creates the host and client tokens and
+  the `TOKENS` secret, which holds only their hashes.
+
 ## 1.2611.2-preview.1 — 2 November 2026 (models on demand, DE/EN switch, chat titles)
 
 - Models on demand: with `load_on_demand = true` next to `model_control_socket`, a host

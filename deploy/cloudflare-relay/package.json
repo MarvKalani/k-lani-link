@@ -1,0 +1,13 @@
+{
+  "name": "k-lani-relay",
+  "private": true,
+  "description": "k-lani-link HTTPS mailbox relay for Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.1"
+  }
+}

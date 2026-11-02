@@ -172,7 +172,9 @@ bestätigten Mehrfachabrufen ist jetzt als **ausdrückliche Quellcode-Vorschau**
 mit TLS-Prüfung, dauerhaftem Kopplungszustand und SSE-Weiterleitung durch Host/Gateway.
 [Privates HTTPS-Setup, Tests und Grenzen](deploy/https/README.md). Das Verbindungspanel
 koppelt per Code über HTTPS; eine WebRTC-Kopplung wechselt nie von selbst zu
-HTTPS. Die Vorschau ist weder ein öffentlicher Relay-Dienst
+HTTPS. Den Relay bringst du selbst mit: als [kostenlosen Cloudflare Worker](deploy/cloudflare-relay/ANLEITUNG.de.md),
+auf [PHP-Webspace oder WordPress](deploy/php-relay/ANLEITUNG.de.md) oder als Rust-Relay auf einem Server.
+Die Vorschau ist weder ein öffentlicher Relay-Dienst
 noch eine Durchsatzzusage. [Umsetzungscheckliste](docs/HTTPS-IMPLEMENTATION.md)
 · [Unveränderter Übertragungsvertrag](docs/DESIGN-MAILBOX.md) · [Changelog](CHANGELOG.md).
 Die [Lasttests des tatsächlichen Anwendungspfads](deploy/https/RESULTS.md) zeigten zunächst

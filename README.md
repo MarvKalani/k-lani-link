@@ -162,8 +162,9 @@ now includes 63 controlled cases: 50/100 tokens per second, 1/10 tunnels,
 multi-record mailbox is now wired as an **explicit source preview** with verified TLS,
 durable paired-state folders and host/gateway SSE forwarding. [Private HTTPS setup,
 tests and limits](deploy/https/README.md). The browser connection panel pairs over HTTPS
-by code; a WebRTC pairing never falls back to HTTPS by itself. This preview
-is not a public relay or a throughput guarantee. [Implementation checklist](docs/HTTPS-IMPLEMENTATION.md)
+by code; a WebRTC pairing never falls back to HTTPS by itself. Bring your own relay: a
+[free Cloudflare Worker](deploy/cloudflare-relay/README.md), [PHP web space or WordPress](deploy/php-relay/README.md)
+or the Rust relay on a server. This preview is not a public relay or a throughput guarantee. [Implementation checklist](docs/HTTPS-IMPLEMENTATION.md)
 · [Original delivery contract](docs/DESIGN-MAILBOX.md) · [Changelog](CHANGELOG.md).
 The [actual application-path load tests](deploy/https/RESULTS.md) first exposed a
 response flow-control bottleneck; after the documented correction all four synthetic

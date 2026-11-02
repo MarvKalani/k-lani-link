@@ -1,0 +1,31 @@
+# k-lani-link HTTPS mailbox relay on Cloudflare Workers (free plan is enough for a few
+# people). Set the admission tokens as a secret before the first use:
+#   npx wrangler secret put TOKENS
+name = "k-lani-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+# Requests carry only ciphertext; observability would still record URLs and timings.
+[observability]
+enabled = false
+
+[vars]
+# Refused requests per address and minute before it is held back; 0 turns the brake off.
+FAILED_AUTH_PER_MINUTE = "20"
+FAILED_AUTH_BAN_MINUTES = "10"
+# Open pairing-by-code slots for the whole relay; 0 turns pairing by code off.
+PAIR_SLOTS = "64"
+
+[[durable_objects.bindings]]
+name = "SPACES"
+class_name = "Space"
+
+[[durable_objects.bindings]]
+name = "PAIRS"
+class_name = "Pairs"
+
+# The free plan offers only SQLite-backed Durable Objects; this relay keeps everything in
+# memory and writes nothing to that storage.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Space", "Pairs"]
