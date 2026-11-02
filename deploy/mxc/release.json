@@ -1,0 +1,28 @@
+{
+  "mxc": {
+    "version": "1.0.1",
+    "url": "https://github.com/microsoft/mxc/releases/download/v1.0.1/mxc-release-binaries.zip",
+    "sha256": "0e832239454ba7fcd338ff56218a287eef4c0a01c1484084b869f55feff8abe9",
+    "size_bytes": 542051775,
+    "files": [
+      "x64/wxc-exec.exe",
+      "x64/mxc_ffi.dll"
+    ],
+    "file_sha256": {
+      "wxc-exec.exe": "090f5d1f7bb93104ab08dcd4e8034ef954aeefcdaf6658dde5f7dff4cfc12f3a",
+      "mxc_ffi.dll": "bd45522f06dc9cc8001dcd5d7320bc2bf303fb08a39bf10f3404bd9a8001812c"
+    }
+  },
+  "opencode": {
+    "version": "1.19.5",
+    "url": "https://github.com/anomalyco/opencode/releases/download/v1.19.5/opencode-windows-x64.zip",
+    "sha256": "09a6e693157f0887e504f2cf4357a8cbddc5ead5d0dffb9a269dcc47c48640f5",
+    "size_bytes": 81738227,
+    "files": [
+      "opencode.exe"
+    ],
+    "file_sha256": {
+      "opencode.exe": "d7b473388cb62555970e400ce54cdfb6d6573608beea6f8fdf382cd1a698a3fa"
+    }
+  }
+}

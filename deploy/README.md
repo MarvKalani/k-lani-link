@@ -86,6 +86,8 @@ Docker Desktop benötigt die passende Host-Networking-Unterstützung. Basalt tei
 dieses Netzwerk ausdrücklich nicht.
 
 Für den Firmenrechner gibt es einen [eigenständigen Docker-Client und OpenCode-Aufbau](../QUICKSTART.md).
+Unter Windows gibt es außerdem ein [MXC-Terminalprofil ohne Docker](mxc/README.md),
+mit einem Projektordner und genau einem freigegebenen lokalen API-Port.
 Alternativ wird der API-Client nativ gestartet:
 
 ```sh
