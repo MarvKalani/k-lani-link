@@ -7,6 +7,8 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.2-preview.2 — 2 November 2026 (free trial relay, own relay on Cloudflare, status page)
+
 - A relay that refuses every handshake of an access (429 or 503, usually because all the
   connections it allows that access are in use) is no longer an endless "Connecting…":
   after 15 seconds the client reports `relay_busy`, and the control panel shows **Relay
