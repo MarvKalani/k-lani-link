@@ -12,7 +12,7 @@ Build the current images with the production Compose file. Copy
 Its IDs (`coder`, `nvfp4`) are the model aliases advertised by Basalt; the files
 must already exist. Each profile fixes its context, parallel slots, prefill size
 and thinking budget. INT8 KV, mmap experts, privacy mode and vision off are enforced.
-Only one model is loaded at a time.
+Only one model is loaded at a time; see below for GGUF models and loading on demand.
 
 Set `LINK_MODEL_CATALOG`, `LINK_CODER_MODEL` and `LINK_NVFP4_MODEL` to absolute local
 paths. Keep the ordinary `BASALT_MODEL_PATH` and `LINK_HOST_CONFIG` variables
@@ -76,6 +76,45 @@ the loaded alias in the AI application. `/v1/models` lists the currently loaded
 model; the administrative catalog includes all operator-approved profiles.
 Conversation text remains the client's responsibility. A different model must
 process the resent conversation; its KV cache is not transferred or saved.
+
+## Models on demand, including GGUF via llama.cpp
+
+To offer several models on one GPU without anyone switching by hand, add to the host TOML:
+
+```toml
+model_control_socket = "/run/link/control.sock"
+load_on_demand = true
+max_concurrent_requests = 2
+max_queued_requests = 8
+```
+
+`GET /v1/models` then lists every catalog model with `"loaded": true` or `false`, and a
+request naming an unloaded one waits in the queue: the host lets running requests finish,
+asks the supervisor to load that model and then sends it and every other waiting request
+for it. Requests for the loaded model may still overtake a waiting swap, at most eight or
+for 30 seconds, so each model's requests run together instead of one swap per request.
+A swap takes as long as the engine needs to load (Basalt packs from fast storage tens of
+seconds, a 13 GB GGUF about ten); `request_timeout_seconds` includes that wait. A model
+nobody offers gets 404; if a load fails, the requests waiting for that model fail with 503
+and nothing is loaded until the next request names a model. Nothing ever falls back to
+another model. No operator key is needed for this; explicit `model --load` still works.
+
+The image also contains llama.cpp (pinned by digest in `deploy/basalt.Dockerfile`). A
+catalog entry with `"engine": "llama"` names a `.gguf` file, its context, parallel slots
+and KV type (`q8_0`, `q4_0` or `f16`; all slots share one KV pool). Mount the folder with
+`deploy/managed/gguf.compose.yaml` and `LINK_GGUF_DIR`:
+
+```json
+{"id": "Mellum2.1-12B-A2.5B-Thinking-Q8_0", "engine": "llama",
+ "path": "/models/gguf/Mellum2.1-12B-A2.5B-Thinking-Q8_0.gguf",
+ "context_tokens": 131072, "parallel": 2, "kv": "q4_0", "reasoning_budget_tokens": 8192}
+```
+
+llama.cpp has no k-lani-link privacy profile. The supervisor starts it inside the same
+network-less container with `--no-webui --no-slots --log-disable --offline`, output
+discarded, on the Unix socket only, and reports it as `"privacy": "supervised"`; the
+host accepts that report from its own supervisor before every request, and still checks
+Basalt's own profile for Basalt models. `allow_unverified_backend` stays off.
 
 ## API and scheduling
 

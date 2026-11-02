@@ -1,9 +1,12 @@
 # JetBrains Mellum 2.1 (12B-A2.5B, Thinking, Q8_0 GGUF) as a local OpenAI- and
 # Anthropic-compatible backend for k-lani-link, via the official llama.cpp CUDA server.
 # Stop Basalt (or any other GPU model) first: on a 16 GB card only one fits.
-#   LINK_MELLUM_DIR=/path/to/Mellum2.1-12B-A2.5B-Thinking-GGUF \
+#   mkdir -m 700 /private/mellum-run
+#   LINK_MELLUM_DIR=/path/to/Mellum2.1-12B-A2.5B-Thinking-GGUF LINK_MELLUM_RUN=/private/mellum-run \
 #     docker compose -f deploy/mellum.compose.yaml up -d
-# Host config: upstream = "http://127.0.0.1:18091" and allow_unverified_backend = true
+# Host config: upstream_socket = "/private/mellum-run/mellum.sock" and
+# allow_unverified_backend = true. The server has no network and no TCP port: only the
+# user owning that folder (uid 1000 here) reaches it, so no web page in a browser can.
 # (llama.cpp has no k-lani-link privacy profile). llama.cpp logs no prompts or answers, but
 # it does log when each request ran and how many tokens it used; Docker logging is off
 # below so that this record is never kept either.
@@ -17,14 +20,17 @@ services:
     security_opt: [no-new-privileges:true]
     restart: 'no'
     logging: {driver: none}
-    # Loopback only: the k-lani-link host is the only intended client.
-    ports: ['127.0.0.1:18091:8080']
+    network_mode: none
+    user: '1000:1000'
     volumes:
       - '${LINK_MELLUM_DIR:?Set the folder holding the Mellum GGUF}:/models:ro'
+      - '${LINK_MELLUM_RUN:?Set a private folder for the Unix socket}:/run/link'
     deploy:
       resources:
         reservations:
           devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
     # Full 131,072-token context fits 16 GB with flash attention and a 4-bit KV cache.
+    # No web UI, no slot monitor (it shows what runs), no log, no downloads.
     command: [-m, /models/Mellum2.1-12B-A2.5B-Thinking-Q8_0.gguf, -c, '131072', -ngl, '99',
-              --flash-attn, 'on', -ctk, q4_0, -ctv, q4_0, --jinja, --host, 0.0.0.0, --port, '8080']
+              --flash-attn, 'on', -ctk, q4_0, -ctv, q4_0, --jinja, --host, /run/link/mellum.sock,
+              --no-webui, --no-slots, --log-disable, --offline]

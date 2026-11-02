@@ -21,7 +21,28 @@ struct Upload {
     body: Vec<u8>,
     started: Instant,
     control: bool,
+    /// With `load_on_demand`: the model the request names.
+    model: Option<String>,
 }
+/// With `load_on_demand`, whether a queued request can go to the backend as it is.
+enum Want {
+    Ready,
+    /// The supervisor's catalog is not known yet.
+    Unknown,
+    /// It names an allowlisted model other than the loaded one.
+    Load(String),
+}
+fn want(snapshot: Option<&crate::on_demand::Snapshot>, upload: &Upload) -> Want {
+    let (false, Some(model)) = (upload.control, upload.model.as_deref()) else {
+        return Want::Ready;
+    };
+    match snapshot {
+        None => Want::Unknown,
+        Some(s) if !s.lists(model) || s.active_model.as_deref() == Some(model) => Want::Ready,
+        Some(_) => Want::Load(model.to_owned()),
+    }
+}
+type Change = (Option<String>, Result<crate::on_demand::Snapshot>);
 struct Job {
     serial: u64,
     control: bool,
@@ -326,17 +347,86 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
     registry.session += 1;
     let resume = Duration::from_secs(config.resume_seconds);
     let mut deadline_tick = tokio::time::interval(Duration::from_millis(100));
+    // Load on demand: the supervisor's catalog, a running model swap, and how many requests
+    // for the loaded model have overtaken the one that waits for the swap.
+    let managed = config
+        .load_on_demand
+        .then(|| config.model_control_socket.clone())
+        .flatten();
+    let mut models: Option<crate::on_demand::Snapshot> = None;
+    let mut switching: Option<String> = None;
+    let mut asking = false;
+    let mut asked: Option<Instant> = None;
+    let mut overtaken = 0usize;
+    let (changed, mut changes) = mpsc::unbounded_channel::<Change>();
+    let ask = |asking: &mut bool, asked: &mut Option<Instant>| {
+        let Some(socket) = managed.clone() else {
+            return;
+        };
+        if *asking || asked.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return;
+        }
+        (*asking, *asked) = (true, Some(Instant::now()));
+        let changed = changed.clone();
+        tokio::spawn(async move {
+            let _ = changed.send((None, crate::on_demand::snapshot(&socket).await));
+        });
+    };
+    ask(&mut asking, &mut asked);
     loop {
         // FIFO admission: a management operation drains earlier requests and prevents
-        // later ones from entering the backend until the operation has completed.
+        // later ones from entering the backend until the operation has completed. With load
+        // on demand, a request for another model waits until the running ones are done,
+        // then the swap runs like a management operation. Requests for the loaded model may
+        // overtake it a bounded number of times, so each model's requests run together.
         while let Some(front) = queue.front() {
-            if registry.jobs.values().any(|j| j.control)
+            // The model list is answered from the catalog and need not wait for a swap.
+            let listing = front.method == "GET" && front.path == "/v1/models";
+            if switching.is_some() && !listing
+                || registry.jobs.values().any(|j| j.control)
                 || (front.control && !registry.jobs.is_empty())
                 || registry.jobs.len() >= config.max_concurrent_requests
             {
                 break;
             }
-            let upload = queue.pop_front().unwrap();
+            let index = match want(models.as_ref(), front) {
+                Want::Ready => 0,
+                Want::Unknown => {
+                    ask(&mut asking, &mut asked);
+                    break;
+                }
+                Want::Load(model) => {
+                    let patient = overtaken < crate::on_demand::OVERTAKE_LIMIT
+                        && front.started.elapsed()
+                            < Duration::from_secs(crate::on_demand::OVERTAKE_SECONDS);
+                    let overtaker = queue
+                        .iter()
+                        .take_while(|u| !u.control)
+                        .position(|u| matches!(want(models.as_ref(), u), Want::Ready))
+                        .filter(|_| patient);
+                    match overtaker {
+                        Some(index) => {
+                            overtaken += 1;
+                            index
+                        }
+                        None => {
+                            if registry.jobs.is_empty()
+                                && let Some(socket) = managed.clone()
+                            {
+                                switching = Some(model.clone());
+                                overtaken = 0;
+                                let changed = changed.clone();
+                                tokio::spawn(async move {
+                                    let result = crate::on_demand::load(&socket, &model).await;
+                                    let _ = changed.send((Some(model), result));
+                                });
+                            }
+                            break;
+                        }
+                    }
+                }
+            };
+            let upload = queue.remove(index).unwrap();
             let id = upload.id;
             let control = upload.control;
             let cancel = CancellationToken::new();
@@ -406,12 +496,46 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
         tokio::select! {
             _ = closed.cancelled() => break,
             Some((id, serial)) = registry.done.recv() => {
-                if registry.jobs.get(&id).is_some_and(|j| j.serial == serial) { registry.jobs.remove(&id); }
+                if let Some(job) = registry.jobs.get(&id) && job.serial == serial {
+                    // An operator's own load or unload changes which model is loaded.
+                    if registry.jobs.remove(&id).is_some_and(|job| job.control) {
+                        asked = None;
+                        ask(&mut asking, &mut asked);
+                    }
+                }
+            }
+            Some((attempted, result)) = changes.recv() => {
+                if attempted.is_some() { switching = None; } else { asking = false; }
+                match result {
+                    Ok(snapshot) => {
+                        routes.set_managed(snapshot.clone());
+                        models = Some(snapshot);
+                    }
+                    Err(error) => {
+                        if let Some(model) = attempted {
+                            // Never another model instead: what waited for this one fails.
+                            let message = format!("model {model} could not be loaded: {error}");
+                            let (failed, kept): (VecDeque<_>, VecDeque<_>) = queue.drain(..)
+                                .partition(|u| !u.control && u.model.as_deref() == Some(model.as_str()));
+                            queue = kept;
+                            for upload in failed { reject(peer.tx(), upload.id, 503, &message).await?; }
+                            asked = None;
+                            ask(&mut asking, &mut asked);
+                        } else if models.is_none() {
+                            // Without a catalog, requests go on and the privacy check decides.
+                            models = Some(crate::on_demand::Snapshot::default());
+                        }
+                    }
+                }
             }
             Some((id, serial)) = registry.gone.recv() => {
                 if registry.outlets.get(&id).is_some_and(|o| o.serial == serial) { registry.outlets.remove(&id); }
             }
             _ = deadline_tick.tick() => {
+                // The operator may load a model by hand; look again now and then.
+                if switching.is_none() && asked.is_some_and(|t| t.elapsed() > Duration::from_secs(30)) {
+                    ask(&mut asking, &mut asked);
+                }
                 let expired: Vec<_> = uploads.iter().filter(|(_,u)| u.started.elapsed() > Duration::from_secs(UPLOAD_SECONDS)).map(|(id,_)| *id).collect();
                 for id in expired {
                     uploads.remove(&id);
@@ -444,7 +568,7 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                         } else if occupied >= capacity {
                             reject(peer.tx(), id, 429, "request capacity exhausted").await?;
                         } else {
-                            uploads.insert(id, Upload { id, method, path, body: vec![], started: Instant::now(), control });
+                            uploads.insert(id, Upload { id, method, path, body: vec![], started: Instant::now(), control, model: None });
                         }
                     }
                     Frame::Data { data, .. } => {
@@ -456,10 +580,15 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                         }
                     }
                     Frame::RequestEnd { .. } => {
-                        if let Some(upload) = uploads.remove(&id) {
+                        if let Some(mut upload) = uploads.remove(&id) {
                             if upload.control && !control_body_valid(&upload.method, &upload.body) {
                                 reject(peer.tx(), id, 400, "invalid model control command").await?;
-                            } else { queue.push_back(upload); }
+                            } else {
+                                if managed.is_some() && !upload.control {
+                                    upload.model = crate::on_demand::requested(&upload.body);
+                                }
+                                queue.push_back(upload);
+                            }
                         }
                     }
                     Frame::Credit { .. } => {
@@ -590,16 +719,21 @@ async fn forward(
     credits: Arc<Semaphore>,
 ) -> Result<()> {
     let id = upload.id;
-    if routes.is_routed() && upload.method == "GET" && upload.path == "/v1/models" {
+    if routes.lists_models() && upload.method == "GET" && upload.path == "/v1/models" {
         let body = routes.model_list().await?;
         return respond(tx, credits, id, 200, &body).await;
     }
-    let target = routes.target(routes.choose(&upload.body).await);
+    let index = routes.choose(&upload.body).await;
+    if let Some((status, message)) = routes.managed_refusal(index, &upload.body) {
+        let body = serde_json::to_vec(
+            &serde_json::json!({"error": {"message": message, "code": status}}),
+        )?;
+        return respond(tx, credits, id, status, &body).await;
+    }
+    let target = routes.target(index);
     // Recheck before each request: a restarted backend must not silently resume logging.
     // This is a configuration interlock, not remote attestation of arbitrary software.
-    if target.verify {
-        crate::backend::verify_at(target.http, target.upstream, target.api_key).await?;
-    }
+    routes.verify(index).await?;
     let anthropic = route_api(&upload.method, &upload.path) == Some(Api::Anthropic);
     let method = reqwest::Method::from_bytes(upload.method.as_bytes())?;
     let url = format!("{}{}", target.upstream.trim_end_matches('/'), upload.path);
@@ -717,6 +851,7 @@ mod tests {
             body: b"{}".to_vec(),
             started: Instant::now(),
             control: false,
+            model: None,
         };
         let credits = Arc::new(Semaphore::new(RESPONSE_WINDOW));
         let (tx, mut rx) = mpsc::channel(RESPONSE_WINDOW + 4);
@@ -848,6 +983,7 @@ mod tests {
             body: body.as_bytes().to_vec(),
             started: Instant::now(),
             control: false,
+            model: None,
         };
         let credits = Arc::new(Semaphore::new(RESPONSE_WINDOW));
         let (tx, mut rx) = mpsc::channel(64);

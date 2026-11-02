@@ -304,6 +304,7 @@ fn imported(text: &str, directory: &std::path::Path) -> anyhow::Result<Config> {
     config.pairing_state_dir = Some(directory.join("pairing-state"));
     config.management_token_file = None;
     config.model_control_socket = None;
+    config.load_on_demand = false;
     config.upstream_socket = None;
     config.upstream_api_key.clear();
     config.upstream = "http://127.0.0.1:8080".into();

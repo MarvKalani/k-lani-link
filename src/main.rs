@@ -759,6 +759,7 @@ async fn run(cli: Cli) -> Result<()> {
                         max_queued_requests: 0,
                         management_token_file: None,
                         model_control_socket: None,
+                        load_on_demand: false,
                     },
                 )
             }))?;

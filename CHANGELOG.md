@@ -7,6 +7,23 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Models on demand: with `load_on_demand = true` next to `model_control_socket`, a host
+  lists every model its operator allowlisted, loaded or not, and loads the one a request
+  names. The swap waits for running requests; requests for the loaded model may still go
+  first, at most eight of them or for 30 seconds, so a model's requests run together.
+  A request is never answered by another model: one nobody offers gets 404, and when a
+  model fails to load, the requests waiting for it fail with 503.
+- The managed backend now also runs GGUF models with llama.cpp, inside the same
+  network-less container as Basalt (`"engine": "llama"` in the catalog,
+  `deploy/managed/gguf.compose.yaml` for the folder). llama.cpp has no privacy profile
+  of its own: the supervisor starts it without web UI, slot monitor, log, network or
+  downloads and reports so, and the host checks that report before every request.
+- Model aliases may contain dots, e.g. `Mellum2.1-12B-Q8_0`, but no path.
+- `deploy/mellum.compose.yaml` no longer publishes a TCP port: llama.cpp answered any
+  web origin on it, so a web page open on that computer could use the model. The
+  container now has no network, runs as uid 1000, answers on a Unix socket in a private
+  folder (`LINK_MELLUM_RUN`, `upstream_socket` in the host config) and has its web UI,
+  slot monitor and log switched off.
 - The control panel has a **DE** / **EN** switch in its header. It changes the language
   at once, open chat windows included, and the panel keeps the choice in its data
   directory; without a choice the panel follows the browser language as before.

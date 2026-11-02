@@ -1,0 +1,6 @@
+# Add after deploy/managed/compose.yaml to offer GGUF models through llama.cpp, which the
+# Basalt image contains. Catalog entries then name paths below /models/gguf.
+services:
+  basalt:
+    volumes:
+      - '${LINK_GGUF_DIR:?Set the absolute folder holding the GGUF files}:/models/gguf:ro'

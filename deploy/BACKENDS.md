@@ -125,9 +125,12 @@ OpenAI-compatible chat endpoints alone do not standardize loading or KV storage.
 ## Mellum 2.1 via llama.cpp
 
 `deploy/mellum.compose.yaml` runs JetBrains Mellum 2.1 (12B-A2.5B Thinking, Q8_0 GGUF)
-with the official `ghcr.io/ggml-org/llama.cpp:server-cuda` image: loopback port 18091,
-read-only, no capabilities, no restart policy, full 131,072-token context with flash
-attention and a 4-bit KV cache. Only one model fits a 16 GB card, so stop Basalt first.
+with the official `ghcr.io/ggml-org/llama.cpp:server-cuda` image: no network, only a Unix
+socket in a private folder (so neither another machine nor a web page in a local browser
+reaches it), a non-root user, read-only, no capabilities, no web UI, no slot monitor, no
+log, no restart policy, full 131,072-token context with flash attention and a 4-bit KV
+cache. Earlier versions of this file published loopback port 18091; llama.cpp answers
+any web origin there, so a page open in a browser on that computer could use the model. Only one model fits a 16 GB card, so stop Basalt first.
 Measured 2026-10-30 on an RTX 5070 Ti (driver 595.99), image built the same day:
 
 | | Direct | Through k-lani-link (HTTPS mailbox, local relay) |

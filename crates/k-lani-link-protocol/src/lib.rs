@@ -188,12 +188,15 @@ pub enum ModelCommand {
     Unload {},
 }
 
+/// An operator's model alias such as `coder` or `Mellum2.1-12B-Q8_0`: never a path.
 pub fn valid_model_id(model: &str) -> bool {
     !model.is_empty()
         && model.len() <= 64
+        && !model.starts_with('.')
+        && !model.contains("..")
         && model
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
 pub fn control_body_valid(method: &str, body: &[u8]) -> bool {
@@ -574,9 +577,16 @@ mod management_tests {
             br#"{"action":"load","model":"coder-1"}"#
         ));
         assert!(control_body_valid("POST", br#"{"action":"unload"}"#));
+        assert!(control_body_valid(
+            "POST",
+            br#"{"action":"load","model":"Mellum2.1-12B-Q8_0"}"#
+        ));
         for body in [
             br#"{}"#.as_slice(),
             br#"{"action":"load","model":"../file"}"#,
+            br#"{"action":"load","model":".hidden"}"#,
+            br#"{"action":"load","model":"a..b"}"#,
+            br#"{"action":"load","model":"dir/file"}"#,
             br#"{"action":"load","model":"coder","args":"--debug"}"#,
             br#"{"action":"unload","model":"coder"}"#,
         ] {

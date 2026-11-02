@@ -31,6 +31,7 @@ pub fn config(options: Options, api_key: String) -> Config {
         max_queued_requests: 0,
         management_token_file: None,
         model_control_socket: None,
+        load_on_demand: false,
         allow_unverified_backend: false,
         include_loopback_candidate: false,
         resume_seconds: 0,

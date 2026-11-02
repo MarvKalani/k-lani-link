@@ -7,6 +7,7 @@ pub mod exchange;
 pub mod gateway;
 pub mod host;
 pub mod local_api;
+pub mod on_demand;
 pub mod pairing;
 pub mod peer;
 pub mod qr;

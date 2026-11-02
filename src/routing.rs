@@ -25,8 +25,8 @@ struct Catalog {
     built: Instant,
     /// Model ID to backend index (0 is `upstream`); the first backend listing it wins.
     owner: HashMap<String, usize>,
-    /// Entries of backends whose privacy profile passed, primary first.
-    listed: Vec<Value>,
+    /// Entries of backends whose privacy profile passed, primary first, with their index.
+    listed: Vec<(usize, Value)>,
     reachable: bool,
 }
 
@@ -36,6 +36,8 @@ pub struct Routes {
     primary: reqwest::Client,
     network: reqwest::Client,
     catalog: Mutex<Option<Arc<Catalog>>>,
+    /// With `load_on_demand`: the supervisor's last snapshot, kept current by the host.
+    managed: Mutex<Option<crate::on_demand::Snapshot>>,
 }
 
 impl Routes {
@@ -57,6 +59,7 @@ impl Routes {
             primary: primary.build()?,
             network: builder().build()?,
             catalog: Mutex::new(None),
+            managed: Mutex::new(None),
         })
     }
 
@@ -89,6 +92,48 @@ impl Routes {
         *self.catalog.lock().unwrap() = None;
     }
 
+    pub fn set_managed(&self, snapshot: crate::on_demand::Snapshot) {
+        *self.managed.lock().unwrap() = Some(snapshot);
+        self.invalidate();
+    }
+
+    /// With `load_on_demand`, why a request for `upstream` must not reach it: llama.cpp
+    /// answers with whatever model is loaded, so a request is never served by another one.
+    pub fn managed_refusal(&self, index: usize, body: &[u8]) -> Option<(u16, &'static str)> {
+        if !self.config.load_on_demand || index != 0 {
+            return None;
+        }
+        let managed = self.managed.lock().unwrap();
+        let (Some(snapshot), Some(model)) = (managed.as_ref(), crate::on_demand::requested(body))
+        else {
+            return None;
+        };
+        if !snapshot.lists(&model) {
+            return Some((404, "this model is not offered by the model computer"));
+        }
+        (snapshot.active_model.as_deref() != Some(model.as_str()))
+            .then_some((503, "this model is not loaded right now; try again"))
+    }
+
+    /// Whether `GET /v1/models` comes from the routes instead of a backend.
+    pub fn lists_models(&self) -> bool {
+        self.is_routed() || self.config.load_on_demand
+    }
+
+    /// The privacy check before a request reaches backend `index`, if it needs one.
+    pub async fn verify(&self, index: usize) -> Result<()> {
+        let target = self.target(index);
+        if !target.verify {
+            return Ok(());
+        }
+        match (&self.config.model_control_socket, index) {
+            (Some(socket), 0) => {
+                crate::on_demand::verify(socket, target.http, target.upstream, target.api_key).await
+            }
+            _ => crate::backend::verify_at(target.http, target.upstream, target.api_key).await,
+        }
+    }
+
     /// The backend for a request body. Without further backends the body is not read.
     pub async fn choose(&self, body: &[u8]) -> usize {
         #[derive(Deserialize)]
@@ -109,12 +154,30 @@ impl Routes {
         self.catalog().await.owner.get(&model).copied().unwrap_or(0)
     }
 
-    /// `GET /v1/models` across all backends whose privacy profile passed.
+    /// `GET /v1/models` across all backends whose privacy profile passed. With
+    /// `load_on_demand` the primary contributes every allowlisted model, loaded or not.
     pub async fn model_list(&self) -> Result<Vec<u8>> {
-        let catalog = self.catalog().await;
-        ensure!(catalog.reachable, "no backend answered the model list");
+        let managed = self
+            .config
+            .load_on_demand
+            .then(|| self.managed.lock().unwrap().clone())
+            .flatten();
+        let mut data: Vec<Value> = managed.as_ref().map(|s| s.entries()).unwrap_or_default();
+        if self.is_routed() || managed.is_none() {
+            let catalog = self.catalog().await;
+            ensure!(
+                catalog.reachable || managed.is_some(),
+                "no backend answered the model list"
+            );
+            for (index, model) in &catalog.listed {
+                let taken = data.iter().any(|entry| entry["id"] == model["id"]);
+                if !(managed.is_some() && *index == 0) && !taken {
+                    data.push(model.clone());
+                }
+            }
+        }
         Ok(serde_json::to_vec(
-            &serde_json::json!({"object": "list", "data": catalog.listed}),
+            &serde_json::json!({"object": "list", "data": data}),
         )?)
     }
 
@@ -148,7 +211,7 @@ impl Routes {
                 let size = serde_json::to_vec(&model).map_or(usize::MAX, |entry| entry.len());
                 if verified && bytes + size < MODEL_LIST_BYTES {
                     bytes += size + 1;
-                    catalog.listed.push(model);
+                    catalog.listed.push((index, model));
                 }
             }
         }
@@ -160,10 +223,7 @@ impl Routes {
     /// The backend's model entries, and whether its privacy profile passed.
     async fn models_of(&self, index: usize) -> (Option<Vec<Value>>, bool) {
         let target = self.target(index);
-        let verified = !target.verify
-            || crate::backend::verify_at(target.http, target.upstream, target.api_key)
-                .await
-                .is_ok();
+        let verified = self.verify(index).await.is_ok();
         let mut request = target
             .http
             .get(format!(

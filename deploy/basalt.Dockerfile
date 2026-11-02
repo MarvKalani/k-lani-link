@@ -1,3 +1,11 @@
+# llama.cpp for GGUF models in the managed catalog (deploy/managed). Pinned by digest; it
+# brings its own CUDA 12 libraries, which only its process loads.
+FROM ghcr.io/ggml-org/llama.cpp@sha256:f25bfa096802cdf35ceb7d124816387a1e3ed5cbfc869eb242246cd29ab29352 AS llama
+RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
+    && cp -L /usr/local/cuda/lib64/libcudart.so.12 /usr/local/cuda/lib64/libcublas.so.12 \
+       /usr/local/cuda/lib64/libcublasLt.so.12 /lib/x86_64-linux-gnu/libnccl.so.2 /opt/llama/lib/ \
+    && rm -f /opt/llama/llama /opt/llama/*bench* /opt/llama/*perplexity* /opt/llama/*quantize*
+
 FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04
 ARG BUILD_JOBS=2
 RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build g++ git python3 python3-venv ca-certificates \
@@ -27,6 +35,7 @@ RUN if getent passwd 1000 >/dev/null; then \
 COPY deploy/basalt-entrypoint.py /opt/link-entrypoint.py
 COPY deploy/healthcheck.py /opt/link-healthcheck.py
 COPY deploy/managed/manager.py /opt/link-manager.py
+COPY --from=llama /opt/llama /opt/llama
 ENV PYTHONDONTWRITEBYTECODE=1 CUDA_CACHE_DISABLE=1
 COPY integrations/basalt/numeric-metrics.patch /tmp/link-numeric-metrics.patch
 RUN git apply --check /tmp/link-numeric-metrics.patch \

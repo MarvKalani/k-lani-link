@@ -35,6 +35,8 @@ struct Backend {
     controls: Arc<AtomicUsize>,
     #[cfg(unix)]
     overlap: Arc<AtomicBool>,
+    /// The order in which chat requests reached the backend.
+    order: Arc<Mutex<Vec<String>>>,
 }
 struct Active(Arc<AtomicUsize>);
 impl Drop for Active {
@@ -54,6 +56,7 @@ async fn chat(State(state): State<Backend>, Json(body): Json<serde_json::Value>)
     state.maximum.fetch_max(active, Ordering::SeqCst);
     let guard = Active(state.active.clone());
     let label = body["label"].as_str().unwrap().to_owned();
+    state.order.lock().unwrap().push(label.clone());
     let hold = body["hold"] == true;
     let burst = body["burst"] == true;
     let gated = body["gated"] == true;
@@ -78,18 +81,36 @@ async fn chat(State(state): State<Backend>, Json(body): Json<serde_json::Value>)
 async fn model_control(
     State(state): State<Backend>,
     Json(body): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
+) -> Response {
     state.controls.fetch_add(1, Ordering::SeqCst);
     if state.active.load(Ordering::SeqCst) != 0 {
         state.overlap.store(true, Ordering::SeqCst);
     }
     tokio::time::sleep(Duration::from_millis(80)).await;
+    if body["model"] == "broken" {
+        *state.model.lock().unwrap() = None;
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"model failed to become ready; backend remains unloaded"})),
+        )
+            .into_response();
+    }
     *state.model.lock().unwrap() = if body["action"] == "unload" {
         None
     } else {
         body["model"].as_str().map(str::to_owned)
     };
-    Json(serde_json::json!({"active_model":*state.model.lock().unwrap()}))
+    snapshot(State(state)).await.into_response()
+}
+/// The supervisor's catalog, as `GET /v1/link/models` reports it.
+#[cfg(unix)]
+async fn snapshot(State(state): State<Backend>) -> Json<serde_json::Value> {
+    let active = state.model.lock().unwrap().clone();
+    let models: Vec<_> = ["alpha", "beta", "broken"]
+        .iter()
+        .map(|id| serde_json::json!({"id": id, "loaded": active.as_deref() == Some(*id)}))
+        .collect();
+    Json(serde_json::json!({"active_model": active, "models": models}))
 }
 async fn server(router: Router) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -123,6 +144,14 @@ impl Lab {
         Self::with(2, 1, None).await
     }
     async fn with(concurrent: usize, queued: usize, upload_timeout: Option<Duration>) -> Self {
+        Self::build(concurrent, queued, upload_timeout, false).await
+    }
+    async fn build(
+        concurrent: usize,
+        queued: usize,
+        upload_timeout: Option<Duration>,
+        on_demand: bool,
+    ) -> Self {
         let root = std::env::temp_dir().join(format!("kl-m-{}", config::random_id().unwrap()));
         std::fs::create_dir(&root).unwrap();
         let state = Backend {
@@ -134,6 +163,7 @@ impl Lab {
             controls: Arc::new(AtomicUsize::new(0)),
             #[cfg(unix)]
             overlap: Arc::new(AtomicBool::new(false)),
+            order: Arc::new(Mutex::new(Vec::new())),
         };
         let (upstream, backend) = server(Router::new().route("/health",get(||async {Json(serde_json::json!({"link_privacy":{"version":1,"application_logs":false,"request_history":false,"diagnostics":false,"remote_images":false}}))}))
             .route("/v1/chat/completions",post(chat)).route("/v1/responses",post(chat)).with_state(state.clone())).await;
@@ -147,6 +177,7 @@ impl Lab {
         cfg.max_concurrent_requests = concurrent;
         cfg.max_queued_requests = queued;
         cfg.request_timeout_seconds = 10;
+        cfg.load_on_demand = on_demand;
         let key = root.join("management-token");
         config::private_file(&key, &"m".repeat(43)).unwrap();
         cfg.management_token_file = Some(key);
@@ -161,12 +192,7 @@ impl Lab {
                     listener,
                     Router::new()
                         .route("/v1/link/model", post(model_control))
-                        .route(
-                            "/v1/link/models",
-                            get(|| async {
-                                Json(serde_json::json!({"models":[{"id":"alpha"},{"id":"beta"}]}))
-                            }),
-                        )
+                        .route("/v1/link/models", get(snapshot))
                         .with_state(control_state),
                 )
                 .await
@@ -468,5 +494,80 @@ async fn a_stalled_upload_gives_its_slot_back_after_the_upload_limit() {
         .await
         .unwrap();
     assert!(text.contains("AFTER"));
+    assert!(lab.gateway.is_connected());
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_request_for_another_allowlisted_model_loads_it_after_the_loaded_models_requests() {
+    let lab = Lab::build(2, 8, None, true).await;
+    let list: serde_json::Value = lab
+        .http
+        .get(format!("{}/v1/models", lab.base))
+        .bearer_auth(&lab.cfg.api_key)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let ids: Vec<_> = list["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| (m["id"].as_str().unwrap().to_owned(), m["loaded"] == true))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            ("alpha".into(), true),
+            ("beta".into(), false),
+            ("broken".into(), false)
+        ]
+    );
+    let gated = |model: &str, label: &str| {
+        lab.http
+            .post(format!("{}/v1/chat/completions", lab.base))
+            .bearer_auth(&lab.cfg.api_key)
+            .json(&serde_json::json!({"model":model,"label":label,"gated":true,"stream":true}))
+    };
+    // Alpha is loaded and busy; beta waits, yet the second alpha request goes first.
+    let first = tokio::spawn(gated("alpha", "A1").send());
+    while lab.state.active.load(Ordering::SeqCst) != 1 {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let waiting = tokio::spawn(lab.chat("beta", "B1", false).send());
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let overtaking = tokio::spawn(lab.chat("alpha", "A2", false).send());
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let second = tokio::spawn(lab.chat("beta", "B2", false).send());
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    assert_eq!(lab.state.controls.load(Ordering::SeqCst), 0);
+    lab.state.finish.notify_waiters();
+    for task in [first, waiting, overtaking, second] {
+        let text = task.await.unwrap().unwrap().text().await.unwrap();
+        assert!(text.contains("answer"), "{text}");
+    }
+    // Both beta requests start together after the swap, in either order.
+    let mut order = lab.state.order.lock().unwrap().clone();
+    order[2..].sort();
+    assert_eq!(order, ["A1", "A2", "B1", "B2"]);
+    // One swap for both beta requests, and never while a request ran.
+    assert_eq!(lab.state.controls.load(Ordering::SeqCst), 1);
+    assert!(!lab.state.overlap.load(Ordering::SeqCst));
+    assert_eq!(lab.state.model.lock().unwrap().as_deref(), Some("beta"));
+
+    // A model nobody offers is refused, not answered by the loaded one.
+    let unknown = lab.chat("gamma", "G", false).send().await.unwrap();
+    assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+    // A model that fails to load fails its requests and leaves nothing loaded.
+    let broken = lab.chat("broken", "X", false).send().await.unwrap();
+    assert_eq!(broken.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(broken.text().await.unwrap().contains("could not be loaded"));
+    assert!(!lab.state.order.lock().unwrap().contains(&"X".to_owned()));
+    // The next request loads its model again.
+    let again = lab.chat("alpha", "A3", false).send().await.unwrap();
+    assert!(again.text().await.unwrap().contains("A3"));
+    assert_eq!(lab.state.controls.load(Ordering::SeqCst), 3);
     assert!(lab.gateway.is_connected());
 }

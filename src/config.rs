@@ -80,6 +80,10 @@ pub struct Config {
     /// Host only: explicitly enables management of an allowlisted local backend.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_control_socket: Option<PathBuf>,
+    /// Host only, with `model_control_socket`: list every allowlisted model and load the one
+    /// a request names when another is loaded. The swap waits for running requests.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub load_on_demand: bool,
     /// Host only. Forward prompts without first confirming the backend's privacy profile.
     /// The backend may then log or store them; `check` repeats this warning.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -245,6 +249,10 @@ impl Config {
                 "model management requires the verified privacy profile"
             );
         }
+        ensure!(
+            !self.load_on_demand || self.model_control_socket.is_some(),
+            "load_on_demand requires model_control_socket"
+        );
         if let Some(socket) = &self.upstream_socket {
             ensure!(
                 cfg!(unix) && socket.is_absolute(),
@@ -472,6 +480,7 @@ pub fn generate_pair(
         max_queued_requests: 0,
         management_token_file: None,
         model_control_socket: None,
+        load_on_demand: false,
     };
     cfg.validate()?;
     let content = toml::to_string_pretty(&cfg)?;
@@ -573,6 +582,7 @@ pub(crate) mod tests {
             max_queued_requests: 0,
             management_token_file: None,
             model_control_socket: None,
+            load_on_demand: false,
         }
     }
     #[test]

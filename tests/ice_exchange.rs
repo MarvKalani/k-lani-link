@@ -126,6 +126,7 @@ async fn mailbox_also_drops_a_delayed_answer_acknowledgement() {
         max_queued_requests: 0,
         management_token_file: None,
         model_control_socket: None,
+        load_on_demand: false,
     };
     let host_config = config.clone();
     let host = tokio::spawn(async move {
@@ -196,6 +197,7 @@ async fn check_connection_and_detachment(answer_delay: Duration) {
         max_queued_requests: 0,
         management_token_file: None,
         model_control_socket: None,
+        load_on_demand: false,
     };
     config.validate().unwrap();
     let cfg = config.clone();
