@@ -27,13 +27,13 @@ Arbeitsspeicher, bevor das Relay Daten annimmt.
    max_ips_per_day = 8
 
    [tokens.limits]
-   rooms = 4
-   sessions = 16
-   bytes = 4194304
+   rooms = 16
+   sessions = 32
+   bytes = 8388608
    pending_puts = 32
    pending_put_bytes = 1048576
-   get_waiters = 16
-   hello_slots = 16
+   get_waiters = 48
+   hello_slots = 32
    requests_per_second = 400
    request_burst = 800
    pair_slots = 4
@@ -51,6 +51,11 @@ Arbeitsspeicher, bevor das Relay Daten annimmt.
    dem Bereich höchstens vier gleichzeitig offene Kopplungscodes; `pair_slots` unter
    `[global]` begrenzt alle Bereiche zusammen (höchstens 900). Ohne Angabe gelten 4 pro
    Bereich und 64 für das ganze Relay; `pair_slots = 0` schaltet das Koppeln per Code dort ab.
+   `rooms = 16` reicht für bis zu acht Modellrechner, die ein Kontrollfeld gleichzeitig
+   verbindet: Jede verbundene Kopplung belegt einen Raum, ein Neuverbinden für bis zu zwei
+   Minuten einen zweiten. Ist der Bereich voll, lehnt das Relay jeden neuen Verbindungsaufbau
+   mit 429 ab, und das Kontrollfeld zeigt „Relay voll“. Ein neuer Code hilft dann nicht;
+   eine andere Verbindung beenden oder die Grenze erhöhen.
 
 3. Relay neu starten und koppeln. Am einfachsten **per Code**: Am Modellrechner
 

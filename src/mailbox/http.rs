@@ -161,7 +161,11 @@ pub struct Http {
     /// How writes travel, raised for the rest of this client when a web firewall refuses
     /// one: 0 PUT, 1 POST, 2 POST with the record wrapped in JSON.
     writes: Arc<std::sync::atomic::AtomicU8>,
+    refused: Refusals,
 }
+/// Since when (Unix seconds) the relay has answered only 429 or 503, so a caller can tell a
+/// relay that is full for this access from one that is merely slow; 0 while it admits.
+pub type Refusals = Arc<std::sync::atomic::AtomicU64>;
 /// A relay response over TCP or QUIC; the transport reads only its status and body.
 pub enum Reply {
     Tcp(reqwest::Response),
@@ -258,6 +262,7 @@ impl Http {
             token: secret(&options.admission_token_file)?,
             wait: options.poll_wait_seconds,
             tuning: Arc::default(),
+            refused: Refusals::default(),
             writes: Arc::new(std::sync::atomic::AtomicU8::new(u8::from(
                 options.post_writes,
             ))),
@@ -393,8 +398,17 @@ impl Http {
         self.tuning
             .advise(reply.header("x-k-lani-relay").as_deref());
         match reply.status() {
-            200 | 204 => Ok(reply),
+            200 | 204 => {
+                self.refused.store(0, Ordering::Relaxed);
+                Ok(reply)
+            }
             429 | 503 => {
+                let _ = self.refused.compare_exchange(
+                    0,
+                    crate::signal::now(),
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                );
                 let hint = reply
                     .header("retry-after")
                     .and_then(|value| value.trim().parse::<u64>().ok())
@@ -408,6 +422,11 @@ impl Http {
             410 => Err(Failure::Gone.into()),
             _ => Err(Failure::Denied.into()),
         }
+    }
+    /// Shares the record of relay refusals with the caller, e.g. a client's status.
+    pub fn with_refusals(mut self, refused: Refusals) -> Self {
+        self.refused = refused;
+        self
     }
     pub async fn get(
         &self,

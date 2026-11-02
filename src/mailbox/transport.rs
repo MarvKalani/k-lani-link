@@ -1,5 +1,5 @@
 //! S1–S3 handshake and the selected acknowledged multi-record HTTPS carrier.
-use super::http::{Backoff, Failure, Http, packets};
+use super::http::{Backoff, Failure, Http, Refusals, packets};
 use super::relay::hello_hash;
 use super::{BATCH_MS, HEARTBEAT, LONG_POLL, Options, PEER_TIMEOUT, PIPELINE, RECORD_TTL, WINDOW};
 use crate::{chain_state::Store, diagnostic::Diagnostic, pairing::PairingRejected, signal::now};
@@ -109,7 +109,17 @@ pub async fn connect(
     store: SharedStore,
     stop: CancellationToken,
 ) -> Result<HttpsTunnel> {
-    let http = Http::new(options)?;
+    connect_with(options, store, stop, Refusals::default()).await
+}
+/// As `connect`, and `refused` tells since when the relay refuses every request, e.g.
+/// because this access already holds as many connections as the relay allows it.
+pub async fn connect_with(
+    options: &Options,
+    store: SharedStore,
+    stop: CancellationToken,
+    refused: Refusals,
+) -> Result<HttpsTunnel> {
+    let http = Http::new(options)?.with_refusals(refused);
     let chain = store.lock().unwrap().client(now())?.chain;
     let attempt = Initiator::start(&chain, random()?, random()?, random()?, now())
         .map_err(|_| PairingRejected)?;

@@ -54,8 +54,13 @@ pub struct Gateway {
     code_used: Arc<AtomicBool>,
     session_ended: Arc<AtomicBool>,
     reconnecting: Arc<AtomicBool>,
+    /// Since when the HTTPS relay has refused every request (Unix seconds, 0: it admits).
+    refused: crate::mailbox::http::Refusals,
     linked: Arc<tokio::sync::Notify>,
 }
+/// A relay that refused every request this long is reported as full for this access,
+/// not as a slow connection: waiting longer does not help, freeing a connection does.
+const REFUSED_SECONDS: u64 = 15;
 /// Each unanswered HTTPS hello may hold one of the host's `MAX_PENDING` attempts until a
 /// handshake completes. Automatic retries stop one short, leaving one for an explicit restart.
 const UNANSWERED_HELLO_LIMIT: usize = k_lani_link_protocol::MAX_PENDING - 1;
@@ -78,6 +83,7 @@ impl Gateway {
             code_used: Arc::new(AtomicBool::new(false)),
             session_ended: Arc::new(AtomicBool::new(false)),
             reconnecting: Arc::new(AtomicBool::new(false)),
+            refused: Default::default(),
             linked: Arc::new(tokio::sync::Notify::new()),
         })
     }
@@ -199,7 +205,7 @@ impl Gateway {
                 let connected = tokio::select! {
                     biased;
                     _ = stop.cancelled() => return Ok(None),
-                    connected = crate::mailbox::transport::connect(options, store.clone(), stop.clone()) => connected,
+                    connected = crate::mailbox::transport::connect_with(options, store.clone(), stop.clone(), self.refused.clone()) => connected,
                 };
                 match connected {
                     Ok(peer) => {
@@ -414,6 +420,10 @@ fn api_error(api: Option<Api>, status: StatusCode, message: &str) -> Response {
     )
         .into_response()
 }
+fn relay_busy(refused: &crate::mailbox::http::Refusals, now: u64) -> bool {
+    let since = refused.load(Ordering::Relaxed);
+    since != 0 && now.saturating_sub(since) >= REFUSED_SECONDS
+}
 async fn health(State(gateway): State<Gateway>, headers: HeaderMap) -> Response {
     if !auth(&headers, &gateway.config) {
         return error(StatusCode::UNAUTHORIZED, "invalid k-lani-link API key");
@@ -434,6 +444,7 @@ async fn health(State(gateway): State<Gateway>, headers: HeaderMap) -> Response 
         "access_denied": gateway.denied.load(Ordering::SeqCst),
         "new_code_required": gateway.code_used.load(Ordering::SeqCst) && !active,
         "reconnecting": gateway.reconnecting.load(Ordering::SeqCst) && !active,
+        "relay_busy": !active && relay_busy(&gateway.refused, crate::signal::now()),
         "reconnect_required":gateway.config.transport==crate::config::Transport::Https && gateway.session_ended.load(Ordering::SeqCst) && !active,
         "relay_policy": gateway.config.relay,
         "transport": gateway.config.transport,
@@ -677,6 +688,17 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_relay_that_keeps_refusing_is_called_busy_only_after_a_while() {
+        let refused = crate::mailbox::http::Refusals::default();
+        assert!(!relay_busy(&refused, 1_000));
+        refused.store(1_000, Ordering::Relaxed);
+        assert!(!relay_busy(&refused, 1_000 + REFUSED_SECONDS - 1));
+        assert!(relay_busy(&refused, 1_000 + REFUSED_SECONDS));
+        // A clock that went back never reads as a long refusal.
+        assert!(!relay_busy(&refused, 900));
+    }
 
     async fn call(api: &str, path: &str, header: (&str, &str)) -> (StatusCode, serde_json::Value) {
         let response = reqwest::Client::builder()

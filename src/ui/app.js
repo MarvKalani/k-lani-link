@@ -29,7 +29,10 @@ const texts = {
     computersNote: 'The models of all computers appear under the same base URL and key. Each request goes only to the computer that offers its model.',
     trialNote: 'Free test relay until {d}. After that you need your own relay, for example a free Cloudflare Worker.', trialLink: 'How to set it up',
     trialUntil: 'test relay until {d}',
-    removeComputer: 'Remove', removeSure: 'Really remove?', noModels: 'no models yet',
+    removeComputer: 'Remove', removeSure: 'Really remove?', noModels: 'no models yet', pBusy: 'relay full',
+    sBusy: 'Relay full', waitBusyTitle: 'The relay takes no further connection for this access',
+    waitBusyDetail: 'The relay refuses every request of this access as too many. Usually all connections it allows this access are in use, e.g. by other model computers or a second k-lani-link. k-lani-link keeps trying and connects by itself once one is free. If it stays like this, end another connection or ask the relay operator for a higher limit. A new code does not help.',
+    help6: 'Relay full: the relay allows this access only a few connections at once, and they are in use. End another one, or ask its operator for a higher limit.',
     pDenied: 'access refused', pUsed: 'new code needed', pRejected: 'not verified', pStopped: 'stopped',
     cancel: 'Cancel', readyTitle: 'Connected',
     readyIntro: 'In your AI app, add an “OpenAI-compatible” provider and copy in these three values:',
@@ -108,7 +111,10 @@ const texts = {
     computersNote: 'Die Modelle aller Rechner erscheinen unter derselben Basis-URL und demselben Schlüssel. Jede Anfrage geht nur an den Rechner, der ihr Modell anbietet.',
     trialNote: 'Kostenloser Test-Relay bis {d}. Danach brauchst du einen eigenen Relay, zum Beispiel einen kostenlosen Cloudflare Worker.', trialLink: 'So richtest du ihn ein',
     trialUntil: 'Test-Relay bis {d}',
-    removeComputer: 'Entfernen', removeSure: 'Wirklich entfernen?', noModels: 'noch keine Modelle',
+    removeComputer: 'Entfernen', removeSure: 'Wirklich entfernen?', noModels: 'noch keine Modelle', pBusy: 'Relay voll',
+    sBusy: 'Relay voll', waitBusyTitle: 'Das Relay nimmt für diesen Zugang keine weitere Verbindung an',
+    waitBusyDetail: 'Das Relay lehnt jede Anfrage dieses Zugangs als „zu viele“ ab. Meist sind alle Verbindungen belegt, die es diesem Zugang erlaubt, etwa durch andere Modellrechner oder ein zweites k-lani-link. k-lani-link versucht es weiter und verbindet sich von selbst, sobald eine frei wird. Bleibt es so, beende eine andere Verbindung oder bitte den Betreiber des Relays um ein höheres Limit. Ein neuer Code hilft hier nicht.',
+    help6: 'Relay voll: Das Relay erlaubt diesem Zugang nur wenige Verbindungen gleichzeitig, und die sind belegt. Beende eine andere oder bitte den Betreiber um ein höheres Limit.',
     pDenied: 'Zugang verweigert', pUsed: 'neuer Code nötig', pRejected: 'nicht geprüft', pStopped: 'angehalten',
     cancel: 'Abbrechen', readyTitle: 'Verbunden',
     readyIntro: 'Lege in deiner KI-App einen „OpenAI-kompatiblen“ Anbieter an und kopiere diese drei Werte hinein:',
@@ -306,6 +312,7 @@ function render(state) {
     case 'connected': light('connected', t('sConnected')); show('ready'); ready(); return;
     case 'connecting': light('connecting', t('sConnecting')); wait('waitConnTitle', 'waitConnDetail', true); return;
     case 'recovering': light('recovering', t('sRecovering')); wait('waitRecTitle', 'waitRecDetail', true); return;
+    case 'relay_busy': light('rejected', t('sBusy')); wait('waitBusyTitle', 'waitBusyDetail', true); return;
     case 'disconnected': light('', t('sProblem')); problem('disconnected', 'fixConnect', () => api('connect', {})); return;
     case 'stopped':
       light('rejected', t('sProblem'));
@@ -339,7 +346,7 @@ async function newCode() {
   wantPair = true; byId('code').value = '';
 }
 const computerPhase = { connected: 'sConnected', connecting: 'sConnecting', recovering: 'sRecovering', disconnected: 'sProblem',
-  denied: 'pDenied', rejected: 'pRejected', new_code_required: 'pUsed', stopped: 'pStopped' };
+  denied: 'pDenied', rejected: 'pRejected', new_code_required: 'pUsed', stopped: 'pStopped', relay_busy: 'pBusy' };
 let computerCount = 0;
 // "2027-02-02" → the date as people here write it.
 const trialDay = (day) => new Date(day + 'T12:00:00Z').toLocaleDateString(language, { dateStyle: 'long', timeZone: 'UTC' });

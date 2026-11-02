@@ -7,6 +7,15 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- A relay that refuses every handshake of an access (429 or 503, usually because all the
+  connections it allows that access are in use) is no longer an endless "Connecting…":
+  after 15 seconds the client reports `relay_busy`, and the control panel shows **Relay
+  full** with what helps (end another connection, or a higher limit) and that a new code
+  does not. It keeps trying and connects by itself once a connection is free.
+- The example relay limits per space (`relay.example.toml`, `ZUGANG.de.md`) now fit one
+  person with up to eight model computers: `rooms = 16` instead of 4, more sessions,
+  waiting reads and handshake slots. Every connected pairing holds a room and a reconnect
+  briefly a second one, so four rooms filled up with two or three computers and a test.
 - Relay status page: `/status` (refreshing every 15 s) and `/v1/status` (JSON) show
   totals only: connections, rooms, sessions, requests per minute, memory, uptime and
   trials in use, handed out and refused today. No address, token or content.

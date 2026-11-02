@@ -239,6 +239,13 @@ impl Fixture {
         Self::with_fault(0).await
     }
     async fn with_fault(mode: u8) -> Self {
+        Self::build(mode, super::super::relay::Limits::default()).await
+    }
+    /// A relay whose one token space has these limits, e.g. room for one connection only.
+    async fn with_space(limits: super::super::relay::Limits) -> Self {
+        Self::build(0, limits).await
+    }
+    async fn build(mode: u8, space: super::super::relay::Limits) -> Self {
         let root = std::env::temp_dir().join(format!(
             "link-https-{}",
             crate::config::random_id().unwrap()
@@ -257,7 +264,7 @@ impl Fixture {
         let token = random_secret().unwrap();
         let relay = super::super::relay::Relay::new(
             super::super::relay::Limits::default(),
-            vec![(token.clone(), super::super::relay::Limits::default())],
+            vec![(token.clone(), space)],
         )
         .unwrap();
         let stop = CancellationToken::new();
@@ -398,6 +405,66 @@ impl Fixture {
         self.shutdown.0.cancel();
         self.server.await.unwrap();
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_relay_full_for_this_access_is_reported_instead_of_waiting_silently() {
+    // The space allows one room, and another pairing's handshake already holds it.
+    let fixture = Fixture::with_space(super::super::relay::Limits {
+        rooms: 1,
+        ..super::super::relay::Limits::default()
+    })
+    .await;
+    let stop = CancellationToken::new();
+    let other = Http::new(&fixture.options).unwrap();
+    let mut hello = vec![0u8; k_lani_link_protocol::HELLO_BYTES];
+    hello[..4].copy_from_slice(b"KLH1");
+    hello[4] = 1;
+    let occupied = "/v1/hello/AAAAAAAAAAAAAAAAAAAAAA/client";
+    other
+        .put(
+            occupied,
+            0,
+            Bytes::from(hello),
+            &stop,
+            Instant::now() + Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+    let refused = Refusals::default();
+    let started = now();
+    let error = connect_with(
+        &fixture.options,
+        fixture.client.clone(),
+        stop.clone(),
+        refused.clone(),
+    )
+    .await
+    .err()
+    .unwrap();
+    // Still a transport failure, so the client keeps trying by itself ...
+    assert_eq!(error.downcast_ref::<Failure>(), Some(&Failure::Network));
+    // ... but it knows since when every request was refused, from its first hello on.
+    let since = refused.load(Ordering::Relaxed);
+    assert!(
+        since >= started && since <= started + 1,
+        "{since} {started}"
+    );
+    // The first admitted request clears it.
+    let admitted = Http::new(&fixture.options)
+        .unwrap()
+        .with_refusals(refused.clone());
+    admitted
+        .get(
+            &format!("{occupied}?wait=0"),
+            0,
+            &stop,
+            Instant::now() + Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refused.load(Ordering::Relaxed), 0);
+    fixture.finish().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

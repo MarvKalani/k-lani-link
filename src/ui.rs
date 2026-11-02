@@ -648,6 +648,9 @@ async fn phase_of(panel: &Panel, connection: &Connection) -> &'static str {
         "connected"
     } else if health["recovering"] == true {
         "recovering"
+    } else if health["relay_busy"] == true {
+        // Waiting does not help here; another connection must end first.
+        "relay_busy"
     } else {
         "connecting"
     }

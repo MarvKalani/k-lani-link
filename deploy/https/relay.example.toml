@@ -53,16 +53,18 @@ space = "pair"
 # Generous: on 401 the host process exits. Dual stack counts IPv4 and IPv6 separately.
 max_ips_per_day = 8
 # allow_ips = ["203.0.113.0/24"]
-# Limits of the space, set on its first token. Single user (one host, one or two
-# clients at a time):
+# Limits of the space, set on its first token. Single user with up to eight model
+# computers, as one control panel connects at once. Every connected pairing holds one
+# room, and a reconnect holds a second one for up to two minutes; a full space answers
+# every new handshake with 429, which the client shows as "relay full".
 [tokens.limits]
-rooms = 4
-sessions = 16
-bytes = 4194304
+rooms = 16
+sessions = 32
+bytes = 8388608
 pending_puts = 32
 pending_put_bytes = 1048576
-get_waiters = 16
-hello_slots = 16
+get_waiters = 48
+hello_slots = 32
 requests_per_second = 400
 request_burst = 800
 pair_slots = 4
