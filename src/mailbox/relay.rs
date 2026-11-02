@@ -328,6 +328,45 @@ struct Inner {
     trial_free: Vec<usize>,
     /// Salted address hashes → trials handed out to that address within 24 hours.
     minted: HashMap<[u8; 16], (usize, Instant)>,
+    /// Totals for the status page only: no address, room or token is kept with them.
+    stats: Stats,
+}
+#[derive(Default)]
+struct Stats {
+    /// Admitted requests in the current and the previous minute.
+    minute: Option<Instant>,
+    this_minute: u64,
+    last_minute: u64,
+    /// Trial counts since the start of the current day of uptime.
+    day: Option<Instant>,
+    minted: u64,
+    full: u64,
+    limited: u64,
+}
+impl Stats {
+    fn request(&mut self) {
+        let now = Instant::now();
+        let start = *self.minute.get_or_insert(now);
+        if now.duration_since(start) >= Duration::from_secs(120) {
+            (self.this_minute, self.last_minute) = (0, 0);
+            self.minute = Some(now);
+        } else if now.duration_since(start) >= Duration::from_secs(60) {
+            self.last_minute = std::mem::take(&mut self.this_minute);
+            self.minute = Some(start + Duration::from_secs(60));
+        }
+        self.this_minute += 1;
+    }
+    fn today(&mut self) -> &mut Self {
+        let now = Instant::now();
+        if self
+            .day
+            .is_none_or(|start| now.duration_since(start) >= DAY)
+        {
+            (self.minted, self.full, self.limited) = (0, 0, 0);
+            self.day = Some(now);
+        }
+        self
+    }
 }
 /// A namespace of rooms with its own quotas; one or more tokens lead into it.
 struct Tenant {
@@ -348,6 +387,9 @@ pub struct Relay {
     salt: [u8; 32],
     counts: Arc<Counts>,
     trial: Option<Trial>,
+    started: Instant,
+    /// The listener's connection slots and their number, once serving.
+    connections: std::sync::OnceLock<(Arc<tokio::sync::Semaphore>, usize)>,
     inner: Mutex<Inner>,
 }
 type Failure = StatusCode;
@@ -493,6 +535,7 @@ impl Relay {
                 trial_spaces: HashMap::new(),
                 trial_free,
                 minted: HashMap::new(),
+                stats: Stats::default(),
             }),
             limits,
             tenants,
@@ -501,6 +544,8 @@ impl Relay {
             salt,
             counts: Arc::default(),
             trial,
+            started: Instant::now(),
+            connections: std::sync::OnceLock::new(),
         }))
     }
     pub fn router(self: &Arc<Self>, stop: CancellationToken) -> Router {
@@ -530,6 +575,8 @@ impl Relay {
             )
             .route("/v1/box/{room}/{session}/{direction}", get(get_records))
             .route("/v1/trial", axum::routing::post(mint_trial))
+            .route("/v1/status", get(status_json))
+            .route("/status", get(status_page))
             .route("/v1/pair", axum::routing::post(slots::open_pair))
             .route("/v1/pair/{slot}", axum::routing::delete(slots::close_pair))
             .route(
@@ -675,6 +722,7 @@ impl Relay {
         }
         inner.global_rate.tokens -= 1.0;
         inner.rates[tenant].tokens -= 1.0;
+        inner.stats.request();
         Ok(tenant)
     }
     /// A trial token this relay signed and that has not ended.
@@ -721,6 +769,63 @@ impl Relay {
             }
         }
     }
+    /// Lets the status page compare the connections in use with the listener's limit.
+    pub fn watch_connections(&self, slots: Arc<tokio::sync::Semaphore>, maximum: usize) {
+        let _ = self.connections.set((slots, maximum));
+    }
+    /// Totals for the public status page: how busy the relay is, never who uses it.
+    pub fn status(&self) -> serde_json::Value {
+        let mut inner = self.inner.lock().unwrap();
+        let rooms = inner.rooms.len();
+        let sessions: usize = inner.rooms.values().map(|room| room.sessions.len()).sum();
+        let stats = inner.stats.today();
+        let (minted, full, limited) = (stats.minted, stats.full, stats.limited);
+        let trial = self.trial.as_ref().map(|trial| {
+            serde_json::json!({
+                "spaces_in_use": inner.trial_spaces.len(),
+                "max_spaces": trial.max_spaces,
+                "until": super::trial::day(trial.until.saturating_sub(1)),
+                "open": unix_now() < trial.until,
+                "handed_out_today": minted,
+                "refused_full_today": full,
+                "refused_address_today": limited,
+            })
+        });
+        // A full minute when one has passed, else the running one.
+        let per_minute = if inner.stats.last_minute > 0 {
+            inner.stats.last_minute
+        } else {
+            inner.stats.this_minute
+        };
+        drop(inner);
+        let connections = self.connections.get().map(|(slots, maximum)| {
+            serde_json::json!({
+                "in_use": maximum.saturating_sub(slots.available_permits()),
+                "max": maximum,
+            })
+        });
+        let used = |value: &Option<serde_json::Value>, now: &str, max: &str| {
+            value.as_ref().map_or(0.0, |v| {
+                v[now].as_f64().unwrap_or(0.0) / v[max].as_f64().unwrap_or(1.0).max(1.0)
+            })
+        };
+        let load = used(&connections, "in_use", "max")
+            .max(used(&trial, "spaces_in_use", "max_spaces"))
+            .max(rooms as f64 / self.limits.rooms as f64);
+        serde_json::json!({
+            "state": if load >= 0.95 { "full" } else if load >= 0.7 { "busy" } else { "ok" },
+            "version": env!("CARGO_PKG_VERSION"),
+            "uptime_seconds": self.started.elapsed().as_secs(),
+            "connections": connections,
+            "rooms": {"in_use": rooms, "max": self.limits.rooms},
+            "sessions": sessions,
+            "waiting_reads": self.counts.gets.load(Ordering::SeqCst),
+            "buffered_bytes": self.counts.bytes.load(Ordering::SeqCst),
+            "requests_per_minute": per_minute,
+            "memory_mb": memory_mb(),
+            "trial": trial,
+        })
+    }
     /// A new trial: a host and a client token of a fresh space, for the asking address.
     fn mint(&self, peer: Option<IpAddr>) -> Answer<serde_json::Value> {
         let Some(trial) = &self.trial else {
@@ -738,6 +843,7 @@ impl Relay {
         inner.door_rate.tokens -= 1.0;
         // A full relay refuses before counting, so trying again later costs nothing.
         if inner.trial_free.is_empty() {
+            inner.stats.today().full += 1;
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
         if trial.per_address_per_day > 0 {
@@ -760,10 +866,12 @@ impl Relay {
                 *entry = (0, Instant::now());
             }
             if entry.0 >= trial.per_address_per_day {
+                inner.stats.today().limited += 1;
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
             entry.0 += 1;
         }
+        inner.stats.today().minted += 1;
         drop(inner);
         let mut space = [0u8; 16];
         getrandom::getrandom(&mut space).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
@@ -1153,6 +1261,102 @@ impl Relay {
     }
 }
 
+/// Resident memory of this process, from /proc where there is one.
+fn memory_mb() -> Option<u64> {
+    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    Some(pages * 4096 / (1024 * 1024))
+}
+/// `GET /v1/status`: the relay's totals as JSON, for anyone.
+async fn status_json(State(relay): State<Arc<Relay>>) -> Response {
+    let mut response = relay.response(StatusCode::OK, Body::from(relay.status().to_string()));
+    response
+        .headers_mut()
+        .insert("content-type", "application/json".parse().unwrap());
+    response
+}
+/// `GET /status`: the same totals as a page that refreshes itself, without scripts.
+async fn status_page(State(relay): State<Arc<Relay>>) -> Response {
+    let status = relay.status();
+    let row =
+        |label: &str, value: String| format!("<tr><th>{label}</th><td>{}</td></tr>", html(&value));
+    let pair = |value: &serde_json::Value| match value {
+        serde_json::Value::Null => "–".to_owned(),
+        v => format!("{} / {}", v["in_use"], v["max"]),
+    };
+    let (word, colour) = match status["state"].as_str() {
+        Some("full") => ("voll / full", "#c0266d"),
+        Some("busy") => ("ausgelastet / busy", "#c9a227"),
+        _ => ("in Ordnung / ok", "#16a6b6"),
+    };
+    let mut rows = vec![
+        row("Verbindungen / connections", pair(&status["connections"])),
+        row("Räume / rooms", pair(&status["rooms"])),
+        row("Sitzungen / sessions", status["sessions"].to_string()),
+        row(
+            "Anfragen pro Minute / requests per minute",
+            status["requests_per_minute"].to_string(),
+        ),
+        row(
+            "Wartende Abrufe / waiting reads",
+            status["waiting_reads"].to_string(),
+        ),
+        row(
+            "Speicher / memory",
+            status["memory_mb"]
+                .as_u64()
+                .map_or("–".into(), |mb| format!("{mb} MB")),
+        ),
+        row(
+            "Laufzeit / uptime",
+            format!(
+                "{} h",
+                status["uptime_seconds"].as_u64().unwrap_or(0) / 3600
+            ),
+        ),
+    ];
+    let trial = &status["trial"];
+    if !trial.is_null() {
+        rows.push(row(
+            "Test-Zugänge belegt / trial spaces",
+            format!("{} / {}", trial["spaces_in_use"], trial["max_spaces"]),
+        ));
+        rows.push(row(
+            "Heute vergeben / handed out today",
+            format!(
+                "{} (abgelehnt voll / refused full: {}, je Adresse / per address: {})",
+                trial["handed_out_today"],
+                trial["refused_full_today"],
+                trial["refused_address_today"]
+            ),
+        ));
+        rows.push(row(
+            "Test-Relay bis / trial until",
+            trial["until"].as_str().unwrap_or("").to_owned(),
+        ));
+    }
+    let page = format!(
+        "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"refresh\" content=\"15\"><title>k-lani-link relay status</title><style>body{{font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px 16px;background:#0f1115;color:#e8eaed}}main{{max-width:640px;margin:auto}}h1{{font-size:20px;margin:0 0 4px}}p{{color:#9aa0a6;margin:0 0 20px}}.state{{display:inline-block;padding:4px 12px;border-radius:4px;font-weight:700;color:#0f1115;background:{colour}}}table{{width:100%;border-collapse:collapse;margin-top:20px}}th,td{{text-align:left;padding:8px 4px;border-bottom:1px solid #2a2e35}}th{{font-weight:400;color:#9aa0a6}}td{{text-align:right;font-variant-numeric:tabular-nums}}</style></head><body><main><h1>k-lani-link relay</h1><p>Nur Summen, keine Adressen oder Inhalte. Aktualisiert sich alle 15 s. / Totals only, no addresses or content. Refreshes every 15 s.</p><span class=\"state\">{word}</span><table>{}</table><p style=\"margin-top:20px\">Version {}</p></main></body></html>",
+        rows.concat(),
+        html(status["version"].as_str().unwrap_or("")),
+    );
+    let mut response = relay.response(StatusCode::OK, Body::from(page));
+    let headers = response.headers_mut();
+    headers.insert("content-type", "text/html; charset=utf-8".parse().unwrap());
+    headers.insert(
+        "content-security-policy",
+        "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"
+            .parse()
+            .unwrap(),
+    );
+    response
+}
+fn html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
 /// `POST /v1/trial`: a host and a client token of a new trial space, as JSON.
 async fn mint_trial(State(relay): State<Arc<Relay>>, Peer(peer): Peer) -> Response {
     match relay.mint(peer) {

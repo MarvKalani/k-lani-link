@@ -7,6 +7,9 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Relay status page: `/status` (refreshing every 15 s) and `/v1/status` (JSON) show
+  totals only: connections, rooms, sessions, requests per minute, memory, uptime and
+  trials in use, handed out and refused today. No address, token or content.
 - Free trial access: a relay with a `[trial]` section hands out a host and a client
   token of a new space on `POST /v1/trial`, signed with its own secret and checked by
   recomputation, so it stores no trial token. Trials end on a fixed date, are limited

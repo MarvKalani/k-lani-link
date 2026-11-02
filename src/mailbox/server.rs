@@ -438,16 +438,32 @@ pub async fn serve(
     stop: CancellationToken,
 ) -> Result<()> {
     let router = relay.router(stop.clone());
-    serve_router(listener, router, tls, maximum, http1_only, stop).await
+    let slots = Arc::new(Semaphore::new(maximum.clamp(1, 8192)));
+    // The status page counts the connections in use against this limit.
+    relay.watch_connections(slots.clone(), maximum);
+    serve_router_with(listener, router, tls, slots, maximum, http1_only, stop).await
 }
 /// Bounds for HTTP/2 connections. Each request still passes the relay's own admission
 /// limits (waiting GETs, pending PUTs, rate), which apply per stream, not per connection.
 const H2_STREAMS: u32 = 64;
 const H2_HEADER_BYTES: u32 = 16 * 1024;
+#[cfg(test)]
 pub(crate) async fn serve_router(
     listener: TcpListener,
     router: axum::Router,
     tls: Option<axum_server::tls_rustls::RustlsConfig>,
+    maximum: usize,
+    http1_only: bool,
+    stop: CancellationToken,
+) -> Result<()> {
+    let slots = Arc::new(Semaphore::new(maximum.clamp(1, 8192)));
+    serve_router_with(listener, router, tls, slots, maximum, http1_only, stop).await
+}
+async fn serve_router_with(
+    listener: TcpListener,
+    router: axum::Router,
+    tls: Option<axum_server::tls_rustls::RustlsConfig>,
+    slots: Arc<Semaphore>,
     maximum: usize,
     http1_only: bool,
     stop: CancellationToken,
@@ -462,9 +478,7 @@ pub(crate) async fn serve_router(
         closing.cancelled().await;
         close.graceful_shutdown(Some(Duration::from_secs(2)));
     });
-    let acceptor = Limited {
-        slots: Arc::new(Semaphore::new(maximum)),
-    };
+    let acceptor = Limited { slots };
     let socket = listener.into_std()?;
     let result = if let Some(tls) = tls {
         let mut inner = (*tls.get_inner()).clone();

@@ -1485,4 +1485,10 @@ async fn trial_tokens_share_a_space_cannot_be_forged_and_stay_within_their_bound
     );
     // Without trial settings the route does not exist.
     assert_eq!(server().mint(home), Err(StatusCode::NOT_FOUND));
+    // The status page counts only totals: what was handed out and refused today.
+    let status = relay.status();
+    assert_eq!(status["trial"]["handed_out_today"], 2);
+    assert_eq!(status["trial"]["refused_address_today"], 1);
+    assert!(status["trial"]["refused_full_today"].as_u64().unwrap() >= 1);
+    assert!(!status.to_string().contains("203.0.113"));
 }

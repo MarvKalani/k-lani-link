@@ -161,6 +161,15 @@ in memory for a day and needs client addresses, so not with `behind_tls_proxy`. 
 without `[trial]` (and the PHP and Cloudflare relays) answer `404`; `offer-https` then
 asks for your own tokens.
 
+### Status page
+
+`https://<relay>/status` shows how busy the relay is, refreshing every 15 seconds, and
+`/v1/status` gives the same as JSON: connections in use against `max_connections`, rooms,
+sessions, requests in the last minute, waiting reads, the relay's memory, uptime and, with
+`[trial]`, trial spaces in use and trials handed out or refused today. Both are public and
+hold totals only: no address, token, room or content. The counts live in memory and start
+again with the relay.
+
 ## Issue and transfer paired endpoint state
 
 Run issuance **once**, in a new private directory on a trusted computer:
