@@ -1,6 +1,6 @@
 //! Host only: the operator's model catalog behind `model_control_socket`, which model of it
 //! is loaded, and loading another one when a request names it (`load_on_demand`).
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, bail};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
@@ -11,6 +11,7 @@ pub const OVERTAKE_LIMIT: usize = 8;
 pub const OVERTAKE_SECONDS: u64 = 30;
 /// A catalog read never waits for a model to load: it is answered from the last snapshot.
 const SNAPSHOT_SECONDS: u64 = 5;
+#[cfg(unix)]
 const REPLY_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -83,7 +84,7 @@ async fn call(socket: &Path, post: Option<Value>, timeout: Option<Duration>) -> 
     let status = response.status();
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await? {
-        ensure!(
+        anyhow::ensure!(
             bytes.len() + chunk.len() <= REPLY_BYTES,
             "model supervisor reply too large"
         );

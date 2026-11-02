@@ -157,11 +157,21 @@ impl Routes {
     /// `GET /v1/models` across all backends whose privacy profile passed. With
     /// `load_on_demand` the primary contributes every allowlisted model, loaded or not.
     pub async fn model_list(&self) -> Result<Vec<u8>> {
-        let managed = self
+        let mut managed = self
             .config
             .load_on_demand
             .then(|| self.managed.lock().unwrap().clone())
             .flatten();
+        // A list asked for before the host's first look at the catalog asks for itself.
+        if let (true, None, Some(socket)) = (
+            self.config.load_on_demand,
+            &managed,
+            &self.config.model_control_socket,
+        ) && let Ok(snapshot) = crate::on_demand::snapshot(socket).await
+        {
+            *self.managed.lock().unwrap() = Some(snapshot.clone());
+            managed = Some(snapshot);
+        }
         let mut data: Vec<Value> = managed.as_ref().map(|s| s.entries()).unwrap_or_default();
         if self.is_routed() || managed.is_none() {
             let catalog = self.catalog().await;
