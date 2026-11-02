@@ -58,6 +58,18 @@ impl Connection {
             gateway: None,
         }
     }
+    /// The last day of a free trial on its relay (UTC), read from its trial token.
+    fn trial_until(&self) -> Option<String> {
+        let path = &self.config.https.as_ref()?.admission_token_file;
+        let mut token = String::new();
+        std::io::Read::read_to_string(
+            &mut std::io::Read::take(std::fs::File::open(path).ok()?, 512),
+            &mut token,
+        )
+        .ok()?;
+        let expires = crate::mailbox::trial::expiry(&token)?;
+        Some(crate::mailbox::trial::day(expires.saturating_sub(1)))
+    }
     /// Where its relay or signaling server is, for telling computers apart in the panel.
     fn label(&self) -> String {
         let address = self
@@ -680,7 +692,8 @@ async fn snapshot(panel: &Panel) -> Value {
             let phase = phase_of(panel, connection).await;
             computers.push(
                 json!({"id": connection.id, "label": connection.label(), "phase": phase,
-                "models": front::listed_by(&panel.catalog, &connection.id)}),
+                "models": front::listed_by(&panel.catalog, &connection.id),
+                "trial_until": connection.trial_until()}),
             );
         }
         let front_stopped = control

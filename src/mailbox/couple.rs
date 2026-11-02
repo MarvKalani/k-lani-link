@@ -29,7 +29,11 @@ use tokio::time::Instant;
 
 /// The relay a distribution was built for (`K_LANI_LINK_DEFAULT_RELAY` at build time).
 /// Public source builds have none and ask for the relay address.
-pub const DEFAULT_RELAY: Option<&str> = option_env!("K_LANI_LINK_DEFAULT_RELAY");
+pub const DEFAULT_RELAY: Option<&str> = match option_env!("K_LANI_LINK_DEFAULT_RELAY") {
+    // An unset CI variable arrives as an empty string.
+    Some(relay) if !relay.is_empty() => Some(relay),
+    _ => None,
+};
 /// How long a shown code stays usable; the relay drops the slot at the same time.
 pub const CODE_LIFETIME: Duration = Duration::from_secs(600);
 const PASSWORD_DIGITS: usize = 8;

@@ -83,6 +83,10 @@ jobs:
       - name: Native lint
         run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
       - name: Build portable executable
+        # The relay a release offers by default (repository variable DEFAULT_RELAY); tests
+        # above run without one.
+        env:
+          K_LANI_LINK_DEFAULT_RELAY: ${{ vars.DEFAULT_RELAY }}
         run: cargo build --release --locked --target ${{ matrix.target }} --bin k-lani-link
       - name: Verify executable and prepare artifact
         run: python deploy/portable/stage.py --target ${{ matrix.target }} --platform ${{ matrix.platform }}

@@ -27,6 +27,8 @@ const texts = {
     updatingDetail: 'k-lani-link restarts with the new version and opens a new tab. You can close this one.',
     computersTitle: 'Model computers', addComputer: '+ Add another model computer', back: 'Back',
     computersNote: 'The models of all computers appear under the same base URL and key. Each request goes only to the computer that offers its model.',
+    trialNote: 'Free test relay until {d}. After that you need your own relay, for example a free Cloudflare Worker.', trialLink: 'How to set it up',
+    trialUntil: 'test relay until {d}',
     removeComputer: 'Remove', removeSure: 'Really remove?', noModels: 'no models yet',
     pDenied: 'access refused', pUsed: 'new code needed', pRejected: 'not verified', pStopped: 'stopped',
     cancel: 'Cancel', readyTitle: 'Connected',
@@ -104,6 +106,8 @@ const texts = {
     updatingDetail: 'k-lani-link startet mit der neuen Version neu und öffnet einen neuen Tab. Diesen kannst du schließen.',
     computersTitle: 'Modellrechner', addComputer: '+ Weiteren Modellrechner hinzufügen', back: 'Zurück',
     computersNote: 'Die Modelle aller Rechner erscheinen unter derselben Basis-URL und demselben Schlüssel. Jede Anfrage geht nur an den Rechner, der ihr Modell anbietet.',
+    trialNote: 'Kostenloser Test-Relay bis {d}. Danach brauchst du einen eigenen Relay, zum Beispiel einen kostenlosen Cloudflare Worker.', trialLink: 'So richtest du ihn ein',
+    trialUntil: 'Test-Relay bis {d}',
     removeComputer: 'Entfernen', removeSure: 'Wirklich entfernen?', noModels: 'noch keine Modelle',
     pDenied: 'Zugang verweigert', pUsed: 'neuer Code nötig', pRejected: 'nicht geprüft', pStopped: 'angehalten',
     cancel: 'Abbrechen', readyTitle: 'Verbunden',
@@ -337,9 +341,20 @@ async function newCode() {
 const computerPhase = { connected: 'sConnected', connecting: 'sConnecting', recovering: 'sRecovering', disconnected: 'sProblem',
   denied: 'pDenied', rejected: 'pRejected', new_code_required: 'pUsed', stopped: 'pStopped' };
 let computerCount = 0;
+// "2027-02-02" → the date as people here write it.
+const trialDay = (day) => new Date(day + 'T12:00:00Z').toLocaleDateString(language, { dateStyle: 'long', timeZone: 'UTC' });
+const trialGuide = { de: 'https://github.com/MarvKalani/k-lani-link/blob/main/deploy/cloudflare-relay/ANLEITUNG.de.md',
+  en: 'https://github.com/MarvKalani/k-lani-link/blob/main/deploy/cloudflare-relay/README.md' };
 function showComputers(computers) {
   // Another computer brings other models.
   if (computers.length !== computerCount) { computerCount = computers.length; models = null; lastTest = 0; }
+  // The earliest end of a free trial among the pairings, with the way to an own relay.
+  const ends = computers.map((c) => c.trial_until).filter(Boolean).sort();
+  byId('trial-note').hidden = !ends.length;
+  if (ends.length) {
+    byId('trial-text').textContent = t('trialNote').replace('{d}', trialDay(ends[0]));
+    byId('trial-link').textContent = t('trialLink'); byId('trial-link').href = trialGuide[language] || trialGuide.en;
+  }
   const list = byId('computer-list');
   if (list.contains(document.activeElement) || list.querySelector('[data-sure]')) return;
   list.replaceChildren(...computers.map((computer, index) => {
@@ -349,7 +364,8 @@ function showComputers(computers) {
     name.textContent = (computers.length > 1 ? (index + 1) + ' · ' : '') + computer.label;
     const detail = document.createElement('small');
     const shown = (computer.models || []).map((id) => id.replace(/^.*[\\/]/, '').replace(/\.gguf(@\d+)?$/i, '$1'));
-    detail.textContent = t(computerPhase[computer.phase] || 'sProblem') + ' · ' + (shown.length ? shown.slice(0, 3).join(', ') + (shown.length > 3 ? ' …' : '') : t('noModels'));
+    detail.textContent = t(computerPhase[computer.phase] || 'sProblem') + ' · ' + (shown.length ? shown.slice(0, 3).join(', ') + (shown.length > 3 ? ' …' : '') : t('noModels'))
+      + (computer.trial_until ? ' · ' + t('trialUntil').replace('{d}', trialDay(computer.trial_until)) : '');
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary small'; remove.textContent = t('removeComputer');
     remove.addEventListener('click', () => {
       if (!remove.dataset.sure) {
