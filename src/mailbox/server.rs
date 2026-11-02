@@ -1,6 +1,6 @@
 //! Native TLS or an explicitly selected private listener behind a TLS proxy.
 use super::{
-    relay::{Access, Admit, Brake, Limits, Relay},
+    relay::{Access, Admit, Brake, Limits, Relay, Trial},
     secret,
 };
 use crate::diagnostic::Diagnostic;
@@ -117,6 +117,52 @@ fn day_end(text: &str) -> Option<u64> {
     let days = era * 146_097 + doe - 719_468;
     u64::try_from((days + 1) * 86_400).ok()
 }
+/// Self-service trial access for anyone (see `trial`): `POST /v1/trial` hands out a host
+/// and a client token of a new space; the relay checks them with `secret_file` alone.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrialSettings {
+    /// At least 32 random bytes (e.g. `k-lani-link new-code`); changing it ends all trials.
+    pub secret_file: PathBuf,
+    /// Last day any trial works, `YYYY-MM-DD` (UTC); from the next midnight none does.
+    pub until: String,
+    /// Length of one trial in days, at most until `until`.
+    #[serde(default = "trial_days")]
+    pub days: u64,
+    /// Trial spaces in use at once; beyond it, new trials are refused with 503.
+    #[serde(default = "trial_spaces")]
+    pub max_spaces: usize,
+    /// New trials per address (IPv6 per /64) within 24 hours.
+    #[serde(default = "trial_per_address")]
+    pub per_address_per_day: usize,
+    /// Limits of each trial space.
+    #[serde(default = "trial_limits")]
+    pub limits: Limits,
+}
+fn trial_days() -> u64 {
+    92
+}
+fn trial_spaces() -> usize {
+    100
+}
+fn trial_per_address() -> usize {
+    3
+}
+/// Small on purpose: two model computers' worth of rooms and a modest request rate.
+fn trial_limits() -> Limits {
+    Limits {
+        rooms: 4,
+        sessions: 8,
+        bytes: 4 * 1024 * 1024,
+        pending_puts: 32,
+        pending_put_bytes: 512 * 1024,
+        get_waiters: 16,
+        hello_slots: 16,
+        requests_per_second: 60,
+        request_burst: 200,
+        pair_slots: Some(2),
+    }
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
@@ -147,6 +193,8 @@ pub struct Settings {
     #[serde(default)]
     pub global: Limits,
     pub tokens: Vec<Admission>,
+    #[serde(default)]
+    pub trial: Option<TrialSettings>,
 }
 fn connections() -> usize {
     256
@@ -191,6 +239,11 @@ impl Settings {
                 admission.token_file = base.join(&admission.token_file);
             }
         }
+        if let Some(trial) = &mut config.trial
+            && trial.secret_file.is_relative()
+        {
+            trial.secret_file = base.join(&trial.secret_file);
+        }
         config.validate()?;
         Ok(config)
     }
@@ -229,6 +282,24 @@ impl Settings {
                 "failed_auth_per_minute needs 0..10000, ban 1..1440 minutes and no behind_tls_proxy",
             ));
         }
+        if let Some(trial) = &self.trial {
+            trial.limits.validate()?;
+            if day_end(&trial.until).is_none()
+                || !(1..=366).contains(&trial.days)
+                || !(1..=1000).contains(&trial.max_spaces)
+                || trial.per_address_per_day > 1000
+            {
+                return Err(Diagnostic::err(
+                    "trial needs `until` as YYYY-MM-DD, 1..366 days, 1..1000 spaces and at most 1000 per address",
+                ));
+            }
+            // A per-address cap needs the client's address, which a TLS proxy hides.
+            if self.behind_tls_proxy && trial.per_address_per_day > 0 {
+                return Err(Diagnostic::err(
+                    "trial per_address_per_day needs client addresses, not behind_tls_proxy",
+                ));
+            }
+        }
         Ok(())
     }
     pub fn relay(&self) -> Result<Arc<Relay>> {
@@ -245,13 +316,33 @@ impl Settings {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        Relay::with_access(
+        let trial = match &self.trial {
+            Some(trial) => {
+                let secret = secret(&trial.secret_file)?;
+                if secret.len() < 32 {
+                    return Err(Diagnostic::err(
+                        "trial secret must be at least 32 characters",
+                    ));
+                }
+                Some(Trial {
+                    key: super::trial::key(secret.as_bytes()),
+                    until: day_end(&trial.until).unwrap_or(0),
+                    days: trial.days,
+                    max_spaces: trial.max_spaces,
+                    per_address_per_day: trial.per_address_per_day,
+                    limits: trial.limits.clone(),
+                })
+            }
+            None => None,
+        };
+        Relay::with_trial(
             self.global.clone(),
             tokens,
             Brake {
                 failures_per_minute: self.failed_auth_per_minute,
                 ban: Duration::from_secs(self.failed_auth_ban_minutes * 60),
             },
+            trial,
         )
     }
     pub async fn tls(&self) -> Result<Option<axum_server::tls_rustls::RustlsConfig>> {

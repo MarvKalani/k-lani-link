@@ -7,6 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Free trial access: a relay with a `[trial]` section hands out a host and a client
+  token of a new space on `POST /v1/trial`, signed with its own secret and checked by
+  recomputation, so it stores no trial token. Trials end on a fixed date, are limited
+  per address and day and in number, and get small limits of their own. `offer-https`
+  without `--admission-token-file` takes such a trial and shows until when it works;
+  without `--relay-url` it uses the relay a release was built for.
 - Relay on Cloudflare Workers: `deploy/cloudflare-relay` runs the HTTPS mailbox relay in
   a free Cloudflare account, without a server. It keeps only sealed ciphertext, in memory
   only, with the same token rules, limits, pairing by code and failure brake as the PHP

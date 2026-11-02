@@ -1382,3 +1382,107 @@ async fn requests_without_a_token_cannot_use_up_the_tunnels_budget() {
     tokio::time::advance(Duration::from_secs(1)).await;
     assert!(relay.open_door(None).is_ok());
 }
+
+fn trial_relay(max_spaces: usize, until: u64) -> Arc<Relay> {
+    Relay::with_trial(
+        Limits::default(),
+        vec![Admit {
+            key: "a".repeat(43),
+            space: None,
+            limits: None,
+            access: Access::default(),
+        }],
+        Brake::default(),
+        Some(Trial {
+            key: super::super::trial::key(b"trial secret for the relay tests, 32+ bytes"),
+            until,
+            days: 92,
+            max_spaces,
+            per_address_per_day: 2,
+            limits: Limits {
+                rooms: 2,
+                ..Limits::default()
+            },
+        }),
+    )
+    .unwrap()
+}
+fn trial_bearer(token: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {token}").parse().unwrap());
+    headers
+}
+#[tokio::test(start_paused = true)]
+async fn trial_tokens_share_a_space_cannot_be_forged_and_stay_within_their_bounds() {
+    let month = unix_now() + 30 * 86_400;
+    let relay = trial_relay(1, month);
+    let home: Option<IpAddr> = Some("203.0.113.7".parse().unwrap());
+    let minted = relay.mint(home).unwrap();
+    let (host, client) = (
+        minted["host_token"].as_str().unwrap().to_owned(),
+        minted["client_token"].as_str().unwrap().to_owned(),
+    );
+    assert!(minted["expires"].as_u64().unwrap() <= month);
+    // Host and client token lead into the same trial space, never the owner's.
+    let space = relay.authorize(&trial_bearer(&host), home).unwrap();
+    assert_eq!(
+        relay.authorize(&trial_bearer(&client), home).unwrap(),
+        space
+    );
+    assert_ne!(space, 0);
+    let mut forged = host.clone().into_bytes();
+    let last = forged.len() - 2;
+    forged[last] = if forged[last] == b'A' { b'B' } else { b'A' };
+    assert_eq!(
+        relay.authorize(&trial_bearer(std::str::from_utf8(&forged).unwrap()), home),
+        Err(StatusCode::UNAUTHORIZED)
+    );
+    // The only trial space is in use: a new trial is refused without counting against
+    // the address, and a token of a never-used space gets no tenant either.
+    assert_eq!(relay.mint(home), Err(StatusCode::SERVICE_UNAVAILABLE));
+    let stranger = super::super::trial::seal(
+        &super::super::trial::key(b"trial secret for the relay tests, 32+ bytes"),
+        &super::super::trial::Grant {
+            role: super::super::trial::Role::Host,
+            space: [9; 16],
+            expires: month,
+        },
+    );
+    assert_eq!(
+        relay.authorize(&trial_bearer(&stranger), home),
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    );
+    // An idle space gives its tenant back; the next trial then fits. The address got one
+    // trial so far, so it may take one more today, not two.
+    tokio::time::advance(TRIAL_IDLE + Duration::from_secs(1)).await;
+    relay.sweep();
+    let second = relay.mint(home).unwrap();
+    assert!(
+        relay
+            .authorize(&trial_bearer(second["host_token"].as_str().unwrap()), home)
+            .is_ok()
+    );
+    tokio::time::advance(TRIAL_IDLE + Duration::from_secs(1)).await;
+    relay.sweep();
+    assert_eq!(relay.mint(home), Err(StatusCode::TOO_MANY_REQUESTS));
+    assert!(relay.mint(Some("198.51.100.4".parse().unwrap())).is_ok());
+    // A token past its end is refused, and an ended trial period hands out nothing.
+    let ended = super::super::trial::seal(
+        &super::super::trial::key(b"trial secret for the relay tests, 32+ bytes"),
+        &super::super::trial::Grant {
+            role: super::super::trial::Role::Client,
+            space: [3; 16],
+            expires: unix_now() - 1,
+        },
+    );
+    assert_eq!(
+        relay.authorize(&trial_bearer(&ended), home),
+        Err(StatusCode::UNAUTHORIZED)
+    );
+    assert_eq!(
+        trial_relay(1, unix_now() - 1).mint(home),
+        Err(StatusCode::GONE)
+    );
+    // Without trial settings the route does not exist.
+    assert_eq!(server().mint(home), Err(StatusCode::NOT_FOUND));
+}

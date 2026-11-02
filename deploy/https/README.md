@@ -137,6 +137,30 @@ The single-user limits in the example carried 1, 2 and 4 synthetic tunnels at 10
 tokens/s each without loss (`https-probe`, one machine, no WAN; p50 22 ms, p99 34 ms,
 slowest first token 0.12 s), so they restrict misuse without slowing one person down.
 
+### Free trial access for anyone (optional)
+
+A public relay can hand out trial access itself, so a newcomer needs no token from you:
+
+```toml
+[trial]
+secret_file = "trial-secret"   # k-lani-link new-code --out trial-secret; keep it private
+until = "2027-02-02"           # last day any trial works (UTC)
+days = 92                      # length of one trial, at most until `until`
+max_spaces = 100               # trials in use at once; beyond it new ones get 503
+per_address_per_day = 3        # new trials per address (IPv6 per /64) and day
+```
+
+`offer-https` without `--admission-token-file` then asks the relay (`POST /v1/trial`)
+for a host and a client token of a new space and shows until when they work. The relay
+signs these tokens with `secret_file` and checks them by recomputing the signature: it
+stores no trial token. Both tokens share one space with small limits (`[trial.limits]`,
+by default 4 rooms, 2 pairing slots, 60 requests/s); a space idle for five minutes gives
+its place back. Changing the secret ends every trial at once; after `until` the route
+answers `410` and every trial token `401`. The per-address count is kept as salted hashes
+in memory for a day and needs client addresses, so not with `behind_tls_proxy`. Relays
+without `[trial]` (and the PHP and Cloudflare relays) answer `404`; `offer-https` then
+asks for your own tokens.
+
 ## Issue and transfer paired endpoint state
 
 Run issuance **once**, in a new private directory on a trusted computer:

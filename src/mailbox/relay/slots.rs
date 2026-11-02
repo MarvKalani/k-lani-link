@@ -27,7 +27,7 @@ pub(super) fn door_limits() -> Limits {
 }
 
 pub(super) struct Slot {
-    tenant: usize,
+    pub(super) tenant: usize,
     created: Instant,
     parts: [Option<Bytes>; 4],
 }

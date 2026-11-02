@@ -109,6 +109,22 @@ pub struct Brake {
     pub failures_per_minute: u32,
     pub ban: Duration,
 }
+/// Self-service trial access (`super::trial`): tokens this relay signs and checks without
+/// storing them. Each trial gets a space of its own, mapped onto one of `max_spaces`
+/// prepared tenants while it is in use.
+pub struct Trial {
+    pub key: ring::hmac::Key,
+    /// Unix seconds from which no trial works any more, whatever its token says.
+    pub until: u64,
+    /// How long one trial lasts, at most until `until`.
+    pub days: u64,
+    pub max_spaces: usize,
+    /// New trials per address (IPv6 per /64) within 24 hours.
+    pub per_address_per_day: usize,
+    pub limits: Limits,
+}
+/// A trial space with no rooms, slots or requests for this long gives its tenant back.
+const TRIAL_IDLE: Duration = Duration::from_secs(300);
 /// Bounded bookkeeping: beyond this many addresses, failures are no longer tracked.
 const STRIKE_ENTRIES: usize = 4096;
 const DAY: Duration = Duration::from_secs(86_400);
@@ -307,6 +323,11 @@ struct Inner {
     slots: HashMap<u16, slots::Slot>,
     /// The tokenless side of the slots has its own budget, never the tunnels'.
     door_rate: Bucket,
+    /// Trial spaces in use: space → (tenant, last request).
+    trial_spaces: HashMap<[u8; 16], (usize, Instant)>,
+    trial_free: Vec<usize>,
+    /// Salted address hashes → trials handed out to that address within 24 hours.
+    minted: HashMap<[u8; 16], (usize, Instant)>,
 }
 /// A namespace of rooms with its own quotas; one or more tokens lead into it.
 struct Tenant {
@@ -326,6 +347,7 @@ pub struct Relay {
     brake: Brake,
     salt: [u8; 32],
     counts: Arc<Counts>,
+    trial: Option<Trial>,
     inner: Mutex<Inner>,
 }
 type Failure = StatusCode;
@@ -376,6 +398,14 @@ impl Relay {
         limits: Limits,
         admits: Vec<Admit>,
         brake: Brake,
+    ) -> anyhow::Result<Arc<Self>> {
+        Self::with_trial(limits, admits, brake, None)
+    }
+    pub fn with_trial(
+        limits: Limits,
+        admits: Vec<Admit>,
+        brake: Brake,
+        trial: Option<Trial>,
     ) -> anyhow::Result<Arc<Self>> {
         limits.validate()?;
         if admits.is_empty() || admits.len() > 64 {
@@ -433,6 +463,21 @@ impl Relay {
                 access: admit.access,
             });
         }
+        let mut trial_free = Vec::new();
+        if let Some(trial) = &trial {
+            trial.limits.validate()?;
+            if !(1..=1000).contains(&trial.max_spaces) {
+                return Err(Diagnostic::err("trial max_spaces must be 1..1000"));
+            }
+            for _ in 0..trial.max_spaces {
+                trial_free.push(tenants.len());
+                tenants.push(Tenant {
+                    name: None,
+                    limits: trial.limits.clone(),
+                    counts: Arc::default(),
+                });
+            }
+        }
         let mut salt = [0u8; 32];
         getrandom::getrandom(&mut salt).map_err(|_| Diagnostic::err("OS randomness failed"))?;
         Ok(Arc::new(Self {
@@ -445,6 +490,9 @@ impl Relay {
                 strikes: HashMap::new(),
                 slots: HashMap::new(),
                 door_rate: Bucket::new(&slots::door_limits()),
+                trial_spaces: HashMap::new(),
+                trial_free,
+                minted: HashMap::new(),
             }),
             limits,
             tenants,
@@ -452,6 +500,7 @@ impl Relay {
             brake,
             salt,
             counts: Arc::default(),
+            trial,
         }))
     }
     pub fn router(self: &Arc<Self>, stop: CancellationToken) -> Router {
@@ -480,6 +529,7 @@ impl Relay {
                 axum::routing::put(put_record).post(put_record),
             )
             .route("/v1/box/{room}/{session}/{direction}", get(get_records))
+            .route("/v1/trial", axum::routing::post(mint_trial))
             .route("/v1/pair", axum::routing::post(slots::open_pair))
             .route("/v1/pair/{slot}", axum::routing::delete(slots::close_pair))
             .route(
@@ -583,6 +633,8 @@ impl Relay {
             for seen in &mut inner.seen {
                 seen.retain(|_, first| first.elapsed() < DAY);
             }
+            inner.minted.retain(|_, (_, first)| first.elapsed() < DAY);
+            self.release_trials(inner);
             inner.strikes.retain(|_, strike| {
                 strike.started.elapsed() < Duration::from_secs(60)
                     || strike
@@ -603,11 +655,19 @@ impl Relay {
                 selected = Some(index);
             }
         }
+        let grant = selected
+            .is_none()
+            .then(|| self.trial_grant(header))
+            .flatten();
         let mut inner = self.inner.lock().unwrap();
-        let Some(index) = selected.filter(|&index| self.admits(&mut inner, index, peer)) else {
-            return Err(self.strike(&mut inner, peer));
+        let tenant = match (
+            selected.filter(|&index| self.admits(&mut inner, index, peer)),
+            grant,
+        ) {
+            (Some(index), _) => self.tokens[index].tenant,
+            (None, Some(grant)) => self.trial_tenant(&mut inner, &grant)?,
+            (None, None) => return Err(self.strike(&mut inner, peer)),
         };
-        let tenant = self.tokens[index].tenant;
         inner.global_rate.refill(&self.limits);
         inner.rates[tenant].refill(&self.tenants[tenant].limits);
         if inner.global_rate.tokens < 1.0 || inner.rates[tenant].tokens < 1.0 {
@@ -616,6 +676,115 @@ impl Relay {
         inner.global_rate.tokens -= 1.0;
         inner.rates[tenant].tokens -= 1.0;
         Ok(tenant)
+    }
+    /// A trial token this relay signed and that has not ended.
+    fn trial_grant(&self, header: Option<&str>) -> Option<super::trial::Grant> {
+        let trial = self.trial.as_ref()?;
+        let token = header?.trim().strip_prefix("Bearer ")?.trim();
+        let grant = super::trial::open(&trial.key, token)?;
+        (unix_now() < grant.expires.min(trial.until)).then_some(grant)
+    }
+    /// The tenant a trial space uses now; a new space takes a free one, if any is left.
+    fn trial_tenant(&self, inner: &mut Inner, grant: &super::trial::Grant) -> Answer<usize> {
+        if let Some((tenant, used)) = inner.trial_spaces.get_mut(&grant.space) {
+            *used = Instant::now();
+            return Ok(*tenant);
+        }
+        let tenant = inner
+            .trial_free
+            .pop()
+            .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        inner.rates[tenant] = Bucket::new(&self.tenants[tenant].limits);
+        inner
+            .trial_spaces
+            .insert(grant.space, (tenant, Instant::now()));
+        Ok(tenant)
+    }
+    /// Gives idle trial spaces' tenants back once nothing of theirs is left.
+    fn release_trials(&self, inner: &mut Inner) {
+        let idle: Vec<([u8; 16], usize)> = inner
+            .trial_spaces
+            .iter()
+            .filter(|(_, (_, used))| used.elapsed() >= TRIAL_IDLE)
+            .map(|(space, (tenant, _))| (*space, *tenant))
+            .collect();
+        for (space, tenant) in idle {
+            let counts = &self.tenants[tenant].counts;
+            let busy = inner.rooms.keys().any(|(t, _)| *t == tenant)
+                || inner.slots.values().any(|slot| slot.tenant == tenant)
+                || [Charge::Bytes, Charge::Put, Charge::PutBytes, Charge::Get]
+                    .iter()
+                    .any(|kind| counts.field(*kind).load(Ordering::SeqCst) != 0);
+            if !busy {
+                inner.trial_spaces.remove(&space);
+                inner.trial_free.push(tenant);
+            }
+        }
+    }
+    /// A new trial: a host and a client token of a fresh space, for the asking address.
+    fn mint(&self, peer: Option<IpAddr>) -> Answer<serde_json::Value> {
+        let Some(trial) = &self.trial else {
+            return Err(StatusCode::NOT_FOUND);
+        };
+        let now = unix_now();
+        if now >= trial.until {
+            return Err(StatusCode::GONE);
+        }
+        let mut inner = self.inner.lock().unwrap();
+        inner.door_rate.refill(&slots::door_limits());
+        if inner.door_rate.tokens < 1.0 {
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
+        inner.door_rate.tokens -= 1.0;
+        // A full relay refuses before counting, so trying again later costs nothing.
+        if inner.trial_free.is_empty() {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+        if trial.per_address_per_day > 0 {
+            let Some(ip) = peer else {
+                return Err(StatusCode::FORBIDDEN);
+            };
+            let mut hash = Sha256::new();
+            hash.update(self.salt);
+            hash.update(b"trial");
+            match subscriber(ip) {
+                IpAddr::V4(v4) => hash.update(v4.octets()),
+                IpAddr::V6(v6) => hash.update(v6.octets()),
+            }
+            let key: [u8; 16] = hash.finalize()[..16].try_into().unwrap();
+            if !inner.minted.contains_key(&key) && inner.minted.len() >= STRIKE_ENTRIES {
+                return Err(StatusCode::SERVICE_UNAVAILABLE);
+            }
+            let entry = inner.minted.entry(key).or_insert((0, Instant::now()));
+            if entry.1.elapsed() >= DAY {
+                *entry = (0, Instant::now());
+            }
+            if entry.0 >= trial.per_address_per_day {
+                return Err(StatusCode::TOO_MANY_REQUESTS);
+            }
+            entry.0 += 1;
+        }
+        drop(inner);
+        let mut space = [0u8; 16];
+        getrandom::getrandom(&mut space).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let expires = now
+            .saturating_add(trial.days.saturating_mul(86_400))
+            .min(trial.until);
+        let token = |role| {
+            super::trial::seal(
+                &trial.key,
+                &super::trial::Grant {
+                    role,
+                    space,
+                    expires,
+                },
+            )
+        };
+        Ok(serde_json::json!({
+            "host_token": token(super::trial::Role::Host),
+            "client_token": token(super::trial::Role::Client),
+            "expires": expires,
+        }))
     }
     /// Expiry, address networks and addresses per day. Without a known peer address,
     /// a token with address rules is refused.
@@ -981,6 +1150,20 @@ impl Relay {
             headers.insert("retry-after", "1".parse().unwrap());
         }
         response
+    }
+}
+
+/// `POST /v1/trial`: a host and a client token of a new trial space, as JSON.
+async fn mint_trial(State(relay): State<Arc<Relay>>, Peer(peer): Peer) -> Response {
+    match relay.mint(peer) {
+        Ok(minted) => {
+            let mut response = relay.response(StatusCode::CREATED, Body::from(minted.to_string()));
+            response
+                .headers_mut()
+                .insert("content-type", "application/json".parse().unwrap());
+            response
+        }
+        Err(status) => relay.response(status, Body::empty()),
     }
 }
 

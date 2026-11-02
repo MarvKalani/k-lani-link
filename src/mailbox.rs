@@ -6,6 +6,7 @@ pub mod relay;
 pub mod server;
 pub mod setup;
 pub mod transport;
+pub mod trial;
 
 use crate::diagnostic::Diagnostic;
 use serde::{Deserialize, Serialize};

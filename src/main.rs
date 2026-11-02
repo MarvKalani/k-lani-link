@@ -69,11 +69,13 @@ enum Command {
     OfferHttps {
         #[arg(long)]
         dir: PathBuf,
+        /// Omitted: the relay this build was made for, if any.
         #[arg(long)]
-        relay_url: String,
-        /// The host's relay admission token.
+        relay_url: Option<String>,
+        /// The host's relay admission token. Omitted: ask the relay for a free trial
+        /// (a host and a client token of a new space, valid until the date shown).
         #[arg(long)]
-        admission_token_file: PathBuf,
+        admission_token_file: Option<PathBuf>,
         /// The token the client receives; best a separate one in the same relay space, so a
         /// lost laptop can be revoked alone. Omitted: the client gets the host's token.
         #[arg(long)]
@@ -478,11 +480,57 @@ async fn run(cli: Cli) -> Result<()> {
             qr,
         } => {
             let cwd = std::env::current_dir()?;
+            let relay_url = relay_url
+                .or_else(|| k_lani_link::mailbox::couple::DEFAULT_RELAY.map(str::to_owned))
+                .ok_or_else(|| Diagnostic::err("name the relay with --relay-url"))?;
             let shown_relay = relay_url.clone();
+            // Without own tokens: a trial from the relay, kept in a private folder only until
+            // the pairing has copied them.
+            let mut trial_folder = None;
+            let (admission_token_file, client_admission_token_file) = match admission_token_file {
+                Some(file) => (
+                    cwd.join(file),
+                    client_admission_token_file.map(|p| cwd.join(p)),
+                ),
+                None => {
+                    let minted = k_lani_link::mailbox::trial::mint(
+                        &relay_url,
+                        ca_cert_file.as_ref().map(|p| cwd.join(p)).as_deref(),
+                        proxy_url.as_deref(),
+                    )
+                    .await?;
+                    let folder = std::env::temp_dir().join(format!(
+                        "k-lani-link-trial-{}",
+                        k_lani_link::config::random_id()?
+                    ));
+                    std::fs::create_dir(&folder)?;
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o700))?;
+                    }
+                    k_lani_link::config::private_file(
+                        &folder.join("host-token"),
+                        &minted.host_token,
+                    )?;
+                    k_lani_link::config::private_file(
+                        &folder.join("client-token"),
+                        &minted.client_token,
+                    )?;
+                    println!(
+                        "Free trial access on {relay_url} until {} (UTC). After that, use your own relay: https://github.com/MarvKalani/k-lani-link/tree/main/deploy/cloudflare-relay",
+                        k_lani_link::mailbox::trial::day(minted.expires.saturating_sub(1))
+                    );
+                    let files = (folder.join("host-token"), Some(folder.join("client-token")));
+                    trial_folder = Some(folder);
+                    files
+                }
+            };
+            let result = async {
             let options = k_lani_link::mailbox::Options {
                 relays: vec![relay_url],
                 state_dir: cwd.join("unused"),
-                admission_token_file: cwd.join(&admission_token_file),
+                admission_token_file: admission_token_file.clone(),
                 ca_cert_file: ca_cert_file.map(|p| cwd.join(p)),
                 proxy_url,
                 poll_wait_seconds: 25,
@@ -491,7 +539,7 @@ async fn run(cli: Cli) -> Result<()> {
                 post_writes: false,
             };
             let client_token = k_lani_link::mailbox::secret(
-                &cwd.join(client_admission_token_file.unwrap_or(admission_token_file)),
+                &client_admission_token_file.unwrap_or(admission_token_file),
             )?;
             let host = cwd.join(&dir).join("host").join("host.toml");
             let default_unused = if qr {
@@ -530,7 +578,7 @@ async fn run(cli: Cli) -> Result<()> {
                 println!(
                     "Anyone who photographs this code before the other computer connects could pair instead. Close this window once the other computer shows \"Connected\"."
                 );
-                return Ok(());
+                return anyhow::Ok(());
             }
             k_lani_link::mailbox::couple::offer(
                 &dir,
@@ -551,6 +599,13 @@ async fn run(cli: Cli) -> Result<()> {
                 "Paired. Start the host with: k-lani-link host --config {}",
                 host.display()
             );
+            anyhow::Ok(())
+            }
+            .await;
+            if let Some(folder) = trial_folder {
+                let _ = std::fs::remove_dir_all(folder);
+            }
+            result?;
         }
         Command::JoinHttps {
             dir,
