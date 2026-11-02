@@ -2,7 +2,7 @@
 
 **EUR 4.99 once per human user for all version 1.x releases. No subscription.**
 
-**Checkout remains paused while the purchase flow and terms are prepared. The source repository is public; existing 1.x licenses remain valid for k-lani-link.**
+**[Buy a license](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)** (Stripe checkout). The source repository is public; existing 1.x licenses remain valid for k-lani-link.
 · [Commercial terms](COMMERCIAL-LICENSE.md) · [BSL 1.1](LICENSE)
 
 The purchase is optional if the free production-use grant applies:

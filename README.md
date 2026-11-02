@@ -17,7 +17,7 @@
 The Docker ZIP contains the current source and launcher; build its images locally once. The EXE provides the transport only, without the OpenCode UI; source pushes do not rebuild published binaries. Docker Desktop / company-network acceptance is still pending.
 <!-- WINDOWS-DOWNLOADS:END -->
 
-> **MVP development snapshot:** Linux Docker deployment validated. License sales remain paused while the purchase flow is prepared.
+> **MVP development snapshot:** Linux Docker deployment validated. **[Buy a license for €4.99](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)**, once per person for all 1.x releases.
 
 ### Your AI, wherever you run it. Your apps, wherever you work.
 
@@ -220,7 +220,7 @@ group annual revenue below **USD 100,000**. For company work, the group's revenu
 applies. Non-production evaluation is permitted under the BSL regardless of
 those thresholds.
 
-**License sales remain paused while the purchase flow and terms are prepared.**
+**[Buy a license: €4.99 once](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)** (Stripe checkout; one seat per person)
 · [Free-use conditions and user definition](LICENSING.md)
 · [Commercial terms](COMMERCIAL-LICENSE.md)
 

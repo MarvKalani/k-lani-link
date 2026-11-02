@@ -17,7 +17,7 @@
 Das Docker-ZIP enthält den aktuellen Quellstand samt Starter; die Images werden einmalig lokal gebaut. Die EXE enthält nur den Transport, keine OpenCode-Oberfläche; normale Quellcode-Pushes erneuern sie nicht. Der Windows-/Firmennetz-Test des Docker-Profils steht noch aus.
 <!-- WINDOWS-DOWNLOADS:END -->
 
-> **MVP-Entwicklungsstand:** Linux-Docker-Installation geprüft. Der Lizenzverkauf bleibt während der Vorbereitung des Kaufablaufs pausiert.
+> **MVP-Entwicklungsstand:** Linux-Docker-Installation geprüft. **[Lizenz für 4,99 € kaufen](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)**, einmalig pro Person für alle Versionen 1.x.
 
 ### Deine KI auf einem Rechner deiner Wahl. Deine Anwendungen dort, wo du arbeitest.
 
@@ -235,7 +235,7 @@ unter **100.000 USD Gruppenjahresumsatz**. Bei Arbeit für ein Unternehmen zähl
 der Gruppenumsatz. Nichtproduktives Ausprobieren ist unter der BSL unabhängig
 von diesen Grenzen erlaubt.
 
-**Der Lizenzverkauf bleibt während der Vorbereitung von Kaufablauf und Vertragsunterlagen pausiert.**
+**[Lizenz kaufen: einmalig 4,99 €](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)** (Bezahlung über Stripe; ein Platz pro Person)
 · [Freigrenzen und Nutzerdefinition](LICENSING.md)
 · [Kommerzielle Lizenzbedingungen](COMMERCIAL-LICENSE.md)
 
