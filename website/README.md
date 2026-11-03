@@ -24,8 +24,9 @@ python3 -B deploy/thinkrail/preview.py --directory website --allow-inline --port
 ```
 
 The page and its four downloads are self-contained. Inline styles are allowed
-for GridCraft's HTML export; external connections remain blocked by the local
-server's CSP. The XLSX contains real formulas; its HTML export is a static document view.
+for GridCraft's HTML export; automatic external resource loads remain blocked by
+the local server's CSP. GitHub project links and the existing checkout are ordinary,
+user-initiated navigation. The XLSX contains real formulas; its HTML export is a static document view.
 All customer and invoice data is fictional.
 
 ## What the original run demonstrates
