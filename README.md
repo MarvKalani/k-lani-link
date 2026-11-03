@@ -178,6 +178,15 @@ own server. Connectivity uses the HTTPS access permitted by each network.
 · [Transport comparison](deploy/mailbox-bench/DECISION.md)
 · [Changelog](CHANGELOG.md).
 
+**For organizational use, policy must permit both the private model and the relay connection.**
+Have IT approve the relay hostname, endpoints and access rules. TLS inspection can see
+outer HTTP metadata; model content remains end-to-end encrypted.
+**[TLS-inspection laboratory: 17/17 scenarios passed](deploy/proxy-lab/RESULTS.md).**
+The real client, host and relay were tested with a synthetic model, including pairing,
+streaming, compatibility fallbacks, connection recovery and access revocation.
+[Reproduce the Docker lab](deploy/proxy-lab/README.md). Acceptance on a particular
+corporate gateway remains specific to that organization's configuration and policies.
+
 ## Start with Docker
 
 The current reference deployment targets **Linux x86_64 with Docker Compose**.

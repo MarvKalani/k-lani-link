@@ -35,6 +35,8 @@ jobs:
           done
           php deploy/php-relay/test_relay.php
       - run: python3 -B -m unittest discover -s deploy/portable -p 'test_*.py'
+      - name: Check proxy-lab policy boundaries (full Docker lab runs separately)
+        run: python3 -B -m unittest discover -s deploy/proxy-lab -p 'test_*.py'
       - run: python3 -B deploy/thinkrail/check-website.py
       - run: node --check website/main.js
       - run: node --check src/ui/app.js && node --check src/ui/chat.js && node --check src/ui/scan.js
