@@ -12,8 +12,9 @@ FILES = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "README.md", "README
     "LICENSE", "COMMERCIAL-LICENSE.md", "LICENSING.md", "QUICKSTART.md", "CHANGELOG.md", ".gitignore", ".dockerignore", ".gitattributes")
 SUFFIXES = {".rs", ".toml", ".lock", ".md", ".py", ".sh", ".ps1", ".cmd", ".json", ".yaml", ".yml", ".txt", ".patch", ".html", ".css", ".js", ".conf", ".webp"}
 SPECIAL = {"Dockerfile", "guard.Dockerfile", "link.Dockerfile", "basalt.Dockerfile", "ui.Dockerfile", "LICENSE", "BASE_COMMIT", ".env.example", "client.env.example"}
-# Only these reviewed synthetic documents are public binaries inside the archive.
-DEMO_BINARIES = {"website/examples/invoice.docx", "website/examples/invoice.pdf", "website/examples/ledger.xlsx"}
+# Only these reviewed synthetic documents and relay illustration are public binaries in the archive.
+DEMO_BINARIES = {"website/examples/invoice.docx", "website/examples/invoice.pdf", "website/examples/ledger.xlsx",
+    "website/assets/k-lani-link-relay-flow.gif"}
 # The reviewed PHP relay sources, including its two access-denying .htaccess files.
 PHP_RELAY = {"deploy/php-relay/" + name for name in (
     "k-lani-relay.php", "test_relay.php", "wordpress/k-lani-link-relay.php", "wordpress/relay.php",
