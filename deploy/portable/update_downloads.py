@@ -54,7 +54,6 @@ def block(release, german=False):
         base = f"{BASE}/releases/download/v{version}"
         asset = lambda suffix: f"{base}/k-lani-link-{version}-{suffix}"
         if german:
-            status = "Vorschau" if release.get("prerelease") else "Release"
             links = f"""**[⬇ Windows x64: EXE herunterladen]({asset('windows-x64.exe')})** · **[⬇ OpenCode + Docker: Setup-ZIP]({source})**
 
 | Was möchtest du nutzen? | Download | Anleitung |
@@ -63,11 +62,10 @@ def block(release, german=False):
 | Windows auf ARM, z. B. Snapdragon | [ARM64 EXE]({asset('windows-arm64.exe')}) · [ARM64 ZIP]({asset('windows-arm64.zip')}) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
 | OpenCode im Browser, isoliert mit `D:\\OpenCode` | [Aktuelles Docker-Setup als ZIP]({source}) | [Docker-Desktop-Einrichtung](deploy/desktop/README.md) |
 
-**Neueste veröffentlichte portable Version: {version} ({status}).**
+**Portable Windows-Pakete verfügbar.**
 [Versionshinweise]({BASE}/releases/tag/v{version}) · [Änderungen seit diesem Build]({BASE}/compare/v{version}...main) · [SHA-256-Prüfsummen]({base}/SHA256SUMS) · [macOS / Linux / alle Downloads]({BASE}/releases)
 """
         else:
-            status = "preview" if release.get("prerelease") else "release"
             links = f"""**[⬇ Download Windows x64 EXE]({asset('windows-x64.exe')})** · **[⬇ OpenCode + Docker setup ZIP]({source})**
 
 | What do you want to run? | Download | Instructions |
@@ -76,7 +74,7 @@ def block(release, german=False):
 | Windows on ARM, e.g. Snapdragon | [ARM64 EXE]({asset('windows-arm64.exe')}) · [ARM64 ZIP]({asset('windows-arm64.zip')}) | [Native setup](deploy/portable/README.md#windows-connect-to-a-remote-model) |
 | OpenCode in the browser, isolated with `D:\\OpenCode` | [Current Docker setup ZIP]({source}) | [Docker Desktop setup](deploy/desktop/README.md) |
 
-**Latest published portable version: {version} ({status}).**
+**Portable Windows packages available.**
 [Release notes]({BASE}/releases/tag/v{version}) · [Changes since this build]({BASE}/compare/v{version}...main) · [SHA-256 checksums]({base}/SHA256SUMS) · [macOS / Linux / all downloads]({BASE}/releases)
 """
     note = ("Das Docker-ZIP enthält den aktuellen Quellstand samt Starter; die Images werden einmalig lokal gebaut. "

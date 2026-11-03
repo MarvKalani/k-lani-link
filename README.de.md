@@ -3,21 +3,21 @@
 <!-- WINDOWS-DOWNLOADS:START -->
 ## Windows herunterladen
 
-**[⬇ Windows x64: EXE herunterladen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.1/k-lani-link-1.2611.2-preview.1-windows-x64.exe)** · **[⬇ OpenCode + Docker: Setup-ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip)**
+**[⬇ Windows x64: EXE herunterladen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-x64.exe)** · **[⬇ OpenCode + Docker: Setup-ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip)**
 
 | Was möchtest du nutzen? | Download | Anleitung |
 | --- | --- | --- |
-| Portable EXE für Intel-/AMD-PCs | [Windows x64 als ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.1/k-lani-link-1.2611.2-preview.1-windows-x64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
-| Windows auf ARM, z. B. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.1/k-lani-link-1.2611.2-preview.1-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.1/k-lani-link-1.2611.2-preview.1-windows-arm64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
+| Portable EXE für Intel-/AMD-PCs | [Windows x64 als ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-x64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
+| Windows auf ARM, z. B. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-arm64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
 | OpenCode im Browser, isoliert mit `D:\OpenCode` | [Aktuelles Docker-Setup als ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip) | [Docker-Desktop-Einrichtung](deploy/desktop/README.md) |
 
-**Neueste veröffentlichte portable Version: 1.2611.2-preview.1 (Vorschau).**
-[Versionshinweise](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2611.2-preview.1) · [Änderungen seit diesem Build](https://github.com/MarvKalani/k-lani-link/compare/v1.2611.2-preview.1...main) · [SHA-256-Prüfsummen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.1/SHA256SUMS) · [macOS / Linux / alle Downloads](https://github.com/MarvKalani/k-lani-link/releases)
+**Portable Windows-Pakete verfügbar.**
+[Versionshinweise](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2611.2-preview.2) · [Änderungen seit diesem Build](https://github.com/MarvKalani/k-lani-link/compare/v1.2611.2-preview.2...main) · [SHA-256-Prüfsummen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/SHA256SUMS) · [macOS / Linux / alle Downloads](https://github.com/MarvKalani/k-lani-link/releases)
 
 Das Docker-ZIP enthält den aktuellen Quellstand samt Starter; die Images werden einmalig lokal gebaut. Die EXE enthält nur den Transport, keine OpenCode-Oberfläche; normale Quellcode-Pushes erneuern sie nicht. Der Windows-/Firmennetz-Test des Docker-Profils steht noch aus.
 <!-- WINDOWS-DOWNLOADS:END -->
 
-> **MVP-Entwicklungsstand:** Linux-Docker-Installation geprüft. **[Lizenz für 4,99 € kaufen](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)**, einmalig pro Person für alle Versionen 1.x.
+> **Direkt nutzbar:** Verbinde deine KI-Anwendungen mit deinem gewählten Modellrechner. [Produktive Nutzung unter der Einkommens-/Umsatzgrenze kostenlos](LICENSING.md); darüber [einmalig 4,99 € pro Person](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802) für alle Versionen 1.x.
 
 ### Deine KI auf einem Rechner deiner Wahl. Deine Anwendungen dort, wo du arbeitest.
 
@@ -52,8 +52,8 @@ andere lokale Backends lassen sich ausdrücklich freigeben.
 | Antworten beim Entstehen sehen | Text, Reasoning und Tool-Aufrufe werden fortlaufend übertragen. Welche Funktionen nutzbar sind, bestimmen Backend und Anwendung. |
 | Modelle ohne erneute Kopplung wechseln | Die optionale Basalt-Verwaltung lädt und entlädt freigegebene Modelle, während der Tunnel verbunden bleibt. |
 | Mehrere Anfragen bedienen | Bis zu acht Streams pro Tunnel mit begrenzter Warteschlange; das Backend muss die gewählte Parallelität unterstützen. |
-| Inferenzverkehr zwischen deinen gewählten Gegenstellen halten | Authentifiziertes WebRTC mit zusätzlicher Inhaltsverschlüsselung. Der Vermittler erhält verschlüsselte Aufbaupakete; seine Verbindung endet, sobald der Tunnel steht. |
-| Infrastruktur selbst wählen | Eigene Vermittlungs- und STUN-Server konfigurieren. TURN ist standardmäßig aus und wird nur ausdrücklich aktiviert. |
+| Inferenzverkehr zwischen deinen gewählten Gegenstellen halten | Ende-zu-Ende-Inhaltsverschlüsselung in HTTPS- und WebRTC-Modus. Der HTTPS-Relay reicht Chiffretext weiter; bei WebRTC endet die Signalisierung nach dem Aufbau. |
+| Infrastruktur selbst wählen | HTTPS-Relay wählen oder eigene WebRTC-Vermittlungs- und STUN-Server konfigurieren. TURN für WebRTC ist standardmäßig aus und wird ausdrücklich aktiviert. |
 | Anwendungen isoliert betreiben | Die Docker-Vorlagen geben KI-Client und Modellserver keine Internetroute. Eigene Transportkomponenten stellen die Verbindung her. |
 | Ohne Aktivierungsdienst arbeiten | Keine Online-Lizenzprüfung, Geräteregistrierung oder laufende Lizenzgebühr für Version 1.x. |
 
@@ -67,8 +67,16 @@ flowchart LR
     subgraph B[Rechner B — dein KI-Standort]
         HOST[k-lani-link-Host] --> AI[KI-Backend in Docker]
     end
-    CLIENT <-->|Authentifizierter, verschlüsselter P2P-Tunnel| HOST
+    CLIENT <-->|Verschlüsselte Anfragen und Antworten| RELAY[Gewählter HTTPS-Relay]
+    RELAY <-->|Verschlüsselte Anfragen und Antworten| HOST
 ```
+
+Beide Rechner bauen ihre HTTPS-Verbindung ausgehend auf. Der Relay reicht dieselben
+verschlüsselten Pakete in beide Richtungen weiter. QUESTION ABC und ANSWER ABC stehen hier für
+verschlüsselte Nutzdaten. WebRTC ist ein gesonderter Verbindungsmodus.
+
+![Verschlüsselte QUESTION ABC zum Modell und ANSWER ABC zurück](website/assets/k-lani-link-relay-flow.gif)
+
 
 Unser Docker-Setup isoliert **zwei Anwendungscontainer**: den KI-Client auf der
 einen und den Inferenzserver auf der anderen Seite. Zusätzliche kleine Container
@@ -165,22 +173,19 @@ prüft Funktionen, keine Antwortqualität oder repräsentative Geschwindigkeit.
 [Ergebnisse und Grenzen](deploy/managed/validation-20261028.json)
 · [Test nachvollziehen](deploy/managed/README.md#reproduce-the-gpu-validation).
 
-**Entwicklungsstand:** Der [Vergleich von sieben Transportvarianten](deploy/mailbox-bench/DECISION.md)
-umfasst jetzt 63 kontrollierte Fälle mit 50/100 Token pro Sekunde, 1/10 Tunneln,
-60 Sekunden Last, Proxy-Pufferung und Wiederverbindung. Die ausgewählte Mailbox mit
-bestätigten Mehrfachabrufen ist jetzt als **ausdrückliche Quellcode-Vorschau** eingebunden:
-mit TLS-Prüfung, dauerhaftem Kopplungszustand und SSE-Weiterleitung durch Host/Gateway.
-[Privates HTTPS-Setup, Tests und Grenzen](deploy/https/README.md). Das Verbindungspanel
-koppelt per Code über HTTPS; eine WebRTC-Kopplung wechselt nie von selbst zu
-HTTPS. Den Relay bringst du selbst mit: als [kostenlosen Cloudflare Worker](deploy/cloudflare-relay/ANLEITUNG.de.md),
-auf [PHP-Webspace oder WordPress](deploy/php-relay/ANLEITUNG.de.md) oder als Rust-Relay auf einem Server.
-Die Vorschau ist weder ein öffentlicher Relay-Dienst
-noch eine Durchsatzzusage. [Umsetzungscheckliste](docs/HTTPS-IMPLEMENTATION.md)
-· [Unveränderter Übertragungsvertrag](docs/DESIGN-MAILBOX.md) · [Changelog](CHANGELOG.md).
-Die [Lasttests des tatsächlichen Anwendungspfads](deploy/https/RESULTS.md) zeigten zunächst
-einen Engpass in der Antwort-Flusskontrolle; nach der dokumentierten Korrektur laufen alle
-vier synthetischen Fälle mit 50/100 Token/s live durch. HTTPS bleibt ein privater Teststand,
-bis Abnahmetests mit echtem WAN, Proxy und echter Inferenz bestanden sind.
+**HTTPS über den gewählten Relay:** Beide Rechner bauen ausgehende HTTPS-Verbindungen
+zum Relay auf. Er reicht verschlüsselte Anfragen zum Modellrechner und verschlüsselte
+Antworten zurück. Der Inhalt bleibt zwischen den Gegenstellen verschlüsselt;
+die Modell-API muss nicht als eingehender Dienst im Internet erreichbar sein.
+Kopple die Rechner per Code im Verbindungspanel und verwende die lokale API
+in deiner KI-Anwendung. Eine WebRTC-Kopplung wechselt nicht automatisch zu HTTPS.
+
+Nutze den [Cloudflare Worker](deploy/cloudflare-relay/ANLEITUNG.de.md),
+[PHP-Webspace oder WordPress](deploy/php-relay/ANLEITUNG.de.md) oder den Rust-Relay
+auf einem eigenen Server. Die Verbindung verwendet den HTTPS-Zugang, den das jeweilige
+Netz erlaubt. [Einrichtung und Messungen](deploy/https/README.md)
+· [Transportvergleich](deploy/mailbox-bench/DECISION.md)
+· [Changelog](CHANGELOG.md).
 
 ## Mit Docker starten
 
@@ -205,8 +210,8 @@ Grenzen. Die Abnahme auf Windows/Docker Desktop und im echten Firmennetz steht n
 beschränkt OpenCode auf einen Projektordner und den lokalen k-lani-link-API-Port.
 Windows-Voraussetzungen und die aktuellen Shell-Grenzen stehen in der Anleitung.
 
-Beide Gegenstellen brauchen Netzwerkzugang. Über das Internet müssen ihre
-Netze direkten Peer-Verkehr zulassen; Internetzugang allein garantiert noch
+Im WebRTC-Modus brauchen beide Gegenstellen Netzwerkzugang. Ihre Netze müssen
+direkten Peer-Verkehr über das Internet zulassen; Internetzugang allein garantiert noch
 keine erfolgreiche NAT-Durchquerung. Scheitert die direkte ICE-Verbindung,
 **musst du derzeit einen eigenen TURN-Server mitbringen** und dessen Adresse
 und Zugangsdaten ausdrücklich konfigurieren. k-lani-link betreibt und liefert
@@ -223,13 +228,13 @@ für deine KI-App. Kleine Chatfenster im Kontrollfeld probieren das Modell direk
 ein Chat bleibt nur, solange sein Fenster offen ist, außer du speicherst ihn auf diesem
 Computer. Unter Windows und macOS zeigt ein Symbol in der Taskleiste bzw. Menüleiste
 den Zustand und bietet Öffnen, Pausieren und Beenden.
-Die ersten Downloads sind unsignierte Vorabversionen; Schutzsoftware oder
+Die portablen Downloads sind unsigniert; Schutzsoftware oder
 Unternehmensrichtlinien können sie blockieren. Der native Betrieb bietet keine
 Docker-Isolation der KI-Anwendungen.
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)
 · [Einrichtung, Plattformgrenzen und Prüfsummen](deploy/portable/README.md).
 
-## Einmalig 4,99 €. Alle Versionen 1.x.
+## Unter der Einkommens-/Umsatzgrenze kostenlos. Sonst einmalig 4,99 €.
 
 Eine Lizenz gilt für **eine Person**, auf beliebig vielen Geräten und in
 beliebig vielen Containern, einschließlich ihrer KI-Agenten. Teams kaufen einen
@@ -257,7 +262,7 @@ Das ist freiwillig und kauft oder ersetzt keine erforderliche Lizenz.
 
 ## Stand dieser Version
 
-Der öffentliche Branch `main` enthält den Entwicklungsstand eines MVPs. Pro Tunnel sind
+Pro Tunnel sind
 ein bis acht Streams mit begrenzter Warteschlange konfigurierbar (Standard: einer).
 Die optionale Basalt-Verwaltung wechselt vorab freigegebene Modelle, während der
 Tunnel verbunden bleibt. Gespeicherter KV-Zustand und Browser-Erweiterung fehlen
@@ -269,7 +274,7 @@ sich keine Leistung einer Verbindung zwischen zwei entfernten Netzen ableiten.
 
 Änderungen stehen in [CHANGELOG.md](CHANGELOG.md). Versionen mit Git-Tag und
 Downloads gehören auf [GitHub Releases](https://github.com/MarvKalani/k-lani-link/releases).
-Der aktuelle Quellcode ist ein MVP. Portable Builds haben eigene native CI-Prüfungen;
+Portable Builds haben eigene native CI-Prüfungen;
 veröffentlichte Versionen nennen Quellcode-Commit und Testgrenzen. Die
 [Anleitung für portable Builds](deploy/portable/README.md) erklärt Signaturstatus
 und Plattformunterstützung.
