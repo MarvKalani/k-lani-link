@@ -16,7 +16,7 @@ This is not a new inference run or a newly recorded demonstration.
 as well as the later changes. Original website files, artwork and recordings are
 retained in a private local archive. The unedited old video and GIFs are withdrawn.
 An [edited public excerpt](../assets/demo/README.md), published on 29 October,
-masks former name overlays and includes the original document previews. It is
+masks former name overlays and includes the original document views. It is
 explicitly labelled historical, with the operator's role and measurement limits.
 
 ```sh
@@ -24,8 +24,8 @@ python3 -B deploy/thinkrail/preview.py --directory website --allow-inline --port
 ```
 
 The page and its four downloads are self-contained. Inline styles are allowed
-for GridCraft's HTML export; external connections remain blocked by the preview
-server's CSP. The XLSX contains real formulas; its HTML export is a static preview.
+for GridCraft's HTML export; external connections remain blocked by the local
+server's CSP. The XLSX contains real formulas; its HTML export is a static document view.
 All customer and invoice data is fictional.
 
 ## What the original run demonstrates
@@ -48,3 +48,7 @@ benchmark is claimed.
 The PDF has one A4 page and the spreadsheet totals are EUR 1,280 net + EUR 256
 illustrative tax = EUR 1,536 gross. Previous browser rendering was checked at
 770/1280 pixels; a mobile viewport was not independently verified.
+
+## Product copy update, 3 November 2026
+
+Codex revised the current page and README product wording at the owner's request. The product is presented as usable, without an unfinished-release label. The page now explains the HTTPS relay and both traffic directions, includes the existing bird artwork, and states the income/group-revenue thresholds correctly. The animated relay graphic is produced in FilmCraft from operator-authored motion graphics; it is an explanation, not a packet capture. Historical release identifiers and working download addresses remain unchanged. The office example files are unchanged.

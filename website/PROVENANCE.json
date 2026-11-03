@@ -28,9 +28,10 @@
     "examples/invoice.pdf": "463f08896a2a109b35d2f7ebaefa82b3097591cb4a061ad4b6f8e4366254915c",
     "examples/ledger.html": "e34cd12b4a9dcd381a0aa9d76c27a32170d5ee3285bd76fc6de3f926be7cda59",
     "examples/ledger.xlsx": "446861287b80a0e6283b37bec63cc90272f7a5f6b6c9c80d543920e4efb351ea",
-    "index.html": "03128a4ab48426b92941b273d79e59af3033c26cadb663c29c8a7f3ddfcb587f",
+    "index.html": "b30f5795a435d359ab2df58b58b59694cd52ea32eb99894a40b8b8fb6f31d09d",
     "main.js": "19a0ab8b0dd8ba8f670ba2b10ee7dd46b5b273ae243f8e2887544434f9e56d85",
-    "styles.css": "dd18b2d6bb386387edd290bf0f332de093be60793999ea8cfadc084dcfdd6aaa"
+    "styles.css": "4477f4977bc0beb64ba49bb995523b5d49d72ec91a746d945dc9e17a265a8f41",
+    "assets/k-lani-link-relay-flow.gif": "12f297ca1627782353442a22081a6676f5f3cdd09e7796f2e1901bb5c3376c2f"
   },
   "post_generation_changes": {
     "date": "2026-10-28",
@@ -44,5 +45,18 @@
     "documents_changed": false,
     "originals": "Preserved in a private local archive; not part of the new source snapshot.",
     "recording_status": "Unedited historical media remains private. A labelled public archive edit published 2026-10-29 masks former name overlays and provider badges; see assets/demo/README.md. No new inference run claimed."
+  },
+  "product_copy_update": {
+    "date": "2026-11-03",
+    "operator": "Codex, at the project owner request",
+    "changes": [
+      "Current product copy describes usable software, with published release identifiers and working asset addresses preserved.",
+      "HTTPS relay forwarding is shown in both directions: QUESTION ABC and ANSWER ABC keep their identity through the relay.",
+      "Official bird artwork is retained. The animation is operator-authored motion graphics, exported through FilmCraft.",
+      "Free production use is stated with the personal annual gross income and organizational consolidated group annual gross revenue thresholds.",
+      "WebRTC and HTTPS descriptions distinguish the two connection modes."
+    ],
+    "documents_changed": false,
+    "new_model_workflow_claimed": false
   }
 }

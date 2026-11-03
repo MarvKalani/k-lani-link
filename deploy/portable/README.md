@@ -244,7 +244,7 @@ tunnel does not require a new session.
 
 ## Downloads, signatures and security software
 
-The first portable builds are **unsigned previews**, without Windows publisher
+The portable downloads are **unsigned**, without Windows publisher
 signing or Apple Developer ID notarization. On Apple Silicon a linker-generated
 ad-hoc signature may be present; it does not identify a verified publisher.
 SmartScreen, Gatekeeper or company policy may warn or block these downloads.
@@ -303,7 +303,7 @@ auditable; byte-for-byte reproducibility across machines has not been establishe
 
 `Update download links` refreshes the marked blocks in both READMEs when a release
 is published, edited, withdrawn or deleted. It reads all published releases,
-including previews, and chooses the most recently published complete Windows
+including every published release channel, and chooses the most recently published complete Windows
 package set with `SHA256SUMS`. Drafts and partial uploads are never advertised.
 The separate Docker setup link always downloads `main`; it is a source/setup ZIP,
 not a prebuilt Docker image or a replacement for the published executable.
@@ -319,5 +319,5 @@ the job fails visibly. It never force-pushes, creates a branch or changes releas
 To refresh locally, run `python3 -B deploy/portable/update_downloads.py` and review
 the README diff. Run its fixture tests with
 `python3 -B -m unittest discover -s deploy/portable -p 'test_*.py'`.
-GitHub's generic `/releases/latest` excludes previews, so it cannot serve as the
-sole download link while this project distributes preview builds.
+GitHub's generic `/releases/latest` can omit published packages based on release metadata.
+The updater therefore reads the release list and selects complete uploaded packages.
