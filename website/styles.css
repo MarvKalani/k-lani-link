@@ -283,3 +283,17 @@ footer p { margin: 0 0 8px; }
   body { background: #fff; color: #111; }
   .card, .claims, .flow { break-inside: avoid; }
 }
+
+.relay-diagram { margin: 24px 0; }
+.relay-diagram img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.relay-diagram figcaption {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}

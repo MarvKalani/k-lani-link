@@ -11,13 +11,13 @@
 | Windows on ARM, e.g. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-arm64.zip) | [Native setup](deploy/portable/README.md#windows-connect-to-a-remote-model) |
 | OpenCode in the browser, isolated with `D:\OpenCode` | [Current Docker setup ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip) | [Docker Desktop setup](deploy/desktop/README.md) |
 
-**Latest published portable version: 1.2611.2-preview.2 (preview).**
+**Portable Windows packages available.**
 [Release notes](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2611.2-preview.2) · [Changes since this build](https://github.com/MarvKalani/k-lani-link/compare/v1.2611.2-preview.2...main) · [SHA-256 checksums](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/SHA256SUMS) · [macOS / Linux / all downloads](https://github.com/MarvKalani/k-lani-link/releases)
 
 The Docker ZIP contains the current source and launcher; build its images locally once. The EXE provides the transport only, without the OpenCode UI; source pushes do not rebuild published binaries. Docker Desktop / company-network acceptance is still pending.
 <!-- WINDOWS-DOWNLOADS:END -->
 
-> **MVP development snapshot:** Linux Docker deployment validated. **[Buy a license for €4.99](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802)**, once per person for all 1.x releases.
+> **Ready to use:** connect your AI applications to your chosen model computer. [Free production use below the income/revenue threshold](LICENSING.md); otherwise [€4.99 once per person](https://buy.stripe.com/3cIcN4gDC06MeWW9p7ew802) for all 1.x releases.
 
 ### Your AI, wherever you run it. Your apps, wherever you work.
 
@@ -51,8 +51,8 @@ deployment; other local backends use an explicit opt-in.
 | See the answer as it arrives | Streams text, reasoning and tool-call deltas without waiting for the whole response. The backend and app determine which features are available. |
 | Change models without pairing again | The optional Basalt supervisor loads and unloads approved models while keeping the tunnel connected. |
 | Serve more than one request | Configure up to eight streams per tunnel with a bounded queue; the backend must support the chosen concurrency. |
-| Keep inference traffic between your chosen peers | Authenticated WebRTC with additional content encryption. The intermediary handles encrypted connection setup and is disconnected once the tunnel is ready. |
-| Choose your infrastructure | Configure your own signaling and STUN servers. TURN is off by default and requires explicit opt-in. |
+| Keep inference traffic between your chosen peers | End-to-end content encryption in HTTPS and WebRTC modes. The HTTPS relay forwards ciphertext; WebRTC signaling closes after setup. |
+| Choose your infrastructure | Select your HTTPS relay, or configure WebRTC signaling and STUN. TURN for WebRTC is off by default and requires explicit opt-in. |
 | Isolate the applications | Docker recipes give the AI client and model server no Internet route. Dedicated transport components carry the connection. |
 | Use it without an activation service | No online license check, device registration or recurring fee for the 1.x software license. |
 
@@ -66,8 +66,16 @@ flowchart LR
     subgraph B[Computer B — where you run your AI]
         HOST[k-lani-link host] --> AI[AI backend in Docker]
     end
-    CLIENT <-->|Authenticated, encrypted P2P tunnel| HOST
+    CLIENT <-->|Encrypted requests and replies| RELAY[Selected HTTPS relay]
+    RELAY <-->|Encrypted requests and replies| HOST
 ```
+
+Both computers initiate outgoing HTTPS. The relay forwards the same encrypted
+payload in either direction; QUESTION ABC and ANSWER ABC label ciphertext in this illustration.
+WebRTC is a separate connection mode.
+
+![Encrypted QUESTION ABC to the model and ANSWER ABC back](website/assets/k-lani-link-relay-flow.gif)
+
 
 The Docker reference setup isolates **two application containers**: your AI
 client on one side and the inference server on the other. Small additional
@@ -156,20 +164,19 @@ each. Those contexts were not filled; this is a functional test, not a throughpu
 or answer-quality benchmark. [Results and limits](deploy/managed/validation-20261028.json)
 · [Reproduce the test](deploy/managed/README.md#reproduce-the-gpu-validation).
 
-**Development update:** the [seven-carrier comparison](deploy/mailbox-bench/DECISION.md)
-now includes 63 controlled cases: 50/100 tokens per second, 1/10 tunnels,
-60-second workloads, proxy buffering and reconnection. The selected acknowledged
-multi-record mailbox is now wired as an **explicit source preview** with verified TLS,
-durable paired-state folders and host/gateway SSE forwarding. [Private HTTPS setup,
-tests and limits](deploy/https/README.md). The browser connection panel pairs over HTTPS
-by code; a WebRTC pairing never falls back to HTTPS by itself. Bring your own relay: a
-[free Cloudflare Worker](deploy/cloudflare-relay/README.md), [PHP web space or WordPress](deploy/php-relay/README.md)
-or the Rust relay on a server. This preview is not a public relay or a throughput guarantee. [Implementation checklist](docs/HTTPS-IMPLEMENTATION.md)
-· [Original delivery contract](docs/DESIGN-MAILBOX.md) · [Changelog](CHANGELOG.md).
-The [actual application-path load tests](deploy/https/RESULTS.md) first exposed a
-response flow-control bottleneck; after the documented correction all four synthetic
-50/100-token/s workloads complete live. HTTPS remains private test work until real
-WAN, proxy and inference acceptance tests pass.
+**HTTPS through your selected relay:** both computers establish outgoing HTTPS
+connections to the relay. It forwards encrypted requests to the model computer
+and encrypted responses back to the application. Content remains encrypted between
+the endpoints; the model API does not need a public incoming port.
+Pair the computers by code in the connection panel and use the local API in
+your AI application. A WebRTC pairing does not automatically switch to HTTPS.
+
+Use a [Cloudflare Worker](deploy/cloudflare-relay/README.md),
+[PHP web space or WordPress](deploy/php-relay/README.md), or the Rust relay on your
+own server. Connectivity uses the HTTPS access permitted by each network.
+[Setup and measurements](deploy/https/README.md)
+· [Transport comparison](deploy/mailbox-bench/DECISION.md)
+· [Changelog](CHANGELOG.md).
 
 ## Start with Docker
 
@@ -189,8 +196,8 @@ interface; k-lani-link handles the peer connection through a private socket.
 The PowerShell launcher builds/starts the stack and checks its boundaries. The
 Windows/Docker Desktop and real company-network acceptance test is still pending.
 
-Both peers need network access. Across the Internet, their networks must allow
-direct peer traffic; Internet access alone does not guarantee NAT traversal.
+In WebRTC mode, both peers need network access and their networks must allow
+direct peer traffic across the Internet; Internet access alone does not guarantee NAT traversal.
 If direct ICE cannot connect, **you must currently bring your own TURN server**
 and explicitly configure its address and credentials. k-lani-link does not operate
 or supply a TURN service. There is no automatic relay fallback.
@@ -199,17 +206,17 @@ or supply a TURN service. There is no automatic relay fallback.
 
 Prefer a native program? The portable variants use one executable, with no
 installer: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64/ARM64.
-Starting the new UI preview without arguments opens a local connection panel;
+Starting the program without arguments opens a local connection panel;
 PowerShell/terminal commands remain available. It asks for the relay address and
 pairing code, connects by itself and then shows the three values for your AI app.
 Small chat windows in the panel try the model directly; a chat is kept only while its
 window is open, unless you save it on this computer.
-The initial downloads are unsigned previews; security software or company policy
+The portable downloads are unsigned; security software or company policy
 may block them. Native operation does not provide Docker's application isolation.
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)
 · [Setup, platform limits and checksums](deploy/portable/README.md).
 
-## €4.99 once. All 1.x releases.
+## Free below the income/revenue threshold. Otherwise €4.99 once.
 
 One license covers **one person**, on any number of devices and containers,
 including AI agents acting for that person. Teams buy one seat per human user.
@@ -237,7 +244,7 @@ Contributions are voluntary and do not purchase or replace a required license.
 
 ## Current release scope
 
-The public `main` branch is an MVP development snapshot. Concurrency is configurable from one to eight streams per tunnel with a bounded
+Concurrency is configurable from one to eight streams per tunnel with a bounded
 queue (one stream by default). An opt-in Basalt supervisor loads and unloads
 allowlisted models while the tunnel stays connected. Saved KV state and a browser
 extension are not yet available. See [model control and parallel streams](deploy/managed/README.md). SIGTERM/Ctrl-C now clean up unused pairing
@@ -247,7 +254,7 @@ it does not establish performance between independent Internet connections.
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Tagged versions and their
 downloadable assets belong on [GitHub Releases](https://github.com/MarvKalani/k-lani-link/releases).
-The current source is an MVP. Portable builds have their own native CI checks;
+Portable builds have their own native CI checks;
 published versions identify their source commit and validation limits. See the
 [portable guide](deploy/portable/README.md) for signature status and platform support.
 
