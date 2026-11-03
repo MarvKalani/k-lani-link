@@ -1,0 +1,1230 @@
+{
+  "schema": 1,
+  "created_utc": "2026-11-03T19:55:59.822438+00:00",
+  "application": {
+    "source_base_commit": "0c95dd3af4f606b760d7e9dd7454e06ca1f6e770",
+    "source_scope": "Application source and Cargo inputs at the public base commit; laboratory runtime files identified by hashes below.",
+    "version": "1.2611.2-preview.2",
+    "binary_sha256": "1b126a08f137ca5c40943f28a1388bd0af8b93970f7ab5dcdb594dc6fc04f5ce"
+  },
+  "environment": {
+    "platform": "Linux x86_64",
+    "docker_version": "29.8.1",
+    "proxy_version": "mitmproxy 12.3.1",
+    "images": {
+      "endpoints": "sha256:9530d435e689f8b3529777a6238d3503aa997c93569de880439a019636599d9e",
+      "inspection_proxy": "mitmproxy/mitmproxy@sha256:2711066c855659b5af8b1dbb84494ed3eff69b42ece439c60b4fe09a2db829d4"
+    }
+  },
+  "evidence": {
+    "original_report_sha256": "cf44425799bf2d81af7de69e3fb8340e8f09e641073788de37eaad2710feea2d",
+    "runtime_file_sha256": {
+      "policy.py": "ed8266569e16af67c2d7c985dc900aa01f5fa6d5e77fabd67bd2df490ddee249",
+      "test_policy.py": "f8d5590f1cf49b1ed94d12ef162b61a96dc9f6798a400b34dab3eca955e3e00c",
+      "proxy.py": "233ceeb281acefec98754b6f670f4d1a8d96940ffd6dc0485bdb707a38545ce8",
+      "endpoint.py": "854c28a315c6515dcbd6b98f4e21bd9f80e8788b7ed36a1bfc0d9c71137cda36",
+      "run.py": "c10e1d4650a8e215a0778f25ecf67e13bb43180cba55f160b6aebd062920926e",
+      "Dockerfile": "cf23b470c6fb06db167c4d83d5691fb1308fd80838a014276d48f14db0735f85"
+    },
+    "model": "deterministic synthetic HTTP/SSE backend; real k-lani-link client, host and relay"
+  },
+  "summary": {
+    "scenarios": 17,
+    "passed": 17,
+    "policy_unit_tests_passed": 7,
+    "cleanup_complete": true,
+    "private_state_retained": false
+  },
+  "cases": [
+    {
+      "case": "inspected_https",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "network_probes": {
+        "default_ipv4_route": false,
+        "proxy_reachable": true,
+        "relay_direct_reachable": false,
+        "model_direct_reachable": false
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 22,
+          "server_tls": 1,
+          "response": 21
+        },
+        "response_statuses": {
+          "204": 10,
+          "200": 11
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "only_proxy_reachable": true,
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true
+      },
+      "elapsed_seconds": 2.53,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.11,
+        "elapsed_seconds": 0.393
+      }
+    },
+    {
+      "case": "pairing_by_code",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 3,
+          "client_tls": 3,
+          "request": 32,
+          "server_tls": 3,
+          "response": 30
+        },
+        "response_statuses": {
+          "204": 15,
+          "200": 15
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "pairing_code_round_trip": true,
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true
+      },
+      "elapsed_seconds": 2.74,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.34,
+        "elapsed_seconds": 0.394
+      }
+    },
+    {
+      "case": "domain_denied",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": false,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "checks": {
+        "valid_health_response": true,
+        "connection_refused": true,
+        "backend_not_called": true,
+        "expected_rejection_observed": true
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_denied": 8
+        },
+        "response_statuses": {},
+        "http_versions": [],
+        "methods": [],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": false,
+        "origin_tls_verified": false,
+        "backend": {
+          "calls": 0,
+          "duplicates": 0,
+          "completed": 0,
+          "cancelled": 0
+        }
+      },
+      "elapsed_seconds": 6.6
+    },
+    {
+      "case": "missing_inspection_ca",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": false,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "checks": {
+        "valid_health_response": true,
+        "connection_refused": true,
+        "backend_not_called": true,
+        "expected_rejection_observed": true
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 7,
+          "client_tls_failed": 7
+        },
+        "response_statuses": {},
+        "http_versions": [],
+        "methods": [],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": false,
+        "origin_tls_verified": false,
+        "backend": {
+          "calls": 0,
+          "duplicates": 0,
+          "completed": 0,
+          "cancelled": 0
+        }
+      },
+      "elapsed_seconds": 6.74
+    },
+    {
+      "case": "wrong_origin_name",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": false,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "checks": {
+        "valid_health_response": true,
+        "connection_refused": true,
+        "backend_not_called": true,
+        "expected_rejection_observed": true
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 7,
+          "server_tls_failed": 1,
+          "flow_error": 7
+        },
+        "response_statuses": {},
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": false,
+        "backend": {
+          "calls": 0,
+          "duplicates": 0,
+          "completed": 0,
+          "cancelled": 0
+        }
+      },
+      "elapsed_seconds": 6.62
+    },
+    {
+      "case": "expired_origin_certificate",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": false,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "checks": {
+        "valid_health_response": true,
+        "connection_refused": true,
+        "backend_not_called": true,
+        "expected_rejection_observed": true
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 7,
+          "server_tls_failed": 1,
+          "flow_error": 7
+        },
+        "response_statuses": {},
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": false,
+        "backend": {
+          "calls": 0,
+          "duplicates": 0,
+          "completed": 0,
+          "cancelled": 0
+        }
+      },
+      "elapsed_seconds": 6.66
+    },
+    {
+      "case": "basic_proxy_auth",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "proxy_auth_accepted": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 22,
+          "server_tls": 1,
+          "response": 21
+        },
+        "response_statuses": {
+          "204": 10,
+          "200": 11
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "proxy_credentials_accepted": true
+      },
+      "elapsed_seconds": 2.16,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 109.17,
+        "elapsed_seconds": 0.363
+      }
+    },
+    {
+      "case": "http1_only",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 2,
+          "client_tls": 2,
+          "request": 22,
+          "server_tls": 2,
+          "response": 21
+        },
+        "response_statuses": {
+          "204": 10,
+          "200": 11
+        },
+        "http_versions": [
+          "HTTP/1.1"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "negotiated_http1": true
+      },
+      "elapsed_seconds": 2.18,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 112.49,
+        "elapsed_seconds": 0.366
+      }
+    },
+    {
+      "case": "post_only",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 21,
+          "response": 20,
+          "server_tls": 1
+        },
+        "response_statuses": {
+          "405": 1,
+          "204": 9,
+          "200": 10
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "post_fallback_observed": true
+      },
+      "elapsed_seconds": 2.13,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.41,
+        "elapsed_seconds": 0.363
+      }
+    },
+    {
+      "case": "json_only",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 22,
+          "response": 21,
+          "server_tls": 1
+        },
+        "response_statuses": {
+          "405": 1,
+          "415": 1,
+          "204": 9,
+          "200": 10
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "json_writes": 9,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "post_fallback_observed": true,
+        "json_fallback_observed": true
+      },
+      "elapsed_seconds": 2.27,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 111.49,
+        "elapsed_seconds": 0.363
+      }
+    },
+    {
+      "case": "buffered",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 10,
+          "server_tls": 1,
+          "response": 9
+        },
+        "response_statuses": {
+          "204": 4,
+          "200": 5
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true
+      },
+      "elapsed_seconds": 2.92,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 395.29,
+        "elapsed_seconds": 0.626
+      }
+    },
+    {
+      "case": "lost_write_ack",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 21,
+          "server_tls": 1,
+          "response": 20,
+          "dropped_write_ack": 1
+        },
+        "response_statuses": {
+          "204": 10,
+          "200": 10
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "fault_triggered": true
+      },
+      "elapsed_seconds": 2.19,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.0,
+        "elapsed_seconds": 0.363
+      }
+    },
+    {
+      "case": "proxy_restart",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 2,
+          "connect_allowed": 3,
+          "client_tls": 3,
+          "request": 273,
+          "server_tls": 2,
+          "response": 271,
+          "flow_error": 1
+        },
+        "response_statuses": {
+          "204": 135,
+          "200": 136
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "proxy_restart_observed": true
+      },
+      "elapsed_seconds": 8.38,
+      "probe": {
+        "complete": true,
+        "tokens": 160,
+        "expected": 160,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.43,
+        "elapsed_seconds": 6.49
+      }
+    },
+    {
+      "case": "revoke_domain",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 25,
+          "server_tls": 1,
+          "response": 24,
+          "flow_error": 1
+        },
+        "response_statuses": {
+          "204": 10,
+          "200": 11,
+          "403": 3
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "json_writes": 1,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "revocation_blocks_work": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "policy_denial_observed": true
+      },
+      "elapsed_seconds": 3.42,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.85,
+        "elapsed_seconds": 0.393
+      },
+      "after_revocation": {
+        "complete": false,
+        "tokens": 0,
+        "expected": 32,
+        "done": false,
+        "ordered": true,
+        "http_status": 503,
+        "elapsed_seconds": 0.003
+      }
+    },
+    {
+      "case": "revoke_token",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "denied_health": {
+        "access_denied": true,
+        "connected": false,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": true,
+        "reconnect_required": true,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "revocation_observed_after_seconds": 23.041,
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 2,
+          "client_tls": 2,
+          "request": 70,
+          "server_tls": 2,
+          "response": 21,
+          "flow_error": 49
+        },
+        "response_statuses": {
+          "204": 10,
+          "200": 10,
+          "401": 1
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "stream_complete": true,
+        "client_reports_access_denied": true,
+        "revocation_blocks_work": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "relay_denial_observed": true
+      },
+      "elapsed_seconds": 25.22,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 110.1,
+        "elapsed_seconds": 0.363
+      },
+      "after_revocation": {
+        "complete": false,
+        "tokens": 0,
+        "expected": 32,
+        "done": false,
+        "ordered": true,
+        "http_status": 502,
+        "elapsed_seconds": 21.422
+      }
+    },
+    {
+      "case": "tampered_record",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "after_tampering": {
+        "access_denied": false,
+        "connected": false,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": true,
+        "reconnect_required": true,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1,
+          "connect_allowed": 1,
+          "client_tls": 1,
+          "request": 6,
+          "server_tls": 1,
+          "response": 6,
+          "tampered_record": 1
+        },
+        "response_statuses": {
+          "204": 3,
+          "200": 3
+        },
+        "http_versions": [
+          "HTTP/2.0"
+        ],
+        "methods": [
+          "GET",
+          "PUT"
+        ],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": true,
+        "origin_tls_verified": true,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 0,
+          "cancelled": 0
+        }
+      },
+      "checks": {
+        "corruption_rejected": true,
+        "authentication_failure_reported": true,
+        "no_duplicate_model_execution": true,
+        "no_plaintext_at_inspector": true,
+        "tls_actually_inspected": true,
+        "origin_tls_verified": true,
+        "fault_triggered": true
+      },
+      "elapsed_seconds": 2.2,
+      "probe": {
+        "complete": false,
+        "tokens": 0,
+        "expected": 32,
+        "done": false,
+        "ordered": true,
+        "http_status": 502,
+        "elapsed_seconds": 0.07
+      }
+    },
+    {
+      "case": "blocked_quic",
+      "passed": true,
+      "connection": {
+        "access_denied": false,
+        "connected": true,
+        "data_relay": true,
+        "max_concurrent_requests": 1,
+        "max_queued_requests": 0,
+        "model_management": false,
+        "new_code_required": false,
+        "pairing_rejected": false,
+        "reconnect_required": false,
+        "reconnecting": false,
+        "recovering": false,
+        "relay_busy": false,
+        "relay_policy": "disabled",
+        "transport": "https"
+      },
+      "evidence": {
+        "events": {
+          "ready": 1
+        },
+        "response_statuses": {},
+        "http_versions": [],
+        "methods": [],
+        "json_writes": 0,
+        "plaintext_marker_found": false,
+        "client_tls_inspected": false,
+        "origin_tls_verified": false,
+        "backend": {
+          "calls": 1,
+          "duplicates": 0,
+          "completed": 1,
+          "cancelled": 0
+        }
+      },
+      "udp_packets_rejected": 4,
+      "checks": {
+        "stream_complete": true,
+        "no_duplicate_model_execution": true,
+        "one_model_execution": true,
+        "udp_attempt_rejected": true
+      },
+      "elapsed_seconds": 4.14,
+      "probe": {
+        "complete": true,
+        "tokens": 32,
+        "expected": 32,
+        "done": true,
+        "ordered": true,
+        "http_status": 200,
+        "first_token_ms": 108.4,
+        "elapsed_seconds": 0.363
+      }
+    }
+  ],
+  "scope": [
+    "Controlled Docker/mitmproxy laboratory; no commercial gateway certification.",
+    "Exact-hostname allowlist, not a vendor URL reputation feed.",
+    "PAC, NTLM, Kerberos, native Windows trust stores and endpoint controls remain outside this run.",
+    "The model is synthetic; no inference-performance or model-quality benchmark.",
+    "Plaintext-marker checks and tamper rejection are regression evidence, not an independent cryptographic audit."
+  ]
+}

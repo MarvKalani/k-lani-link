@@ -187,6 +187,15 @@ Netz erlaubt. [Einrichtung und Messungen](deploy/https/README.md)
 · [Transportvergleich](deploy/mailbox-bench/DECISION.md)
 · [Changelog](CHANGELOG.md).
 
+**Im Unternehmen müssen sowohl das private Modell als auch die Relay-Verbindung erlaubt sein.**
+Die IT gibt Relay-Domain, Gegenstellen und Zugriffsregeln frei. Eine TLS-Inspektion kann
+die äußeren HTTP-Metadaten sehen; die Modellinhalte bleiben Ende-zu-Ende verschlüsselt.
+**[TLS-Inspektionslabor: 17 von 17 Szenarien bestanden](deploy/proxy-lab/RESULTS.md).**
+Getestet wurden der echte Client, Host und Relay mit einem synthetischen Modell:
+Kopplung, Streaming, Fallbacks, Wiederherstellung und Zugriffsentzug.
+[Docker-Labor selbst ausführen](deploy/proxy-lab/ANLEITUNG.de.md). Die Abnahme am konkreten
+Unternehmens-Gateway richtet sich nach dessen Konfiguration und den Regeln der Organisation.
+
 ## Mit Docker starten
 
 Die aktuelle Referenzinstallation verwendet **Linux x86_64 mit Docker Compose**.

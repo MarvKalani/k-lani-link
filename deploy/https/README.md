@@ -1,15 +1,16 @@
-# Explicit HTTPS mailbox preview
+# HTTPS mailbox transport
 
 This implements the **acknowledged multi-record mailbox** selected in the
 [seven-carrier decision](../mailbox-bench/DECISION.md), using the existing
 [delivery and state contract](../../docs/DESIGN-MAILBOX.md).
-It is an opt-in source preview for private testing. Published preview.3 executables,
-the native connection panel and the Docker Desktop launcher do **not** support these
-paired-state folders yet. No automatic WebRTC fallback or public shared service is enabled.
+The CLI supports issuing paired state and pairing by code; the native connection panel
+supports pairing by code. Importing an arbitrary paired-state folder into that panel is
+separate from this flow. HTTPS and WebRTC remain separate transport selections.
 The first full-path run exposed a response flow-control bottleneck at 100 tokens/s;
 after the [documented correction](RESULTS.md) all four 50/100-token/s × 1/10-tunnel
 workloads complete with about 0.1 s median token delay. That is a synthetic lab result,
-not a release: real WAN/proxies and real inference over HTTPS remain unverified.
+not a real corporate-network measurement. The separate
+[TLS-inspection laboratory](../proxy-lab/README.md) exercises a forward proxy and its policies.
 
 Both peers use ordinary finite HTTPS PUTs and GETs to one operator-selected relay.
 The relay carries **all tunnel ciphertext**, so its bandwidth and hosting cost differ
@@ -189,7 +190,8 @@ For a private CA, add `--ca-cert-file /private/ca.pem`. Never disable TLS verifi
 Use `--proxy-url http://proxy.example:3128` if an explicitly permitted proxy is required.
 Proxy credentials, if configured in that URL, become secret configuration data.
 System proxy variables are deliberately ignored. The tested proxy authentication is
-Basic CONNECT; NTLM/Kerberos/PAC and TLS interception are not verified.
+Basic CONNECT. The [Docker proxy laboratory](../proxy-lab/README.md) covers TLS interception
+with a dedicated inspection CA. Actual corporate gateways and NTLM/Kerberos/PAC remain unverified.
 
 Both durable endpoint states are saved **before** either portable configuration is
 exported. The result contains `host/host.toml` and `client/client.toml`, each with its
