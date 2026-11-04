@@ -36,6 +36,25 @@ not evidence that two full contexts fit a particular GPU. The supervisor checks
 the engine's actual model, slot count and context before reporting success;
 it refuses a silent fallback to fewer slots. Reduce the profile if it does not fit.
 
+### Custom Basalt expert profiles
+
+Basalt 0.2.1 loads expert placement profiles separately from the model file. Its
+bundled profile must match the model's layer and expert counts. For a custom or
+pruned pack, an operator can select an existing matching profile in the catalog:
+
+```json
+{"id": "coder", "path": "/models/coder.basalt",
+ "expert_profile": "/models/profiles/coder.prof"}
+```
+
+Mount that file or its directory read-only in a private Compose override. The
+supervisor accepts only existing absolute paths, only for the Basalt engine; the
+remote model-control API still accepts model IDs only and does not expose paths.
+This is a cache-placement ranking, not a replacement for model weights. A neutral
+initial ranking is not evidence of a tuned cache or a throughput improvement.
+Preserve a model's matching profile before format migration; a 512-expert profile
+cannot be used unchanged with a 256-expert pack.
+
 ## Client computer
 
 Generate a separate private operator key (a random key file, not a pairing code):

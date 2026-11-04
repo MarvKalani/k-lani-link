@@ -27,6 +27,23 @@ diese Dateien auf tmpfs und der Server hat gar kein Netzwerkinterface.
 
 ## Updates
 
+Der aktuelle Quellstand ist Basalt **0.2.1**, Commit
+`1b3f69641c989f2c1b6b6faf1525a65574fa1446`. Das Image vermerkt ihn als
+`io.k-lani.basalt.revision`. Wer `BASALT_SOURCE_CONTEXT` überschreibt, setzt auch
+`BASALT_REVISION` passend zum verwendeten Quellstand.
+
+Diese Version liest `.basalt`-Format 2 und separate Expertenprofile. Ältere Packs
+müssen mit dem offiziellen Migrationstool in eine neue Datei überführt werden.
+Bei eigenen oder beschnittenen Modellen muss ein Profil mit passender Geometrie
+vorhanden sein; der [Supervisor](../../deploy/managed/README.md#custom-basalt-expert-profiles)
+kann es ausdrücklich über `expert_profile` auswählen. Die Integration verändert
+keine Modellgewichte und aktiviert keine Bildverarbeitung.
+
+[Validierung vom 4. November 2026](validation-20261104.json): Container-Build,
+Datenschutz- und Servertests sowie echte Coder-/Mellum-Antworten durch einen
+verschlüsselten k-lani-link-Tunnel. Für den 256-Experten-Coder wurde ein neutrales
+Platzierungsprofil ergänzt; daraus wird keine Leistungssteigerung abgeleitet.
+
 Auf einem frischen Checkout des genannten Basalt-Commits:
 
 ```sh
@@ -84,4 +101,7 @@ The patch also keeps the answer-room calculation silent in privacy mode, and sin
 `5d28effb` it refuses Basalt's disk tier for conversations (`--conversation-cache-dir`,
 `--conversation-cache-disk-mib`), which would write conversation state to disk.
 No CUDA kernels or model weights are changed by these integration patches. With both
-patches applied, Basalt's own serve tests pass (657 at `9175e7a3`).
+patches applied at `1b3f6964`, Basalt's serve suite completes 826 tests successfully
+(7 skipped). The tests use synthetic fixtures, including temporary executable mock
+engines; the test container therefore needs an executable temporary directory.
+The production container retains its non-executable temporary filesystems.

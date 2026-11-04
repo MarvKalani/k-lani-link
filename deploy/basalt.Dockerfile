@@ -8,6 +8,8 @@ RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
 
 FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04
 ARG BUILD_JOBS=2
+ARG BASALT_REVISION=1b3f69641c989f2c1b6b6faf1525a65574fa1446
+LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build g++ git python3 python3-venv ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/basalt
