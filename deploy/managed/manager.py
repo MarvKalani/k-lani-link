@@ -42,7 +42,7 @@ def catalog_from_file(path):
         raise ValueError("invalid models")
     models = {}
     for row in rows:
-        if not isinstance(row, dict) or set(row) - {"id", "engine", "path", "context_tokens", "parallel", "slot_full_context", "prefill", "reasoning_budget_tokens", "kv"}:
+        if not isinstance(row, dict) or set(row) - {"id", "engine", "path", "context_tokens", "parallel", "slot_full_context", "prefill", "reasoning_budget_tokens", "kv", "expert_profile"}:
             raise ValueError("invalid model profile")
         engine = row.get("engine", "basalt")
         if engine not in ENGINES or engine == "basalt" and "kv" in row or row.get("kv", "q8_0") not in LLAMA_KV:
@@ -51,6 +51,11 @@ def catalog_from_file(path):
         if not model_id(name) or name in models or not isinstance(path, str) or not Path(path).is_absolute() or not Path(path).is_file():
             raise ValueError("invalid local model")
         profile = dict(row, engine=engine)
+        if "expert_profile" in row:
+            expert_profile = row["expert_profile"]
+            if (engine != "basalt" or not isinstance(expert_profile, str)
+                    or not Path(expert_profile).is_absolute() or not Path(expert_profile).is_file()):
+                raise ValueError("invalid Basalt expert profile")
         if engine == "llama":
             # One KV pool shared by all slots: each request may use the whole context.
             if not path.endswith(".gguf") or row.get("slot_full_context") is False:
@@ -213,6 +218,8 @@ class Manager:
                 "--reasoning-budget-tokens", str(profile["reasoning_budget_tokens"])]
             if profile["slot_full_context"]:
                 args.append("--slot-full-context")
+            if profile.get("expert_profile"):
+                args += ["--expert-profile", profile["expert_profile"]]
             if self.metrics:
                 args += ["--privacy-metrics-file", str(self.runtime / "performance.json")]
         self.process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

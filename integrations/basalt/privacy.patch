@@ -1,8 +1,8 @@
 diff --git a/serve/config.py b/serve/config.py
-index f533dd9..213c4a8 100644
+index 392868a..5f37967 100644
 --- a/serve/config.py
 +++ b/serve/config.py
-@@ -176,6 +176,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str]):
+@@ -177,6 +177,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str]):
              else:
                  src[at + 1] = part
              a.shared_context = ctx                         # the total, for the startup line
@@ -12,7 +12,7 @@ index f533dd9..213c4a8 100644
      return a, file_argv + cli, file_words, cli_words
  
  
-@@ -358,6 +361,9 @@ def build_parser() -> argparse.ArgumentParser:
+@@ -369,6 +372,9 @@ def build_parser() -> argparse.ArgumentParser:
                                   allow_abbrev=False)
      ap.add_argument("--mock-engine", action="store_true",
                      help="run a scripted engine instead of the model, for clients and tests (no --model needed)")
@@ -56,7 +56,7 @@ index 22f4ca7..dcd4ca6 100644
          if self.route:
              script = self.scripts[self.route(list(ids))]
 diff --git a/serve/handler.py b/serve/handler.py
-index 1509791..adb2fd7 100644
+index 01ea4c8..890f3bd 100644
 --- a/serve/handler.py
 +++ b/serve/handler.py
 @@ -5,6 +5,7 @@ import json
@@ -67,7 +67,7 @@ index 1509791..adb2fd7 100644
  import sys
  import threading
  import time
-@@ -213,6 +214,9 @@ def make_handler(svc: Service):
+@@ -219,6 +220,9 @@ def make_handler(svc: Service):
  
          def do_GET(self):
              path = self.path.split("?")[0].rstrip("/")
@@ -77,7 +77,7 @@ index 1509791..adb2fd7 100644
              if path.startswith("/fonts/"):
                  name = path[len("/fonts/"):]
                  f = ROOT / "serve" / "web" / "fonts" / name
-@@ -260,7 +264,11 @@ def make_handler(svc: Service):
+@@ -266,7 +270,11 @@ def make_handler(svc: Service):
              elif path in ("/health", "/api/health"):
                  self._json(200, {"status": "ok", "max_context": svc.engine.max_context, "model": svc.model,
                                   "images": svc.vision is not None, "api_key": bool(svc.api_key),
@@ -90,7 +90,7 @@ index 1509791..adb2fd7 100644
              elif path == "/status":
                  if not self._authorized():                  # it shows the last answer's tail
                      return
-@@ -306,6 +314,9 @@ def make_handler(svc: Service):
+@@ -312,6 +320,9 @@ def make_handler(svc: Service):
              if not self._authorized():
                  return
              path = self.path.split("?")[0].rstrip("/")   # clients post /v1/messages?beta=true
@@ -100,7 +100,7 @@ index 1509791..adb2fd7 100644
              if path.startswith("/v1/") and self._foreign_page():
                  return
              if path in ("/unload", "/load") and not self._control_body():
-@@ -761,9 +772,38 @@ class Server(ThreadingHTTPServer):
+@@ -764,9 +775,38 @@ class Server(ThreadingHTTPServer):
              super().handle_error(request, client_address)
  
  
@@ -195,10 +195,10 @@ index 0000000..bec5b39
 +        if name in ("--conversation-cache-dir", "--conversation-cache-disk-mib"):
 +            raise ValueError("privacy forbids writing conversations to disk")
 diff --git a/serve/server.py b/serve/server.py
-index cef80dd..9ec0511 100644
+index 1933de5..290b186 100644
 --- a/serve/server.py
 +++ b/serve/server.py
-@@ -40,6 +40,7 @@ from serve.service import Service  # noqa: E402
+@@ -41,6 +41,7 @@ from serve.service import Service  # noqa: E402
  from serve.util.logbuf import ColorStream, LogBuffer, TeeStream, tail_file  # noqa: E402
  from serve.util.console import LEGEND, tagged  # noqa: E402
  from serve.util.text import ByteTokenizer  # noqa: E402
@@ -206,7 +206,7 @@ index cef80dd..9ec0511 100644
  
  
  def fail(msg: str) -> None:
-@@ -70,15 +71,20 @@ def grammar_entry(on: bool, cli: list[str], used: list[str]) -> tuple[bool, str]
+@@ -90,15 +91,20 @@ def open_when_ready(svc, url, now=False, opener=None):
  
  
  def main() -> int:
@@ -230,8 +230,8 @@ index cef80dd..9ec0511 100644
      print(tagged("legend", LEGEND), flush=True)          # first line, so the key precedes every value
      cfg = {}                                            # what the model file implies
      try:
-@@ -131,10 +137,11 @@ def main() -> int:
-                                     grammar_entry(a.grammar, sys.argv[1:], used_argv)), flush=True)
+@@ -157,10 +163,11 @@ def main() -> int:
+         fail(str(e))
      if a.alias:
          cfg["model_name"] = a.alias
 -    try:                                                # fail fast if the port is taken
@@ -246,7 +246,7 @@ index cef80dd..9ec0511 100644
      if cfg.get("tokenizer"):
          a.tokenizer = cfg["tokenizer"]
      tok = ByteTokenizer()
-@@ -170,12 +177,16 @@ def main() -> int:
+@@ -196,12 +203,16 @@ def main() -> int:
                  vision = Vision(cfg["vision"], log=open(cfg["log"], "a", encoding="utf-8") if cfg.get("log") else None,
                                  env=vision_env(env, mode))
          print(vision_line(cfg.get("vision"), cfg, vision.ready_s if vision else 0.0), flush=True)
@@ -264,7 +264,7 @@ index cef80dd..9ec0511 100644
          known_flags = engine_flags_of(cfg["engine_bin"])
          has_grammar = known_flags is not None and "--grammar" in known_flags
          if a.grammar and not has_grammar:
-@@ -191,13 +202,14 @@ def main() -> int:
+@@ -217,13 +228,14 @@ def main() -> int:
              vision.attach(engine)
      else:
          engine, vision, sampling_defaults = MockEngine(tok, a.script or [
@@ -279,9 +279,9 @@ index cef80dd..9ec0511 100644
 -                  grammar_engine=bool(a.mock_engine or has_grammar))
 +                  grammar_engine=bool(a.mock_engine or has_grammar), privacy=a.privacy)
      svc.logs = logs
-     if any(x == "--api-key" and i + 1 < len(used_argv) and not used_argv[i + 1].strip() or x.strip() == "--api-key="
-            for i, x in enumerate(used_argv)):
-@@ -229,7 +241,7 @@ def main() -> int:
+     svc.image_sources = image_sources
+     if image_sources.url_hosts or image_sources.dirs or image_sources.remote_only:
+@@ -260,7 +272,7 @@ def main() -> int:
      svc.thinking_loop_tokens = a.thinking_loop_tokens
      svc.gpu_indices = gpus_in_play(cfg, engine_args(cfg) if not a.mock_engine else [])   # the cards /metrics reads
      svc.gpu_index = svc.gpu_indices[0]
@@ -290,7 +290,7 @@ index cef80dd..9ec0511 100644
      svc.start_idle_unload()
      svc.start_idle_sleep()
      svc.on_loaded = lambda: announce()
-@@ -285,7 +297,7 @@ def main() -> int:
+@@ -316,7 +328,7 @@ def main() -> int:
      except KeyboardInterrupt:
          if not rc:
              print("[server] stopping (Ctrl+C again to force)", flush=True)
@@ -300,7 +300,7 @@ index cef80dd..9ec0511 100644
              try:
                  close()
 diff --git a/serve/service.py b/serve/service.py
-index 769fb66..96b6df1 100644
+index 3f2eb1d..3cbd528 100644
 --- a/serve/service.py
 +++ b/serve/service.py
 @@ -14,6 +14,7 @@ from serve.engine.errors import EngineDied, EngineSilent, EngineStartError, Engi
@@ -311,7 +311,7 @@ index 769fb66..96b6df1 100644
  from serve.security import LOOPBACK_NAMES
  from serve.prompt import CTX_SLACK, PromptText, overflow_error, room_error
  from serve.util.text import Detokenizer, IM_END, StopMatcher, control_literals, stop_strings
-@@ -80,8 +81,12 @@ class Service:
+@@ -81,8 +82,12 @@ class Service:
  
      def __init__(self, engine: Engine, tokenizer, template: ChatTemplate, model_name: str = "qwen3.8-flash-next",
                   vision: Vision | None = None, sampling_defaults: dict | None = None,
@@ -325,8 +325,8 @@ index 769fb66..96b6df1 100644
          self.literals = literal_tags(control_literals(tokenizer))   # control texts that stay text inside a message
          self.fit_max_tokens = fit_max_tokens          # clamp the output cap instead of a 400
          self.grammar = grammar                        # the `grammar` option: every tool or JSON request gets one
-@@ -93,7 +98,7 @@ class Service:
-         self.api_key = ""                              # when set, /v1/* requires it
+@@ -97,7 +102,7 @@ class Service:
+         self.images_waiting = 0                         # bytes of read images waiting for their turn to encode
          # put a non-default reasoning effort in a system turn before the answer so the cached prefix survives
          self.effort_end = False
 -        self.logs = LogBuffer()                         # server and engine output
@@ -334,7 +334,7 @@ index 769fb66..96b6df1 100644
          # origins allowed to call /v1/* (CORS; "*" = any); empty: no CORS headers
          self.cors_origins: list[str] = []
          # origins treated as the server's own page for the load/unload/VRAM controls (no wildcard)
-@@ -166,8 +171,9 @@ class Service:
+@@ -170,8 +175,9 @@ class Service:
              return budget
          room = max_new - min(max(ANSWER_RESERVE_MIN, max_new // 4), max_new // 2)
          if budget is None or budget > room:
@@ -346,7 +346,7 @@ index 769fb66..96b6df1 100644
              return room
          return budget
  
-@@ -482,6 +488,8 @@ class Service:
+@@ -486,6 +492,8 @@ class Service:
  
      def start_telemetry(self):
          """Start the hardware sampler behind GET /metrics, including this server's speeds."""
@@ -355,7 +355,7 @@ index 769fb66..96b6df1 100644
          if getattr(self, "telemetry", None) is None:
              from serve.util.telemetry import Telemetry
              self.telemetry = Telemetry(extra=lambda: {"tok_s": self._tok_s(),
-@@ -804,6 +812,8 @@ class Service:
+@@ -826,6 +834,8 @@ class Service:
          return ids, kwargs.get("enable_thinking", True) is not False, max_new
  
      def _note(self, n, evs, st=None, rate=None):
@@ -364,7 +364,7 @@ index 769fb66..96b6df1 100644
          with self.status_lock:
              s = self.status if st is None else st
              s["generated"] = n
-@@ -836,6 +846,8 @@ class Service:
+@@ -858,6 +868,8 @@ class Service:
  
      def live_line(self, now: float) -> str | None:
          """One line for every request that is generating; None when none is."""
@@ -373,7 +373,7 @@ index 769fb66..96b6df1 100644
          with self.status_lock:
              reqs = [st for st, _ in self.live_reqs.values()] or ([self.status] if self.status.get("busy") else [])
              rows = []
-@@ -857,6 +869,8 @@ class Service:
+@@ -879,6 +891,8 @@ class Service:
  
      def _progress(self, last_print, every=1.0, st=None):
          """Print progress while a request runs: its prompt read, then the shared live line."""
@@ -382,7 +382,7 @@ index 769fb66..96b6df1 100644
          now = time.time()
          with self.status_lock:
              s = dict(self.status if st is None else st)
-@@ -1025,9 +1039,11 @@ class Service:
+@@ -1047,9 +1061,11 @@ class Service:
                                          ended_thinking = True
                                          break
                                      finish = "stop"
@@ -396,7 +396,7 @@ index 769fb66..96b6df1 100644
                                  seg.append(t)
                                  if parser.state == "reasoning":
                                      run_n = run_n + 1 if t == run_id else 1
-@@ -1127,7 +1143,8 @@ class Service:
+@@ -1149,7 +1165,8 @@ class Service:
                                  break                   # no room for the call: "length"
                          for t in extra:
                              n += 1
@@ -406,7 +406,7 @@ index 769fb66..96b6df1 100644
                              thinking_n += parser.state == "reasoning"
                              evs = cut(parser.feed(detok.push(t)))
                              self._note(n, evs, st, rate)
-@@ -1158,42 +1175,51 @@ class Service:
+@@ -1180,42 +1197,51 @@ class Service:
                              pcie_share = round(last["offloaded"] / routed, 3) \
                                  if last.get("offloaded") is not None and routed else None
                              seen = prompt_tokens_seen(len(ids), last)   # less than len(ids) when cancelled mid-read
@@ -486,7 +486,7 @@ index 769fb66..96b6df1 100644
                          st["busy"] = False
                          st.pop("tail", None)                     # drop the tail once done
                          st.pop("tool", None)
-@@ -1202,6 +1228,10 @@ class Service:
+@@ -1224,6 +1250,10 @@ class Service:
                              if self.live_reqs:              # the newest request still running
                                  self.status.update(list(self.live_reqs.values())[-1][0])
                              else:

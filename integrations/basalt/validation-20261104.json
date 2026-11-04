@@ -1,0 +1,101 @@
+{
+  "date": "2026-11-04",
+  "upstream_commit": "1b3f69641c989f2c1b6b6faf1525a65574fa1446",
+  "upstream_source_version": "0.2.1",
+  "previous_commit": "9175e7a3211bda355c02e804c7c107b15b8ea89f",
+  "patch_sha256": {
+    "privacy.patch": "8b310197da29193c401ee05906ff355de3580c713a2f4eb5ff53365756ab7151",
+    "numeric-metrics.patch": "028a7fefab2c263b69f5c150abc56bf50295d4ab8a3532068c5d94414599d757"
+  },
+  "manager_sha256": "629ae3f6cb0249f072ac4124016bc5854813535a4548404ffb572f64bc08486b",
+  "image_id": "sha256:7a70567852d12d63b8ffaf7bdc49b2df2c9a8be4485c812031df8c296505ebe3",
+  "native_binary_sha256": "1e1e40ff65390f256036baf7e8d0fa297964b87c377c47f11f7a0cae39a62906",
+  "checks": {
+    "container_build": true,
+    "privacy_and_numeric_tests": 10,
+    "serve_tests_run": 826,
+    "serve_tests_skipped": 7,
+    "serve_suite_passed": true,
+    "manager_tests_passed": 6,
+    "network_mode": "none",
+    "readonly_root": true,
+    "container_memory_bytes": 6442450944,
+    "container_swap_allowance_bytes": 0,
+    "logging_driver": "none",
+    "idle_state_restored": true
+  },
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "gpu_memory_mib": 16303,
+    "gpu_power_limit_w": 300
+  },
+  "expert_profile": {
+    "profile": "qwen4exp-48x256-neutral.prof",
+    "layers": 48,
+    "experts": 256,
+    "bytes": 98324,
+    "sha256": "016b9c61427c0520512a31f8bfd2740ae572178e5376fa4cabce4ff4024f258f",
+    "ranking": "neutral expert-major fill order from the previous Basalt converter; no learned routing traces",
+    "model_weights_modified": false
+  },
+  "models": [
+    {
+      "id": "Qwen3.8-FN-GSQ-RCO-Coder",
+      "engine": "basalt",
+      "load_status": 200,
+      "profile": {
+        "id": "Qwen3.8-FN-GSQ-RCO-Coder",
+        "engine": "basalt",
+        "context_tokens": 262144,
+        "parallel": 2,
+        "context_per_slot": 262144,
+        "loaded": true,
+        "privacy": "basalt"
+      },
+      "completion": {
+        "status": 200,
+        "done": true,
+        "content_received": true,
+        "reasoning_received": false,
+        "error_events": 0,
+        "usage": {
+          "prompt_tokens": 18,
+          "completion_tokens": 3,
+          "total_tokens": 21
+        },
+        "expected_marker_found": true
+      },
+      "passed": true
+    },
+    {
+      "id": "Mellum2.1-12B-A2.5B-Thinking-Q8_0",
+      "engine": "llama",
+      "load_status": 200,
+      "profile": {
+        "id": "Mellum2.1-12B-A2.5B-Thinking-Q8_0",
+        "engine": "llama",
+        "context_tokens": 131072,
+        "parallel": 2,
+        "context_per_slot": 131072,
+        "loaded": true,
+        "privacy": "supervised"
+      },
+      "completion": {
+        "status": 200,
+        "done": true,
+        "content_received": true,
+        "reasoning_received": false,
+        "error_events": 0,
+        "usage": {
+          "prompt_tokens": 21,
+          "completion_tokens": 4,
+          "total_tokens": 25
+        },
+        "expected_marker_found": true
+      },
+      "passed": true
+    }
+  ],
+  "transport": "new same-machine encrypted WebRTC tunnel; existing pairings unchanged",
+  "scope": "Functional update acceptance using short synthetic requests, not an inference benchmark or a model-quality comparison. Context capacities were checked, not filled. The 256-expert profile uses neutral placement, not a learned ranking."
+}

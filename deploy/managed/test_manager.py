@@ -102,6 +102,28 @@ class ModelsTest(unittest.TestCase):
         self.assertIsNone(self.manager.snapshot()['active_model'])
         self.assertFalse(self.manager.socket.exists())
 
+    def test_operator_expert_profile_reaches_basalt_without_exposing_its_path(self):
+        path=self.root/'custom.prof';path.write_bytes(b'operator-selected fixture')
+        self.doc['models'][0]['expert_profile']=str(path)
+        self.catalog.write_text(json.dumps(self.doc))
+        _,self.manager.models=catalog_from_file(self.catalog)
+        code,state=self.manager.command({'action':'load','model':'alpha'})
+        self.assertEqual(code,200)
+        args=self.manager.process.args
+        self.assertEqual(args[args.index('--expert-profile')+1],str(path))
+        self.assertNotIn(str(path),json.dumps(state))
+        self.assertEqual(self.manager.command({'action':'load','model':'alpha','expert_profile':'/tmp/other.prof'})[0],400)
+
+    def test_expert_profiles_require_existing_absolute_files_and_basalt(self):
+        for value in (None,123,'relative.prof',str(self.root/'missing.prof'),str(self.root)):
+            doc=json.loads(json.dumps(self.doc));doc['models'][0]['expert_profile']=value
+            self.catalog.write_text(json.dumps(doc))
+            with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+        path=self.root/'custom.prof';path.write_bytes(b'fixture')
+        doc=json.loads(json.dumps(self.doc));doc['models'][-1]['expert_profile']=str(path)
+        self.catalog.write_text(json.dumps(doc))
+        with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+
     def test_catalog_rejects_unknown_fields_and_invalid_profiles(self):
         for field,value in [('parallel',9),('context_tokens',True),('slot_full_context','yes'),('before_load','curl example.org'),
                 ('engine','vllm'),('kv','q4_0'),('id','../x'),('id','.hidden')]:
