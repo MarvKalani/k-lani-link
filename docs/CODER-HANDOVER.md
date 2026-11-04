@@ -5,6 +5,9 @@ before you touch names, protocol constants or the local API's upload handling. I
 the only file in the repository allowed to spell the former product name; everything
 else is checked against it by `deploy/check-names.py`.
 
+This is the historical rename snapshot. For later delivery and validation,
+including regular releases and native/GPU checks, see [PROJECT-STATUS.md](PROJECT-STATUS.md).
+
 ## Why this exists
 
 The product was renamed to **k-lani-link** because the former name collides with an

@@ -1,0 +1,50 @@
+{
+  "measured_on": "2026-11-04",
+  "opencode_version": "2.2.0",
+  "link_version": "1.2611.4",
+  "backend": "Basalt 0.2.1 with preserved Coder target weights and official MTP components",
+  "transport": "fresh encrypted WebRTC tunnel on one workstation",
+  "catalog_models": 3,
+  "contexts_in_config": [
+    262144,
+    262144,
+    131072
+  ],
+  "agent": {
+    "exit_code": 0,
+    "elapsed_seconds": 16.23,
+    "event_types": {
+      "step_start": 4,
+      "reasoning": 4,
+      "tool_use": 3,
+      "step_finish": 3,
+      "text": 1
+    },
+    "reasoning_events": 4,
+    "tools": [
+      "read",
+      "write",
+      "shell"
+    ],
+    "file_verified": true,
+    "seed_unchanged": true,
+    "no_commit": true,
+    "final_marker_seen": true,
+    "swap_disabled": true
+  },
+  "boundary": {
+    "network": "none",
+    "read_only_root": true,
+    "capabilities": "none",
+    "no_new_privileges": true,
+    "credentials": "inference API key only",
+    "workspace": "fresh synthetic project",
+    "host_swap_disabled": true
+  },
+  "cleanup": {
+    "temporary_container_removed": true,
+    "temporary_pairing_removed": true,
+    "backend_unloaded": true
+  },
+  "scope": "Real OpenCode read, write and shell tools on a synthetic two-line file task. No WAN throughput or general model quality claim."
+}

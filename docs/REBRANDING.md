@@ -4,8 +4,9 @@ The product, executable, Rust packages, new Docker image tags and repository are
 now named **k-lani-link**. The latest reviewed development snapshot includes the
 three follow-up commits through `5e67e23` before the history was consolidated.
 The old Git history, release assets and original demonstrations are backed up
-privately. The source repository is public again under the new name; checkout
-remains paused while the purchase flow and terms are prepared.
+privately. The source repository is public again under the new name. Checkout
+was paused during that rename; the current purchase flow and terms are linked
+from the README. See [current delivery status](PROJECT-STATUS.md) for later releases.
 Existing version 1.x licenses remain valid; price and free-use thresholds do not change.
 
 ## Identifiers
@@ -46,7 +47,7 @@ invoice and spreadsheet files remain unchanged.
 
 ## Publication
 
-No replacement public release is created by this rename. A new public release must
+The rename itself did not create a replacement public release. A new public release must
 use this name in its downloads, current artwork and checkout. A name change alone
 is not trademark clearance; no such clearance is claimed for the new name.
 
