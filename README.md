@@ -278,6 +278,7 @@ deployment; lawful processing and GDPR compliance still depend on its operation.
 
 [Security model](SECURITY.md)
 · [Technical reference](REFERENCE.md)
+· [Use cases and further options](docs/PRODUCT-OPTIONS.md)
 · [Third-party licenses](THIRD_PARTY.md)
 
 [Name change and existing installations](docs/REBRANDING.md)

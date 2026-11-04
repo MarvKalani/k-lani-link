@@ -1,7 +1,7 @@
 {
   "default": "coder",
   "models": [
-    {"id": "coder", "path": "/models/coder.basalt", "context_tokens": 262144, "parallel": 2, "slot_full_context": true, "prefill": 512, "reasoning_budget_tokens": 2048},
-    {"id": "nvfp4", "path": "/models/nvfp4.basalt", "context_tokens": 262144, "parallel": 2, "slot_full_context": true, "prefill": 512, "reasoning_budget_tokens": 2048}
+    {"id": "coder", "path": "/models/coder.basalt", "context_tokens": 262144, "parallel": 2, "slot_full_context": true, "memory_mode": "resident", "prefill": "auto", "reasoning_budget_tokens": 2048},
+    {"id": "nvfp4", "path": "/models/nvfp4.basalt", "context_tokens": 262144, "parallel": 2, "slot_full_context": true, "memory_mode": "resident", "prefill": "auto", "reasoning_budget_tokens": 2048}
   ]
 }

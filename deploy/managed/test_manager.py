@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from manager import Manager, catalog_from_file, health
 
 FAKE = r'''
@@ -123,6 +124,47 @@ class ModelsTest(unittest.TestCase):
         doc=json.loads(json.dumps(self.doc));doc['models'][-1]['expert_profile']=str(path)
         self.catalog.write_text(json.dumps(doc))
         with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+
+    def test_operator_performance_profile_reaches_the_backend_but_not_the_remote_api(self):
+        self.doc['models'][0].update(memory_mode='resident',prefill='auto:16384',prefill_cpu_share=0.4,pool_workers=3)
+        self.catalog.write_text(json.dumps(self.doc))
+        _,self.manager.models=catalog_from_file(self.catalog)
+        code,state=self.manager.command({'action':'load','model':'alpha'})
+        self.assertEqual(code,200)
+        args=self.manager.process.args
+        self.assertIn('--resident-experts',args);self.assertNotIn('--mmap-experts',args)
+        for flag,value in [('--prefill','auto:16384'),('--prefill-cpu-share','0.4'),('--pool-workers','3')]:
+            self.assertEqual(args[args.index(flag)+1],value)
+        self.assertNotIn('memory_mode',json.dumps(state))
+        self.assertEqual(self.manager.command({'action':'load','model':'alpha','memory_mode':'mmap'})[0],400)
+
+    def test_invalid_performance_settings_are_rejected_before_a_process_starts(self):
+        for key,value in [('memory_mode','resident --debug'),('memory_mode',None),('prefill',True),
+                ('prefill','auto:9999'),('prefill','auto --debug'),('prefill_cpu_share',True),
+                ('prefill_cpu_share',float('nan')),('prefill_cpu_share',float('inf')),('prefill_cpu_share',1.1),
+                ('prefill_cpu_share',-0.1),('pool_workers',True),('pool_workers',0),('pool_workers',257)]:
+            with self.subTest(key=key,value=value):
+                doc=json.loads(json.dumps(self.doc));doc['models'][0][key]=value
+                self.catalog.write_text(json.dumps(doc))
+                with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+        for key,value in [('memory_mode','resident'),('prefill_cpu_share',0.4),('pool_workers',3)]:
+            doc=json.loads(json.dumps(self.doc));doc['models'][-1][key]=value
+            self.catalog.write_text(json.dumps(doc))
+            with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+
+    def test_swap_guard_rechecks_before_switching_and_preserves_the_loaded_model(self):
+        self.manager.require_no_swap=True
+        with patch('manager.host_swap_disabled',return_value=True):
+            self.assertEqual(self.manager.command({'action':'load','model':'alpha'})[0],200)
+        first=self.manager.process
+        with patch('manager.host_swap_disabled',return_value=False):
+            code,body=self.manager.command({'action':'load','model':'beta'})
+            self.assertEqual(code,503);self.assertIn('swap',body['error'])
+            self.assertIs(self.manager.process,first);self.assertIsNone(first.poll())
+            self.assertEqual(self.manager.command({'action':'load','model':'alpha'})[0],503)
+        with patch('manager.host_swap_disabled',return_value=True):
+            self.assertEqual(self.manager.command({'action':'load','model':'beta'})[0],200)
+        self.assertIsNotNone(first.poll())
 
     def test_catalog_rejects_unknown_fields_and_invalid_profiles(self):
         for field,value in [('parallel',9),('context_tokens',True),('slot_full_context','yes'),('before_load','curl example.org'),

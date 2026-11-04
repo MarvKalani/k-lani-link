@@ -7,6 +7,24 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.4 — 4 November 2026
+
+- Regular release of the current portable application. Historical preview tags and
+  their checksums remain unchanged.
+- Managed Basalt profiles can choose resident experts, automatic prefill, a measured
+  prefill CPU share and the CPU worker count. `LINK_BACKEND_MEMORY` configures the
+  container's RAM budget while keeping its swap allowance at zero. Existing catalogs
+  retain their prior defaults; the updated examples use resident experts and auto prefill.
+- The no-swap guard is checked again before every model load or switch, so enabling
+  host swap after supervisor startup cannot bypass the load policy.
+- Basalt is pinned to source version 0.2.1, with explicit operator-selected expert
+  profiles for custom model geometries and the existing privacy protections.
+- The Docker proxy laboratory documents 17 scenarios covering TLS inspection,
+  domain policy, trusted CAs, proxy authentication, transport/method fallbacks and
+  interruptions. These are reproducible laboratory results, not enterprise approval.
+- Updated product presentation and bidirectional relay illustration, with the
+  reviewed GIF included in source bundles.
+
 ## 1.2611.2-preview.2 — 2 November 2026 (free trial relay, own relay on Cloudflare, status page)
 
 - A relay that refuses every handshake of an access (429 or 503, usually because all the

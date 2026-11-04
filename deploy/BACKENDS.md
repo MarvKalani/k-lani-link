@@ -1,6 +1,6 @@
 # Backend capabilities and model management
 
-Reviewed on 28 October 2026. k-lani-link 1.2610.29 forwards inference; it does not
+Reviewed on 4 November 2026. k-lani-link forwards inference; it does not
 pretend that all OpenAI-compatible servers share model-management semantics.
 
 The product connects computer X to computer Y, independent of their location.
@@ -13,9 +13,10 @@ this skips the privacy-profile admission check, warns at startup and is not a
 claim that the backend is privacy-qualified. The secure default remains false. A host-side gateway to an external provider such as
 OpenAI is also planned; it needs an explicit cloud policy because that provider
 receives the inference data. Dedicated deployment/privacy profiles and management
-adapters for other engines are not shipped in 1.2610.29.
+adapters for other engines require separate validation. The managed deployment
+currently supports Basalt and supervised llama.cpp GGUF models.
 
-| Operation | Current k-lani-link MVP | Backend capability |
+| Operation | Current k-lani-link | Backend capability |
 | --- | --- | --- |
 | List the loaded model | `GET /v1/models` | Basalt supplies model ID and context metadata |
 | Stream chat, reasoning, tool calls | Passes SSE through unchanged | Depends on model and client support |
@@ -197,9 +198,10 @@ until there is demand (owner decision, 2026-10-30):
   medium (SFTP, S3-compatible storage, e-mail, Git), the model host picks it up and
   leaves the encrypted result. For long jobs that need no live dialog; it needs its own
   timing rules, because the live tunnel ends a session after 23 s without the peer.
-- Relay on Cloudflare Workers with Durable Objects: waiting requests cost almost nothing
-  there and there is no PHP worker limit. Cloudflare is a US provider that would see
-  IP addresses and timing (never content); needs a GDPR review first.
 - Streaming GET reader for the Rust relay: one long-lived response delivers records as
   they arrive (about 25 ms lower median in the carrier benchmark), with fallback to
   finite polls when a buffering proxy holds the stream back. Not for PHP hosting.
+
+The [Cloudflare Workers relay](cloudflare-relay/README.md) is implemented and has
+local workerd validation. It has not been accepted on Cloudflare's production
+network. Provider visibility and deployment/privacy review remain operator concerns.
