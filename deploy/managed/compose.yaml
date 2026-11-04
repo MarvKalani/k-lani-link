@@ -1,8 +1,8 @@
 # Add after deploy/compose.yaml on the backend computer.
 services:
   basalt:
-    mem_limit: 6g
-    memswap_limit: 6g
+    mem_limit: ${LINK_BACKEND_MEMORY:-6g}
+    memswap_limit: ${LINK_BACKEND_MEMORY:-6g}
     environment: {LINK_REQUIRE_NO_SWAP: '1'}
     entrypoint: [/opt/basalt/.venv/bin/python, -B, /opt/link-manager.py]
     command: []

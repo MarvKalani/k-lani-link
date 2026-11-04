@@ -11,7 +11,8 @@ Build the current images with the production Compose file. Copy
 [`models.example.json`](models.example.json) to a private operator directory.
 Its IDs (`coder`, `nvfp4`) are the model aliases advertised by Basalt; the files
 must already exist. Each profile fixes its context, parallel slots, prefill size
-and thinking budget. INT8 KV, mmap experts, privacy mode and vision off are enforced.
+and thinking budget. INT8 KV, privacy mode and vision off are enforced. Basalt
+expert memory and prompt batching are operator-controlled as described below.
 Only one model is loaded at a time; see below for GGUF models and loading on demand.
 
 Set `LINK_MODEL_CATALOG`, `LINK_CODER_MODEL` and `LINK_NVFP4_MODEL` to absolute local
@@ -29,12 +30,42 @@ docker compose -f deploy/compose.yaml -f deploy/managed/compose.yaml up -d
 ```
 
 Add `deploy/compose.no-swap.yaml` before the managed override when using the
-bounded-memory profile. The managed override uses a 6 GiB no-swap container
-limit; host swap must already be disabled. The default example
+bounded-memory profile. Set `LINK_BACKEND_MEMORY` to the RAM budget for this
+backend, for example `20g` on a workstation with enough free RAM. The same value
+sets the memory-plus-swap limit, so the container cannot swap. The compatibility
+default is 6 GiB; this can severely limit throughput for a large model.
+Host swap must already be disabled (`sudo swapoff -a` on Linux). The supervisor
+checks this at startup and before every model load or switch; it does not disable
+swap itself. The default example
 asks for two slots with 262,144 tokens each. This is a capacity configuration,
 not evidence that two full contexts fit a particular GPU. The supervisor checks
 the engine's actual model, slot count and context before reporting success;
 it refuses a silent fallback to fewer slots. Reduce the profile if it does not fit.
+
+### Basalt performance settings
+
+The example catalog uses `memory_mode: "resident"` and `prefill: "auto"`.
+Resident mode keeps CPU experts in RAM when the configured budget permits it;
+Basalt applies its memory safety floor and may retain file-backed experts when
+the full set does not fit. A large context value alone is not a performance profile.
+
+| Catalog field | Accepted values | When omitted |
+| --- | --- | --- |
+| `memory_mode` | `"resident"`, `"mmap"` | `"mmap"`, preserving existing catalogs |
+| `prefill` | Integer 128–8192; `"auto"`, `"auto:8192"`, `"auto:16384"`, `"auto:32768"` | 512 |
+| `prefill_cpu_share` | Finite number from 0 to 1 | Basalt's default |
+| `pool_workers` | Integer 1–256 | Basalt's hardware-dependent default |
+
+`memory_mode`, `prefill_cpu_share` and `pool_workers` apply only to Basalt. They
+are private operator settings, not remotely supplied engine flags. The control
+API still accepts only an allowlisted model ID.
+
+Use [Basalt's probe](https://github.com/jesdga95/basalt/blob/main/docs/probe.md) to
+measure the CPU share and worker count on the target machine. Do not copy another
+machine's tuning values without measuring. Compare identical prompts and record
+the engine version, model, cache reuse, actual output tokens and GPU power limit.
+An MTP drafter must exist in the model file; a speculation flag cannot create
+one. See [Basalt's model format and conversion kit](https://github.com/jesdga95/basalt/blob/main/docs/model-file.md).
 
 ### Custom Basalt expert profiles
 

@@ -2,6 +2,7 @@
 IDs cross its private socket; one model is loaded at a time."""
 import http.client
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -23,6 +24,7 @@ MAX_REPLY = 64 * 1024
 ENGINES = ("basalt", "llama")
 LLAMA_KV = ("q8_0", "q4_0", "f16")
 LLAMA = "/opt/llama/llama-server"
+BASALT_SETTINGS = {"expert_profile", "memory_mode", "prefill_cpu_share", "pool_workers"}
 
 
 def model_id(value):
@@ -42,7 +44,7 @@ def catalog_from_file(path):
         raise ValueError("invalid models")
     models = {}
     for row in rows:
-        if not isinstance(row, dict) or set(row) - {"id", "engine", "path", "context_tokens", "parallel", "slot_full_context", "prefill", "reasoning_budget_tokens", "kv", "expert_profile"}:
+        if not isinstance(row, dict) or set(row) - ({"id", "engine", "path", "context_tokens", "parallel", "slot_full_context", "prefill", "reasoning_budget_tokens", "kv"} | BASALT_SETTINGS):
             raise ValueError("invalid model profile")
         engine = row.get("engine", "basalt")
         if engine not in ENGINES or engine == "basalt" and "kv" in row or row.get("kv", "q8_0") not in LLAMA_KV:
@@ -51,6 +53,8 @@ def catalog_from_file(path):
         if not model_id(name) or name in models or not isinstance(path, str) or not Path(path).is_absolute() or not Path(path).is_file():
             raise ValueError("invalid local model")
         profile = dict(row, engine=engine)
+        if engine != "basalt" and BASALT_SETTINGS.intersection(row):
+            raise ValueError("Basalt settings require the Basalt engine")
         if "expert_profile" in row:
             expert_profile = row["expert_profile"]
             if (engine != "basalt" or not isinstance(expert_profile, str)
@@ -63,10 +67,25 @@ def catalog_from_file(path):
             profile.setdefault("kv", "q8_0")
             profile["slot_full_context"] = True
         for key, default, low, high in [("context_tokens", 262144, 4096, 1048576), ("parallel", 1, 1, 8),
-                ("prefill", 512, 128, 8192), ("reasoning_budget_tokens", 2048, 0, 65536)]:
+                ("reasoning_budget_tokens", 2048, 0, 65536)]:
             value = profile.setdefault(key, default)
             if type(value) is not int or not low <= value <= high:
                 raise ValueError("invalid model setting")
+        prefill = profile.setdefault("prefill", 512)
+        if not (type(prefill) is int and 128 <= prefill <= 8192 or engine == "basalt"
+                and isinstance(prefill, str) and prefill in ("auto", "auto:8192", "auto:16384", "auto:32768")):
+            raise ValueError("invalid prefill setting")
+        if engine == "basalt":
+            if profile.setdefault("memory_mode", "mmap") not in ("mmap", "resident"):
+                raise ValueError("invalid expert memory mode")
+            if "prefill_cpu_share" in profile:
+                share = profile["prefill_cpu_share"]
+                if type(share) not in (int, float) or not 0 <= share <= 1 or not math.isfinite(share):
+                    raise ValueError("invalid prefill CPU share")
+            if "pool_workers" in profile:
+                workers = profile["pool_workers"]
+                if type(workers) is not int or not 1 <= workers <= 256:
+                    raise ValueError("invalid CPU worker count")
         if type(profile.setdefault("slot_full_context", False)) is not bool:
             raise ValueError("invalid slot setting")
         models[name] = profile
@@ -74,6 +93,13 @@ def catalog_from_file(path):
     if default is not None and default not in models:
         raise ValueError("unknown default model")
     return default, models
+
+
+def host_swap_disabled():
+    try:
+        return len(Path("/proc/swaps").read_text().splitlines()) == 1
+    except OSError:
+        return False
 
 
 def remove_socket(path):
@@ -135,7 +161,7 @@ def llama_health(path, name, parallel, context):
 
 
 class Manager:
-    def __init__(self, models, runtime, program=None, metrics=False, timeout=180, llama=None):
+    def __init__(self, models, runtime, program=None, metrics=False, timeout=180, llama=None, require_no_swap=False):
         self.models = models
         self.runtime = Path(runtime)
         self.socket = self.runtime / "basalt.sock"
@@ -144,6 +170,7 @@ class Manager:
         self.llama = llama or [LLAMA]
         self.metrics = metrics
         self.timeout = timeout
+        self.require_no_swap = require_no_swap
         self.process = None
         self.active = None
         self.stopping = threading.Event()
@@ -194,6 +221,8 @@ class Manager:
             return 404, {"error": "unknown model ID"}
         if self.stopping.is_set():
             return 503, {"error": "backend is stopping"}
+        if self.require_no_swap and not host_swap_disabled():
+            return 503, {"error": "host swap must be disabled before loading a model"}
         if self.active == name and self.ready(name):
             return 200, self.snapshot()
         self.stop_engine()
@@ -214,12 +243,16 @@ class Manager:
             args = [*self.program, "--model", profile["path"], "--alias", name,
                 "--privacy", "--vision", "off", "--host", "127.0.0.1", "--unix-socket", str(self.socket),
                 "--parallel", str(profile["parallel"]), "--max-context", str(profile["context_tokens"]),
-                "--kv", "int8", "--mmap-experts", "--prefill", str(profile["prefill"]),
+                "--kv", "int8", "--resident-experts" if profile["memory_mode"] == "resident" else "--mmap-experts",
+                "--prefill", str(profile["prefill"]),
                 "--reasoning-budget-tokens", str(profile["reasoning_budget_tokens"])]
             if profile["slot_full_context"]:
                 args.append("--slot-full-context")
             if profile.get("expert_profile"):
                 args += ["--expert-profile", profile["expert_profile"]]
+            for key, flag in (("prefill_cpu_share", "--prefill-cpu-share"), ("pool_workers", "--pool-workers")):
+                if key in profile:
+                    args += [flag, str(profile[key])]
             if self.metrics:
                 args += ["--privacy-metrics-file", str(self.runtime / "performance.json")]
         self.process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -311,13 +344,14 @@ def main():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     if {name for _, name in socket.if_nameindex()} - {"lo"}:
         return 2
-    if os.environ.get("LINK_REQUIRE_NO_SWAP") == "1" and len(Path("/proc/swaps").read_text().splitlines()) != 1:
+    require_no_swap = os.environ.get("LINK_REQUIRE_NO_SWAP") == "1"
+    if require_no_swap and not host_swap_disabled():
         return 2
     default, models = catalog_from_file("/run/secrets/models.json")
     runtime = Path("/run/link")
     control = runtime / "control.sock"
     remove_socket(control)
-    manager = Manager(models, runtime, metrics=os.environ.get("LINK_NUMERIC_METRICS") == "1")
+    manager = Manager(models, runtime, metrics=os.environ.get("LINK_NUMERIC_METRICS") == "1", require_no_swap=require_no_swap)
     server = Server(str(control), Handler)
     server.manager = manager
     os.chmod(control, 0o600)
