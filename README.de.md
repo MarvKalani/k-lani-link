@@ -3,16 +3,16 @@
 <!-- WINDOWS-DOWNLOADS:START -->
 ## Windows herunterladen
 
-**[⬇ Windows x64: EXE herunterladen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-x64.exe)** · **[⬇ OpenCode + Docker: Setup-ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip)**
+**[⬇ Windows x64: EXE herunterladen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.4/k-lani-link-1.2611.4-windows-x64.exe)** · **[⬇ OpenCode + Docker: Setup-ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip)**
 
 | Was möchtest du nutzen? | Download | Anleitung |
 | --- | --- | --- |
-| Portable EXE für Intel-/AMD-PCs | [Windows x64 als ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-x64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
-| Windows auf ARM, z. B. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/k-lani-link-1.2611.2-preview.2-windows-arm64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
+| Portable EXE für Intel-/AMD-PCs | [Windows x64 als ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.4/k-lani-link-1.2611.4-windows-x64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
+| Windows auf ARM, z. B. Snapdragon | [ARM64 EXE](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.4/k-lani-link-1.2611.4-windows-arm64.exe) · [ARM64 ZIP](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.4/k-lani-link-1.2611.4-windows-arm64.zip) | [Native Einrichtung](deploy/portable/README.md#windows-connect-to-a-remote-model) |
 | OpenCode im Browser, isoliert mit `D:\OpenCode` | [Aktuelles Docker-Setup als ZIP](https://github.com/MarvKalani/k-lani-link/archive/refs/heads/main.zip) | [Docker-Desktop-Einrichtung](deploy/desktop/README.md) |
 
 **Portable Windows-Pakete verfügbar.**
-[Versionshinweise](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2611.2-preview.2) · [Änderungen seit diesem Build](https://github.com/MarvKalani/k-lani-link/compare/v1.2611.2-preview.2...main) · [SHA-256-Prüfsummen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.2-preview.2/SHA256SUMS) · [macOS / Linux / alle Downloads](https://github.com/MarvKalani/k-lani-link/releases)
+[Versionshinweise](https://github.com/MarvKalani/k-lani-link/releases/tag/v1.2611.4) · [Änderungen seit diesem Build](https://github.com/MarvKalani/k-lani-link/compare/v1.2611.4...main) · [SHA-256-Prüfsummen](https://github.com/MarvKalani/k-lani-link/releases/download/v1.2611.4/SHA256SUMS) · [macOS / Linux / alle Downloads](https://github.com/MarvKalani/k-lani-link/releases)
 
 Das Docker-ZIP enthält den aktuellen Quellstand samt Starter; die Images werden einmalig lokal gebaut. Die EXE enthält nur den Transport, keine OpenCode-Oberfläche; normale Quellcode-Pushes erneuern sie nicht. Der Windows-/Firmennetz-Test des Docker-Profils steht noch aus.
 <!-- WINDOWS-DOWNLOADS:END -->
