@@ -7,6 +7,9 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The Windows MXC terminal starter is available in `deploy/mxc`, with pinned
+  tools, an offline import option and a recorded 12-check sandbox acceptance.
+  Its pilot scope and shell-tool limitations are documented in the setup guide.
 - The OpenCode Docker starter discovers managed catalogs with several models and
   uses each model's declared context limit. It keeps the already loaded model as
   its initial choice and offers the other models instead of refusing to start.

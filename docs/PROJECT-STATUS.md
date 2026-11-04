@@ -10,6 +10,7 @@ snapshot; they are not the current list of unfinished implementation tasks.
 | Source and dependencies | [Release source checks and audit](https://github.com/MarvKalani/k-lani-link/actions/runs/41763742616) | Later source changes have their own Check workflow |
 | Managed Basalt | Source version 0.2.1, operator-selected profiles and performance settings, no-swap load guard | Model files and hardware budgets remain operator choices |
 | OpenCode Docker starter | Multiple managed models and their actual context limits; [real read/write/shell acceptance](../deploy/opencode/validation-20261104.json) | The recorded agent task used the Coder; listing another model is not a tool-quality assessment of that model |
+| Windows MXC terminal starter | [Source and setup guide](../deploy/mxc/README.md), pinned tools and [12 sandbox checks plus a real agent task](../deploy/mxc/TESTED.md) | Pilot qualified on the recorded Windows build and pinned versions; shell tools are disabled |
 | TLS-inspecting proxy laboratory | [17 recorded scenarios](../deploy/proxy-lab/RESULTS.md) | A real company's proxy, policy and administrator approval remain external |
 | Product presentation | Current English/German wording and bidirectional request/answer relay illustration | Historical recordings and versioned download URLs retain their provenance |
 
@@ -21,7 +22,7 @@ acceptance is recorded separately from those unit tests.
 
 ## Deliberate boundaries and follow-up choices
 
-- The separately tested Windows MXC sandbox remains a pilot with documented
+- The [Windows MXC sandbox](../deploy/mxc/README.md) remains a pilot with documented
   platform and shell-tool limitations. It is not an OS-signed customer installer
   bundled with the portable release.
 - Cloudflare Workers has [local workerd validation](../deploy/cloudflare-relay/README.md#validation).

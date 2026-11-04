@@ -205,6 +205,10 @@ interface; k-lani-link handles the peer connection through a private socket.
 The PowerShell launcher builds/starts the stack and checks its boundaries. The
 Windows/Docker Desktop and real company-network acceptance test is still pending.
 
+**Windows without Docker:** the [MXC terminal profile](deploy/mxc/README.md)
+restricts OpenCode to one project directory and the local k-lani-link API port.
+Its Windows requirements and current shell limitations are documented there.
+
 In WebRTC mode, both peers need network access and their networks must allow
 direct peer traffic across the Internet; Internet access alone does not guarantee NAT traversal.
 If direct ICE cannot connect, **you must currently bring your own TURN server**

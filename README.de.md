@@ -215,6 +215,10 @@ Netzwerkschnittstelle; k-lani-link stellt die Modellverbindung über einen priva
 Socket bereit. Ein PowerShell-Starter baut und startet den Aufbau und prüft seine
 Grenzen. Die Abnahme auf Windows/Docker Desktop und im echten Firmennetz steht noch aus.
 
+**Windows ohne Docker:** Das [MXC-Terminalprofil](deploy/mxc/README.md)
+beschränkt OpenCode auf einen Projektordner und den lokalen k-lani-link-API-Port.
+Windows-Voraussetzungen und die aktuellen Shell-Grenzen stehen in der Anleitung.
+
 Im WebRTC-Modus brauchen beide Gegenstellen Netzwerkzugang. Ihre Netze müssen
 direkten Peer-Verkehr über das Internet zulassen; Internetzugang allein garantiert noch
 keine erfolgreiche NAT-Durchquerung. Scheitert die direkte ICE-Verbindung,
