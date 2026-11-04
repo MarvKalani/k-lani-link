@@ -7,6 +7,10 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The OpenCode Docker starter discovers managed catalogs with several models and
+  uses each model's declared context limit. It keeps the already loaded model as
+  its initial choice and offers the other models instead of refusing to start.
+
 ## 1.2611.4 — 4 November 2026
 
 - Regular release of the current portable application. Historical preview tags and

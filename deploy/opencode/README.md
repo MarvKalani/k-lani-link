@@ -19,6 +19,16 @@ Der geprüfte Parallelbetrieb verwendet zwei Slots und 6 GiB Backend-RAM ohne Sw
 Ein Backend-Neustart mit
 derselben Modellkonfiguration benötigt keine neue Kopplung, solange beide Peers laufen.
 
+Beim Start übernimmt OpenCode die über `/v1/models` angebotenen Modelle samt
+Kontextgrenzen. Ein bereits geladenes Modell wird zuerst gewählt; andernfalls
+der erste Eintrag des freigegebenen Katalogs. Dieses erste Modell bleibt unter
+`link/basalt` erreichbar. Weitere Modelle erscheinen in der Modellauswahl, auch
+mit kleineren Kontextfenstern wie Mellum mit 128k. Verwendet werden
+`context_length` aus dem verwalteten Katalog oder `meta.n_ctx` eines direkt
+verbundenen Basalt-Servers. Ohne eine gültige Kontextangabe startet der Container
+nicht mit einem erfundenen 256k-Limit. Nach Änderungen am Katalog OpenCode neu
+starten, damit seine Modellauswahl neu eingelesen wird.
+
 ## Voraussetzungen und Swap
 
 Linux x86_64, UID/GID 1000, Docker Compose/BuildKit, Python ≥3.11 und die
@@ -99,6 +109,16 @@ weiterhin normale Dateisystemschreibzugriffe; deaktivierter Swap verhindert
 zusätzliche Swap-Schreiblast, nicht sämtliche SSD-Schreibvorgänge.
 
 ## Reproduzierbarer Funktionstest und Messung
+
+Am 4. November 2026 wurde der aktualisierte Starter mit einem verwalteten Katalog
+aus drei Modellen geprüft, einschließlich Mellum mit 128k Kontext. OpenCode 2.2.0
+las über einen frischen verschlüsselten Tunnel eine synthetische Eingabedatei,
+schrieb die erwartete Ausgabedatei und prüfte sie mit einem Shell-Werkzeug.
+Der Ablauf dauerte 16,23 Sekunden; Eingabe und Git-Stand blieben unverändert.
+Netzwerk-, Privilegien-, Zugangsdaten- und Swap-Grenzen wurden im laufenden
+Container geprüft. Das ist ein lokaler Funktionstest des Coder-Modells, kein
+WAN-Benchmark und kein allgemeiner Qualitätsnachweis für alle angebotenen Modelle.
+[Numerischer Testnachweis](validation-20261104.json).
 
 ```sh
 python3 -B deploy/opencode/verify.py

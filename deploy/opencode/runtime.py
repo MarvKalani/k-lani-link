@@ -14,7 +14,28 @@ import tomllib
 from bridge import accept, forward
 
 
-def model_from_backend(key):
+def backend_models(payload):
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 32:
+        raise ValueError("a nonempty bounded model catalog is required")
+    models, seen = [], set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("invalid model descriptor")
+        name, meta = row.get("id"), row.get("meta", {})
+        if (not isinstance(name, str) or not 1 <= len(name) <= 256 or name != name.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in name) or name in seen or not isinstance(meta, dict)):
+            raise ValueError("invalid or duplicate model ID")
+        contexts = [value for value in (row.get("context_length"), meta.get("n_ctx")) if value is not None]
+        if not contexts or any(type(value) is not int or not 4096 <= value <= 1048576 for value in contexts):
+            raise ValueError("the backend must declare a valid model context")
+        models.append({"id": name, "context": min(contexts), "loaded": row.get("loaded") is True})
+        seen.add(name)
+    return [{"id": row["id"], "context": row["context"]}
+        for row in sorted(models, key=lambda row: not row["loaded"])]
+
+
+def models_from_backend(key):
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         client = http.client.HTTPConnection("localhost", timeout=3)
@@ -26,10 +47,7 @@ def model_from_backend(key):
             response = client.getresponse()
             payload = response.read(65537)
             if response.status == 200 and len(payload) <= 65536:
-                models = json.loads(payload)["data"]
-                if len(models) != 1 or models[0].get("meta", {}).get("n_ctx", 0) < 262144:
-                    raise ValueError("one backend model with at least 256K context is required")
-                return models[0]["id"]
+                return backend_models(json.loads(payload))
         except (OSError, http.client.HTTPException):
             pass
         finally:
@@ -38,17 +56,25 @@ def model_from_backend(key):
     raise TimeoutError("k-lani-link model discovery did not complete")
 
 
-def configuration(model, craft=False):
+def configuration(models, craft=False):
+    entries = {}
+    for index, model in enumerate(models):
+        name, context = model["id"], model["context"]
+        alias = "basalt" if index == 0 else name
+        while alias in entries:
+            alias = "model-" + alias
+        label = str(context // 1024) + "K" if context % 1024 == 0 else str(context)
+        entries[alias] = {"modelID": name, "name": name + " · k-lani-link · " + label,
+            "limit": {"context": context, "output": min(16384, context // 2)},
+            "capabilities": {"tools": True, "input": ["text"], "output": ["text"], "reasoning": {"supported": True}},
+            "cost": {"input": 0, "output": 0, "cache": {"read": 0, "write": 0}}}
     config = {"model": "link/basalt", "default_agent": "build", "update": "disable", "share": "disabled",
         "warming": False, "snapshots": False, "formatter": False, "lsp": False,
-        "providers": {"link": {"name": "Basalt via k-lani-link", "env": ["LINK_API_KEY"],
+        "providers": {"link": {"name": "Local models via k-lani-link", "env": ["LINK_API_KEY"],
             "package": "@opencode/ai/providers/openai-compatible", "settings": {"baseURL": "http://127.0.0.1:8787/v1"},
             "compatibility": {"reasoningField": "reasoning_content", "maxTokensField": "max_tokens", "streamUsage": True},
             "body": {"store": False, "reasoning_effort": "medium"},
-            "models": {"basalt": {"modelID": model, "name": model + " · k-lani-link · 256K",
-                "limit": {"context": 262144, "output": 16384},
-                "capabilities": {"tools": True, "input": ["text"], "output": ["text"], "reasoning": {"supported": True}},
-                "cost": {"input": 0, "output": 0, "cache": {"read": 0, "write": 0}}}}}},
+            "models": entries}},
         "policies": [{"action": "provider.use", "resource": "*", "effect": "deny"},
             {"action": "provider.use", "resource": "link", "effect": "allow"}],
         "permissions": [{"action": "websearch", "resource": "*", "effect": "deny"},
@@ -89,12 +115,12 @@ def main():
         return 2
     os.umask(0o077)
     key = tomllib.loads(Path("/run/secrets/client.toml").read_text())["api_key"]
-    model = model_from_backend(key)
+    models = models_from_backend(key)
     os.environ["LINK_API_KEY"] = key
     os.environ["OPENCODE_PASSWORD"] = Path("/run/secrets/server-password.txt").read_text().strip()
     config = Path.home() / ".config/opencode/opencode.json"
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text(json.dumps(configuration(model, os.environ.get("LINK_CRAFT_TOOLS") == "1"), indent=2))
+    config.write_text(json.dumps(configuration(models, os.environ.get("LINK_CRAFT_TOOLS") == "1"), indent=2))
     with socket.socket() as api, socket.socket(socket.AF_UNIX) as ui:
         api.bind(("127.0.0.1", 8787)); api.listen(8)
         threading.Thread(target=accept, args=(api, "/run/link-api/api.sock"), daemon=True).start()
