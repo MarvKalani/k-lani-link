@@ -7,9 +7,9 @@ Arbeitsspeicher, und er kann nichts lesen oder ändern. Technische Einzelheiten:
 
 ## Einrichten (etwa fünf Minuten)
 
-Du brauchst Node.js ab Version 18 und ein Cloudflare-Konto.
+Du brauchst Node.js ab Version 22 und ein Cloudflare-Konto.
 
-1. Im Ordner `deploy/cloudflare-relay` ein Terminal öffnen und `npm install` ausführen.
+1. Im Ordner `deploy/cloudflare-relay` ein Terminal öffnen und `npm ci` ausführen.
 2. `npx wrangler login`: Der Browser öffnet sich, du meldest dich bei Cloudflare an.
 3. `node tokens.js ~/k-lani-relay-tokens`: Das legt zwei private Zugangsdateien an
    (`host-token`, `client-token`) und zeigt eine Zeile mit `{…}` an.

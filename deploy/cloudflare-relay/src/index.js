@@ -162,6 +162,27 @@ function same(a, b) {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+/** Canonical address bucket: one IPv4 address or the first 64 bits of IPv6. */
+function subscriber(peer) {
+  if (!peer.includes(":")) return `v4:${peer}`;
+  if (!/^[0-9a-f:.]+$/i.test(peer)) return "invalid-peer";
+  try {
+    // The standard URL parser validates IPv6, normalizes case/leading zeroes and
+    // converts an embedded IPv4 tail to hex groups. Expand :: before taking /64.
+    const host = new URL(`http://[${peer}]/`).hostname.slice(1, -1);
+    const [left, right] = host.split("::");
+    const head = left ? left.split(":") : [];
+    const tail = right ? right.split(":") : [];
+    const groups = right === undefined ? head
+      : [...head, ...Array(8 - head.length - tail.length).fill("0"), ...tail];
+    return `v6:${groups.slice(0, 4).join(":")}`;
+  } catch {
+    // Cloudflare supplies the peer address. Malformed values share a restrictive
+    // bucket instead of creating a new failure counter for each spelling.
+    return "invalid-peer";
+  }
+}
 function equalBytes(a, b) {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -492,8 +513,7 @@ export class Pairs {
 
   async key(peer) {
     // IPv4 per address, IPv6 per /64; only salted hashes are kept, in memory.
-    const subscriber = peer.includes(":") ? peer.split(":").slice(0, 4).join(":") : peer;
-    return hex(await sha256(concat(this.salt, new TextEncoder().encode(subscriber)))).slice(0, 32);
+    return hex(await sha256(concat(this.salt, new TextEncoder().encode(subscriber(peer))))).slice(0, 32);
   }
 
   /** Counts a refused request against its address; true while that address is banned. */

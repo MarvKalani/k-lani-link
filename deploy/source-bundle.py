@@ -33,6 +33,9 @@ def main():
     left_out = 0
     for path in sorted(paths):
         relative = path.relative_to(ROOT)
+        # Installed Worker development tools and local workerd state are not sources.
+        if relative.parts[:2] == ("deploy", "cloudflare-relay") and len(relative.parts) > 2 and relative.parts[2] in {"node_modules", ".wrangler"}:
+            continue
         if relative.parts[:2] == LEFT_OUT and relative.suffix == ".gif":
             left_out += 1
             continue

@@ -8,11 +8,11 @@ only**; nothing is written to Cloudflare storage. German guide: [ANLEITUNG.de.md
 
 ## Set up (about five minutes)
 
-You need Node.js 18 or newer and a Cloudflare account.
+You need Node.js 22 or newer and a Cloudflare account.
 
 ```sh
 cd deploy/cloudflare-relay
-npm install
+npm ci
 npx wrangler login
 node tokens.js ~/k-lani-relay-tokens        # writes host-token and client-token
 npx wrangler secret put TOKENS               # paste the JSON line tokens.js printed
@@ -76,6 +76,12 @@ requests fail until the next day, and the paid plan raises it.
   `wrangler.toml`.
 
 ## Validation
+
+The development toolchain is pinned to Wrangler 4.157.0 with Undici 7.30.1.
+`npm test` checks IPv6 subnet grouping and the failure brake, including compressed
+and IPv4-embedded addresses. `npm audit` checks the complete lockfile, including
+development tools; both checks also run in CI. These Node dependencies are local
+development/deployment tools, not runtime imports of the deployed Worker.
 
 Run on 2 November 2026 with `wrangler dev` 4.151.1 (local workerd, HTTPS with a private
 test CA) and two k-lani-link 1.2611.2 peers: pairing by code through the Worker, the

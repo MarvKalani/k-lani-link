@@ -59,6 +59,23 @@ jobs:
       # Match rust-toolchain.toml explicitly; avoid cargo-install's implicit override warning.
       - run: cargo +1.99.1 install cargo-audit --version 0.22.2 --locked
       - run: cargo audit
+  cloudflare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: deploy/cloudflare-relay
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm audit --audit-level=low
   desktop-launcher:
     runs-on: windows-2022
     timeout-minutes: 5

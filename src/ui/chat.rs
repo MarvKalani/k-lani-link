@@ -8,7 +8,7 @@ use crate::{
 use axum::{
     Json, Router,
     body::{Body, Bytes},
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -32,7 +32,15 @@ pub fn routes() -> Router<Panel> {
 
 /// Forwards one chat request to the local gateway and streams its answer back. The page
 /// never sees the API key, and the panel lock is not held while the answer streams.
-async fn chat(State(panel): State<Panel>, body: Bytes) -> Response {
+async fn chat(State(panel): State<Panel>, request: Request) -> Response {
+    let _upload = match panel.chat_uploads.reserve() {
+        Ok(permit) => permit,
+        Err(error) => return error.into_response(),
+    };
+    let body = match panel.chat_uploads.read(request.into_body()).await {
+        Ok(body) => body,
+        Err(error) => return error.into_response(),
+    };
     // Through the front, like any AI app: the model picks the computer.
     let target = {
         let control = panel.control.lock().await;

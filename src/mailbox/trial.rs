@@ -138,10 +138,7 @@ pub async fn mint(
         .await
         .map_err(|_| Diagnostic::err("the relay cannot be reached"))?;
     let status = response.status().as_u16();
-    let body = response.bytes().await.unwrap_or_default();
-    if body.len() > 4096 {
-        return Err(Diagnostic::err("the relay answered with too much data"));
-    }
+    let body = super::response_bytes(response, 4096).await?;
     match status {
         201 => {
             let minted: Minted = serde_json::from_slice(&body)

@@ -8,12 +8,43 @@ pub mod setup;
 pub mod transport;
 pub mod trial;
 
+/// Opening, client answer, sealed bundle and acknowledgement of pairing by code.
+/// The endpoints enforce the same byte limits as the relay, even if the relay is hostile.
+pub(crate) const PAIR_PART_BYTES: [usize; 4] = [64, 128, 8192, 64];
+
 use crate::diagnostic::Diagnostic;
 use serde::{Deserialize, Serialize};
 use std::{
     io::Read,
     path::{Path, PathBuf},
 };
+
+/// Bound untrusted HTTP responses while receiving them, including chunked responses.
+/// A timeout alone does not bound how much memory a fast relay can make us allocate.
+pub(crate) async fn response_bytes(
+    mut response: reqwest::Response,
+    maximum: usize,
+) -> anyhow::Result<Vec<u8>> {
+    let too_large = || Diagnostic::err("the relay response exceeds its size limit");
+    if response
+        .content_length()
+        .is_some_and(|length| length > maximum as u64)
+    {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| Diagnostic::err("the relay response was interrupted"))?
+    {
+        if chunk.len() > maximum.saturating_sub(bytes.len()) {
+            return Err(too_large());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

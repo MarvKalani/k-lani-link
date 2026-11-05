@@ -261,10 +261,9 @@ impl Slots {
             }
             _ => return Err(Diagnostic::err(NETWORK)),
         }
-        let text = response
-            .text()
-            .await
-            .map_err(|_| Diagnostic::err(NETWORK))?;
+        // Three digits, with room for surrounding whitespace used by some web hosts.
+        let bytes = super::response_bytes(response, 16).await?;
+        let text = std::str::from_utf8(&bytes).map_err(|_| Diagnostic::err(UNSUPPORTED))?;
         text.trim()
             .parse::<u16>()
             .ok()
@@ -272,6 +271,10 @@ impl Slots {
             .ok_or_else(|| Diagnostic::err(UNSUPPORTED))
     }
     async fn read(&self, slot: u16, part: &str, wait: u64) -> Result<Read> {
+        let index = ["a", "b", "c", "d"]
+            .iter()
+            .position(|name| *name == part)
+            .ok_or_else(|| Diagnostic::err("invalid pairing message part"))?;
         let response = self
             .request(
                 reqwest::Method::GET,
@@ -282,11 +285,7 @@ impl Slots {
             .map_err(|_| Diagnostic::err(NETWORK))?;
         match response.status().as_u16() {
             200 => Ok(Read::Found(
-                response
-                    .bytes()
-                    .await
-                    .map_err(|_| Diagnostic::err(NETWORK))?
-                    .to_vec(),
+                super::response_bytes(response, super::PAIR_PART_BYTES[index]).await?,
             )),
             204 => Ok(Read::Empty),
             404 => Ok(Read::Missing),

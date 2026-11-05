@@ -78,6 +78,113 @@ async fn fixture_with(global: Limits) -> Fixture {
         stop,
     }
 }
+
+#[tokio::test]
+async fn relay_pairing_responses_are_bounded_before_eof_with_or_without_content_length() {
+    use axum::{
+        Router,
+        body::{Body, Bytes},
+        extract::Path as RoutePath,
+        routing::{get, post},
+    };
+    use futures_util::{StreamExt, stream};
+
+    fn overflow(limit: usize, status: u16, known: bool) -> axum::response::Response {
+        // Never finish the body: an oversized peer must be rejected without waiting
+        // for EOF or for the ordinary 20/40-second network timeout.
+        let first =
+            stream::once(
+                async move { Ok::<_, std::io::Error>(Bytes::from(vec![b'x'; limit + 1])) },
+            );
+        let mut response = axum::http::Response::builder().status(status);
+        if known {
+            response = response.header("content-length", limit + 2);
+        }
+        response
+            .body(Body::from_stream(first.chain(stream::pending())))
+            .unwrap()
+    }
+    fn part_limit(part: &str) -> usize {
+        super::super::PAIR_PART_BYTES[["a", "b", "c", "d"]
+            .iter()
+            .position(|p| *p == part)
+            .unwrap()]
+    }
+    let app = |known| {
+        Router::new()
+            .route(
+                "/v1/pair",
+                post(move || async move { overflow(16, 201, known) }),
+            )
+            .route(
+                "/v1/pair/{slot}/{part}",
+                get(
+                    move |RoutePath((_slot, part)): RoutePath<(u16, String)>| async move {
+                        overflow(part_limit(&part), 200, known)
+                    },
+                ),
+            )
+            .route(
+                "/v1/trial",
+                post(move || async move { overflow(4096, 201, known) }),
+            )
+    };
+    let okay = Router::new()
+        .route(
+            "/v1/pair",
+            post(|| async { (axum::http::StatusCode::CREATED, "472\n") }),
+        )
+        .route(
+            "/v1/pair/{slot}/{part}",
+            get(
+                |RoutePath((_slot, part)): RoutePath<(u16, String)>| async move {
+                    vec![b'x'; part_limit(&part)]
+                },
+            ),
+        );
+    let root = std::env::temp_dir().join(format!("link-response-bound-{}", random_id().unwrap()));
+    crate::pairing::private_directory(&root).unwrap();
+    let router = Router::new()
+        .nest("/known", app(true))
+        .nest("/chunked", app(false))
+        .nest("/okay", okay);
+    let (url, ca, stop) = serve(router, &root).await;
+    let pem = std::fs::read(&ca).unwrap();
+    for framing in ["known", "chunked"] {
+        let base = format!("{url}/{framing}");
+        let slots = Slots::new(&base, None, Some(&pem), None).unwrap();
+        let error = tokio::time::timeout(Duration::from_secs(2), slots.open(&[1; 33]))
+            .await
+            .expect("oversized slot response must not wait for EOF")
+            .unwrap_err();
+        assert!(error.to_string().contains("size limit"));
+        for part in ["a", "b", "c", "d"] {
+            let result = tokio::time::timeout(Duration::from_secs(2), slots.read(472, part, 0))
+                .await
+                .expect("oversized pairing part must not wait for EOF");
+            assert!(result.err().unwrap().to_string().contains("size limit"));
+        }
+        let error = tokio::time::timeout(
+            Duration::from_secs(2),
+            crate::mailbox::trial::mint(&base, Some(&ca), None),
+        )
+        .await
+        .expect("oversized trial response must not wait for EOF")
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("size limit"));
+    }
+    let slots = Slots::new(&format!("{url}/okay"), None, Some(&pem), None).unwrap();
+    assert_eq!(slots.open(&[1; 33]).await.unwrap(), 472);
+    for part in ["a", "b", "c", "d"] {
+        match slots.read(472, part, 0).await.unwrap() {
+            Read::Found(bytes) => assert_eq!(bytes.len(), part_limit(part)),
+            _ => panic!("a response at the limit must be accepted"),
+        }
+    }
+    stop.cancel();
+    std::fs::remove_dir_all(root).unwrap();
+}
 impl Fixture {
     fn options(&self) -> Options {
         Options {

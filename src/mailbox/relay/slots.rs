@@ -6,6 +6,7 @@
 //! and write one sealed acknowledgement. Unknown, expired and used slots all answer 404 and
 //! count against the failure brake. Everything here is ciphertext or a public PAKE message.
 use super::*;
+use crate::mailbox::PAIR_PART_BYTES as PART_BYTES;
 
 /// A slot lives this long; the code shown to the user is useless afterwards.
 pub(crate) const PAIR_TTL: Duration = Duration::from_secs(600);
@@ -14,8 +15,6 @@ pub(super) const SLOT_NUMBERS: usize = 900;
 /// Without `pair_slots`: open slots on the whole relay, and per space.
 const PAIR_SLOTS: usize = 64;
 const PAIR_PER_SPACE: usize = 4;
-/// Opening message, client answer, sealed bundle, sealed acknowledgement.
-const PART_BYTES: [usize; 4] = [64, 128, 8192, 64];
 /// Requests per second for everyone without a token together. A pairing client polls
 /// once a second, so this serves a handful of pairings at a time.
 pub(super) fn door_limits() -> Limits {

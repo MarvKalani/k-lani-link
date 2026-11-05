@@ -113,6 +113,10 @@ struct Panel {
     /// The front's API key: the first pairing's, kept in the panel folder so that an AI
     /// app keeps working when computers are added or removed.
     key: Arc<std::sync::RwLock<Option<String>>>,
+    front_uploads: upload::Budget,
+    // Chat forwards into the front: a separate budget avoids charging the same request
+    // twice against one semaphore while it is waiting for the inner request to finish.
+    chat_uploads: upload::Budget,
 }
 impl Panel {
     fn key(&self) -> Option<String> {
@@ -1098,6 +1102,8 @@ pub async fn run(
         routes: Default::default(),
         catalog: Default::default(),
         key: Default::default(),
+        front_uploads: Default::default(),
+        chat_uploads: Default::default(),
     };
     // A pairing by code reconnects without a new code, so the panel starts it right away.
     let https = {
@@ -1286,6 +1292,7 @@ async fn update(
 mod chat;
 mod front;
 mod tray;
+mod upload;
 
 /// No total timeout: a chat answer streams for as long as the model writes.
 fn streaming_client() -> reqwest::Result<reqwest::Client> {
@@ -1330,6 +1337,8 @@ mod tests {
             routes: Default::default(),
             catalog: Default::default(),
             key: Default::default(),
+            front_uploads: Default::default(),
+            chat_uploads: Default::default(),
         };
         let app = router(panel.clone());
         let stop = panel.stop.clone();
@@ -1347,6 +1356,134 @@ mod tests {
         stop_client(&panel).await;
         task.await.unwrap();
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    fn upload_request(panel: &Panel, chat: bool, body: axum::body::Body) -> Request {
+        Request::builder()
+            .method("POST")
+            .uri(if chat {
+                "/api/chat"
+            } else {
+                "/v1/chat/completions"
+            })
+            .header("host", panel.origin.strip_prefix("http://").unwrap())
+            .header(
+                "authorization",
+                format!(
+                    "Bearer {}",
+                    if chat {
+                        panel.token.clone()
+                    } else {
+                        panel.key().unwrap()
+                    }
+                ),
+            )
+            .body(body)
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn front_and_chat_uploads_reserve_before_reading_and_release_on_cancellation() {
+        use axum::body::{Body, Bytes};
+        use tower::ServiceExt;
+        let (mut panel, server, directory) = fixture().await;
+        let cfg = config();
+        *panel.key.write().unwrap() = Some(cfg.api_key.clone());
+        *panel.routes.write().unwrap() = vec![front::Route {
+            id: "synthetic".into(),
+            key: cfg.api_key.clone(),
+            gateway: Gateway::new(cfg).unwrap(),
+        }];
+        panel.front_uploads = upload::Budget::new(1, std::time::Duration::from_secs(5));
+        panel.chat_uploads = upload::Budget::new(1, std::time::Duration::from_secs(5));
+        for chat in [false, true] {
+            let app = if chat {
+                router(panel.clone())
+            } else {
+                front::router(panel.clone())
+            };
+            let started = Arc::new(tokio::sync::Notify::new());
+            let signal = started.clone();
+            let body = Body::from_stream(async_stream::stream! {
+                signal.notify_one();
+                yield Ok::<_, std::io::Error>(Bytes::from_static(b"{"));
+                futures_util::future::pending::<()>().await;
+            });
+            let first = tokio::spawn(app.clone().oneshot(upload_request(&panel, chat, body)));
+            tokio::time::timeout(std::time::Duration::from_secs(1), started.notified())
+                .await
+                .unwrap();
+            let refused = app
+                .clone()
+                .oneshot(upload_request(&panel, chat, Body::from("{}")))
+                .await
+                .unwrap();
+            assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+            first.abort();
+            assert!(first.await.unwrap_err().is_cancelled());
+            let next = app
+                .oneshot(upload_request(&panel, chat, Body::from("{}")))
+                .await
+                .unwrap();
+            assert_eq!(
+                next.status(),
+                if chat {
+                    StatusCode::CONFLICT
+                } else {
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+            );
+        }
+        cleanup(panel, server, directory).await;
+    }
+
+    #[tokio::test]
+    async fn front_and_chat_time_out_stalled_bodies_and_front_rejects_routes_before_reading() {
+        use axum::body::{Body, Bytes};
+        use tower::ServiceExt;
+        let (mut panel, server, directory) = fixture().await;
+        let cfg = config();
+        *panel.key.write().unwrap() = Some(cfg.api_key.clone());
+        *panel.routes.write().unwrap() = vec![front::Route {
+            id: "synthetic".into(),
+            key: cfg.api_key.clone(),
+            gateway: Gateway::new(cfg).unwrap(),
+        }];
+        panel.front_uploads = upload::Budget::new(1, std::time::Duration::from_millis(40));
+        panel.chat_uploads = upload::Budget::new(1, std::time::Duration::from_millis(40));
+        let pending =
+            || Body::from_stream(futures_util::stream::pending::<Result<Bytes, std::io::Error>>());
+        for chat in [false, true] {
+            let app = if chat {
+                router(panel.clone())
+            } else {
+                front::router(panel.clone())
+            };
+            let response = tokio::time::timeout(
+                std::time::Duration::from_secs(1),
+                app.clone().oneshot(upload_request(&panel, chat, pending())),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+            let next = app
+                .oneshot(upload_request(&panel, chat, Body::from("{}")))
+                .await
+                .unwrap();
+            assert_ne!(next.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+        for uri in [
+            "/unknown",
+            "/v1/link/model",
+            "/v1/chat/completions?unexpected=1",
+        ] {
+            let mut request = upload_request(&panel, false, pending());
+            *request.uri_mut() = uri.parse().unwrap();
+            let response = front::router(panel.clone()).oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        }
+        cleanup(panel, server, directory).await;
     }
 
     #[tokio::test]

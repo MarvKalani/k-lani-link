@@ -7,6 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Pairing and trial clients bound relay responses while receiving them, including
+  chunked responses. The control panel bounds concurrent buffered uploads and
+  their duration before forwarding, including its chat endpoint.
+- The Cloudflare relay groups compressed IPv6 addresses by their actual /64 for
+  failed-authentication limits. Its pinned Wrangler toolchain includes the Undici
+  security fixes; subnet regressions and the full npm audit run in CI.
 - The Windows MXC terminal starter is available in `deploy/mxc`, with pinned
   tools, an offline import option and a recorded 12-check sandbox acceptance.
   Its pilot scope and shell-tool limitations are documented in the setup guide.

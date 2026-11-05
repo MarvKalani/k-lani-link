@@ -26,6 +26,12 @@ und der vorgesehenen Netzisolation betrieben werden. Mit `allow_unverified_backe
 schaltet der Betreiber die Prüfung ausdrücklich ab; `check` und der Start warnen dann,
 und das Logging-Verhalten des Backends liegt vollständig in seiner Verantwortung.
 
+Die gemeinsame Inferenz-API des Kontrollfelds und `/api/chat` erlauben jeweils
+höchstens 24 gepufferte Uploads mit maximal 8 MiB pro Anfrage und 30 Sekunden
+Empfangszeit. Kapazität wird vor dem Lesen reserviert und bei Ablehnung, Abbruch
+oder Weitergabe freigegeben. Antworten zur Kopplung und zum Testzugang werden
+schon beim Empfang begrenzt, auch ohne Content-Length-Header.
+
 Die ThinkRail-Laborumgebung beschränkt IPv4, IPv6 und DNS auf die erforderlichen
 lokalen Verbindungen. Der Browserzugang bindet nur an Loopback und prüft Host/
 Origin; eine CSP begrenzt die Ressourcen der Seite auf lokale Quellen. Der

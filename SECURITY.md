@@ -30,6 +30,12 @@ and the intended network isolation. With `allow_unverified_backend = true` the
 operator explicitly switches the check off; `check` and the start then warn, and
 the backend's logging behavior is entirely the operator's responsibility.
 
+The control panel's shared inference API and `/api/chat` each admit at most 24
+buffered uploads, 8 MiB per body and 30 seconds to receive a body. Capacity is
+reserved before reading and released on rejection, cancellation or handoff.
+Pairing and trial responses are bounded while they arrive, even without a
+Content-Length header.
+
 The ThinkRail lab environment restricts IPv4, IPv6 and DNS to the required local
 connections. Browser access binds to loopback only and checks host and origin; a
 CSP limits the page's resources to local sources. The optional resource recorder

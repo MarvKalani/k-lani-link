@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use k_lani_link_protocol::{MAX_BODY_BYTES, management_route};
+use k_lani_link_protocol::{MAX_BODY_BYTES, accepted_query, allowed_route, route_api};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -219,10 +219,20 @@ async fn proxy(State(panel): State<Panel>, request: Request) -> Response {
         .path_and_query()
         .map_or(path, |p| p.as_str())
         .to_owned();
-    // Model control belongs to a host's operator, never to the shared front.
-    if management_route(parts.method.as_str(), path) {
+    // Reject control, unknown routes and unexpected queries before reading any body.
+    let api = route_api(parts.method.as_str(), path);
+    if !allowed_route(parts.method.as_str(), path)
+        || parts
+            .uri
+            .query()
+            .is_some_and(|query| api.and_then(accepted_query) != Some(query))
+    {
         return failure(StatusCode::NOT_FOUND, "route not available");
     }
+    let _upload = match panel.front_uploads.reserve() {
+        Ok(permit) => permit,
+        Err(error) => return error.into_response(),
+    };
     let routes = panel.routes.read().unwrap().clone();
     let Some(first) = routes.first().cloned() else {
         return failure(
@@ -239,11 +249,9 @@ async fn proxy(State(panel): State<Panel>, request: Request) -> Response {
         }
         return Json(json!({"object": "list", "data": listed})).into_response();
     }
-    let Ok(bytes) = axum::body::to_bytes(body, MAX_BODY_BYTES).await else {
-        return failure(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "request body unavailable or too large",
-        );
+    let bytes = match panel.front_uploads.read(body).await {
+        Ok(bytes) => bytes,
+        Err(error) => return error.into_response(),
     };
     let mut request: Option<Value> = serde_json::from_slice(&bytes).ok();
     let model = request
