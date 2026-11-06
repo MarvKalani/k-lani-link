@@ -46,11 +46,12 @@ for address in ['127.0.0.11','8.8.8.8']:
 """
     for name, python in (("opencode", "python"), ("basalt", "/opt/basalt/.venv/bin/python")):
         run(["docker", "exec", "-i", inspections[name]["Id"], python, "-B", "-"], input=probe)
-    # Probe the UI namespace too: Docker's DNS DNAT must not bypass its loopback rule.
+    # Probe the UI namespace too: Docker's DNS DNAT must not bypass its loopback rule. The
+    # OpenCode image brings the interpreter; the k-lani-link image has none.
     ui_probe = probe.replace("assert {n for _,n in socket.if_nameindex()} == {'lo'}\n", "")
     run(["docker", "run", "--rm", "--network", "container:" + inspections["guard"]["Id"], "--read-only",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--log-driver", "none", "-i",
-        "--entrypoint", "python", "k-lani-link-host:local", "-B", "-"], input=ui_probe)
+        "--entrypoint", "python", inspections["opencode"]["Image"], "-B", "-"], input=ui_probe)
     for port, path, headers, expected in [(24244, "/", {}, 200), (24245, "/stats", {}, 200),
             (24244, "/", {"Origin": "https://untrusted.example.invalid"}, 403),
             (24244, "/", {"Host": "untrusted.example.invalid"}, 403),

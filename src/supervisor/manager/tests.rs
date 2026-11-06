@@ -16,8 +16,9 @@ impl Drop for Fixture {
 }
 impl Fixture {
     fn new() -> Self {
+        // Short: macOS keeps socket paths under 104 bytes, and its temp folder is long.
         let root =
-            std::env::temp_dir().join(format!("link-sup-{}", crate::config::random_id().unwrap()));
+            std::env::temp_dir().join(format!("ls-{}", &crate::config::random_id().unwrap()[..12]));
         std::fs::create_dir_all(root.join("lib")).unwrap();
         for file in ["pack.basalt", "model.gguf"] {
             std::fs::write(root.join(file), b"synthetic test fixture").unwrap();

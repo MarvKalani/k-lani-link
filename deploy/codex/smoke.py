@@ -120,7 +120,9 @@ def main():
                 "-e", "LINK_TEST_MODEL=" + model, "-w", "/work"]
             for path in (BINARY.resolve(), client_config, profile.with_suffix(".models.json")):
                 command += ["-v", f"{path}:{path}:ro"]
-            command += ["--entrypoint", "python", "k-lani-link-host:local", "-B", "/test/bridge.py",
+            # A plain Python image runs the test bridge; the k-lani-link image has no interpreter.
+            command += ["--user", "1000:1000", "-e", "HOME=/home/link", "--entrypoint", "python",
+                        "python:3.12-slim", "-B", "/test/bridge.py",
                         "python", "-B", "/test/agent_check.py", args.mode]
             agent = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout)
             assert agent.returncode == 0, agent.stderr[-5000:]

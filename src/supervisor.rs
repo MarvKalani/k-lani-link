@@ -47,8 +47,22 @@ pub fn host_swap_disabled() -> bool {
 
 /// A deployment that accidentally restored a network interface is refused.
 fn only_loopback() -> bool {
-    std::fs::read_dir("/sys/class/net")
-        .is_ok_and(|entries| entries.flatten().all(|entry| entry.file_name() == "lo"))
+    // The kernel's own interface list, as the earlier script read it; `/sys/class/net`
+    // may also hold non-interface entries such as `bonding_masters`.
+    unsafe {
+        let list = libc::if_nameindex();
+        if list.is_null() {
+            return false;
+        }
+        let mut only_lo = true;
+        let mut at = list;
+        while (*at).if_index != 0 && !(*at).if_name.is_null() {
+            only_lo &= std::ffi::CStr::from_ptr((*at).if_name).to_bytes() == b"lo";
+            at = at.add(1);
+        }
+        libc::if_freenameindex(list);
+        only_lo
+    }
 }
 
 fn checked() -> Result<()> {
