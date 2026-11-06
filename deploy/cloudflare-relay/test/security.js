@@ -10,7 +10,7 @@ test("compressed and expanded IPv6 addresses share their actual /64", async () =
   for (const addresses of [
     ["2001:db8::1", "2001:db8::2", "2001:0DB8:0000:0::abcd", "2001:db8:0:0:ffff:ffff:ffff:ffff"],
     ["::1", "::2", "0:0:0:0:0:0:0:1"],
-    ["::ffff:192.0.2.1", "::ffff:c000:201", "0:0:0:0:0:ffff:c000:202"],
+    ["::ffff:192.0.2.1", "::ffff:c000:201", "0:0:0:0:0:ffff:c000:201", "192.0.2.1"],
   ]) {
     const keys = await Promise.all(addresses.map((address) => pairs.key(address)));
     assert.equal(new Set(keys).size, 1);
@@ -21,6 +21,8 @@ test("different IPv6 subnets and IPv4 addresses retain separate counters", async
   const pairs = new Pairs({});
   const keys = await Promise.all([
     "2001:db8::1", "2001:db8:0:1::1", "2001:db8:1::1", "192.0.2.1", "192.0.2.2",
+    // IPv4 written as IPv6 counts per IPv4 address, not as one shared /64.
+    "::ffff:192.0.2.3", "::ffff:192.0.2.4",
   ].map((address) => pairs.key(address)));
   assert.equal(new Set(keys).size, keys.length);
 });

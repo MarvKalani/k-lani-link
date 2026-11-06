@@ -33,7 +33,7 @@ pub fn routes() -> Router<Panel> {
 /// Forwards one chat request to the local gateway and streams its answer back. The page
 /// never sees the API key, and the panel lock is not held while the answer streams.
 async fn chat(State(panel): State<Panel>, request: Request) -> Response {
-    let _upload = match panel.chat_uploads.reserve() {
+    let upload = match panel.chat_uploads.reserve() {
         Ok(permit) => permit,
         Err(error) => return error.into_response(),
     };
@@ -41,6 +41,9 @@ async fn chat(State(panel): State<Panel>, request: Request) -> Response {
         Ok(body) => body,
         Err(error) => return error.into_response(),
     };
+    // The slot bounds bodies being received; once read, the gateway's own admission
+    // bounds the request, so a request waiting for its answer does not hold it.
+    drop(upload);
     // Through the front, like any AI app: the model picks the computer.
     let target = {
         let control = panel.control.lock().await;

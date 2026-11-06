@@ -229,7 +229,7 @@ async fn proxy(State(panel): State<Panel>, request: Request) -> Response {
     {
         return failure(StatusCode::NOT_FOUND, "route not available");
     }
-    let _upload = match panel.front_uploads.reserve() {
+    let upload = match panel.front_uploads.reserve() {
         Ok(permit) => permit,
         Err(error) => return error.into_response(),
     };
@@ -253,6 +253,9 @@ async fn proxy(State(panel): State<Panel>, request: Request) -> Response {
         Ok(bytes) => bytes,
         Err(error) => return error.into_response(),
     };
+    // The slot bounds bodies being received; once read, the gateway's own admission
+    // bounds the request, so a request waiting for its answer does not hold it.
+    drop(upload);
     let mut request: Option<Value> = serde_json::from_slice(&bytes).ok();
     let model = request
         .as_ref()

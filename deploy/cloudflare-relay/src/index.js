@@ -171,6 +171,13 @@ function subscriber(peer) {
     // The standard URL parser validates IPv6, normalizes case/leading zeroes and
     // converts an embedded IPv4 tail to hex groups. Expand :: before taking /64.
     const host = new URL(`http://[${peer}]/`).hostname.slice(1, -1);
+    // An IPv4 address written as IPv6 (::ffff:a.b.c.d) is that IPv4 address, as in the
+    // Rust relay; otherwise every such peer would share one /64 counter.
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+    if (mapped) {
+      const [high, low] = [parseInt(mapped[1], 16), parseInt(mapped[2], 16)];
+      return `v4:${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+    }
     const [left, right] = host.split("::");
     const head = left ? left.split(":") : [];
     const tail = right ? right.split(":") : [];

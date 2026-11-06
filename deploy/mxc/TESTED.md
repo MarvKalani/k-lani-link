@@ -62,3 +62,11 @@ was certified. MXC calls the unpackaged local proxy arrangement a development/te
 compatibility deployment. See [README.md](README.md) for setup and boundaries.
 
 The video and generated fixtures are private artifacts, outside the source tree.
+
+On 4 November, the launcher's fixed output cap was replaced by the advertised
+context size. The backend must fit output to the room left after the prompt.
+The sandbox policy and pinned tools are unchanged; the VM acceptance above
+records the earlier output cap, not a new Windows run with the larger allowance.
+On 6 November, llama.cpp b12032 (Mellum 2.1 Q6_K, 32,768-token context) answered
+requests with `max_tokens` equal to and four times its context normally (`stop`),
+so llama.cpp backends need no fitting option for this.

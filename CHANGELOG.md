@@ -7,6 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The control panel frees a request's upload slot once its body is read. Before, a
+  request waiting for its answer (for example during a model swap) kept its slot, so
+  more than 24 waiting requests across all model computers were refused early.
+- The Cloudflare relay counts an IPv4 address written as IPv6 (`::ffff:a.b.c.d`) as
+  that IPv4 address for its failure brake, as the Rust relay does, instead of putting
+  all of them into one shared /64 counter.
 - Pairing and trial clients bound relay responses while receiving them, including
   chunked responses. The control panel bounds concurrent buffered uploads and
   their duration before forwarding, including its chat endpoint.
