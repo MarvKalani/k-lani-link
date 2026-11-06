@@ -7,6 +7,17 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The model container no longer runs scripts of ours in Python: its model
+  supervisor, single-model entrypoint and health probe are now part of the
+  k-lani-link program (`k-lani-link backend supervise|start|health`), copied into
+  the image as one static binary. Catalog rules, launch flags, the control socket
+  and the group stop are unchanged and covered by Rust tests. Basalt's own server
+  remains Python. The host image runs on plain Debian instead of a Python image.
+- The Basalt image builds Basalt 0.3 with the 0.3.1 fixes (`a274a20c`): several
+  models per server, an 8,192-token default context and DeepSeek-V4.1-Flash
+  support. The privacy and numeric-metrics patches are rebased; in privacy mode
+  the new router starts no telemetry. `deploy/basalt.json` uses Basalt's config
+  format 2, which this version requires.
 - The control panel frees a request's upload slot once its body is read. Before, a
   request waiting for its answer (for example during a model swap) kept its slot, so
   more than 24 waiting requests across all model computers were refused early.

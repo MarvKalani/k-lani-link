@@ -27,12 +27,15 @@ diese Dateien auf tmpfs und der Server hat gar kein Netzwerkinterface.
 
 ## Updates
 
-Der aktuelle Quellstand ist Basalt **0.2.1**, Commit
-`1b3f69641c989f2c1b6b6faf1525a65574fa1446`. Das Image vermerkt ihn als
+Der aktuelle Quellstand ist Basalt **0.3** mit den Korrekturen für 0.3.1 (noch ohne
+eigenes Release), Commit `a274a20c65775d1dfabe718a15dd9cac6f42e326`. Das Image vermerkt ihn als
 `io.k-lani.basalt.revision`. Wer `BASALT_SOURCE_CONTEXT` überschreibt, setzt auch
 `BASALT_REVISION` passend zum verwendeten Quellstand.
 
-Diese Version liest `.basalt`-Format 2 und separate Expertenprofile. Ältere Packs
+Diese Version liest `.basalt`-Format 2, separate Expertenprofile und nur noch
+Konfigurationsdateien im Format 2 (`"version": 2` mit einer `models`-Liste, siehe
+[`deploy/basalt.json`](../../deploy/basalt.json)); ältere Dateien überführt Basalts
+`tools/migrations/config_v1_to_v2.py`. Ältere Packs
 müssen mit dem offiziellen Migrationstool in eine neue Datei überführt werden.
 Bei eigenen oder beschnittenen Modellen muss ein Profil mit passender Geometrie
 vorhanden sein; der [Supervisor](../../deploy/managed/README.md#custom-basalt-expert-profiles)
@@ -92,7 +95,7 @@ git apply /path/to/k-lani-link/integrations/basalt/numeric-metrics.patch
 
 ## Managed model processes
 
-The optional supervisor in `deploy/managed/` replaces the Basalt process behind
+The optional supervisor (`k-lani-link backend supervise`, set up in `deploy/managed/`) replaces the Basalt process behind
 its private inference socket. Basalt's generic administration API stays disabled.
 The supervisor controls only preconfigured model IDs, requires the privacy health
 profile after each load, and verifies the actual parallel slots and context.
@@ -101,7 +104,8 @@ The patch also keeps the answer-room calculation silent in privacy mode, and sin
 `5d28effb` it refuses Basalt's disk tier for conversations (`--conversation-cache-dir`,
 `--conversation-cache-disk-mib`), which would write conversation state to disk.
 No CUDA kernels or model weights are changed by these integration patches. With both
-patches applied at `1b3f6964`, Basalt's serve suite completes 826 tests successfully
-(7 skipped). The tests use synthetic fixtures, including temporary executable mock
+patches applied at `a274a20c`, Basalt's serve suite completes 951 tests successfully
+(4 skipped; the unpatched tree runs 941). In privacy mode the patch also keeps Basalt
+0.3's router from starting its telemetry. The tests use synthetic fixtures, including temporary executable mock
 engines; the test container therefore needs an executable temporary directory.
 The production container retains its non-executable temporary filesystems.

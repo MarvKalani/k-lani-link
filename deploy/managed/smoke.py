@@ -114,7 +114,7 @@ def main():
             '--tmpfs','/home/link/.cache:rw,nosuid,nodev,noexec,size=256m,uid=1000,gid=1000,mode=0700',
             '-v',f'{coder}:/models/coder.basalt:ro','-v',f'{nvfp4}:/models/nvfp4.basalt:ro',
             '-v',f'{root}/models.json:/run/secrets/models.json:ro','-v',f'{runtime}/backend:/run/link',
-            '--entrypoint','/opt/basalt/.venv/bin/python'],args.backend_image,['-B','/opt/link-manager.py'])
+            '--entrypoint','/usr/local/bin/k-lani-link'],args.backend_image,['backend','supervise'])
         signal=start('signal',['--network','host','--memory','128m','--memory-swap','128m',
             '-v',f'{root}/pair/signaling-token.txt:/run/secrets/token:ro'],args.link_image,
             ['signal','--listen',f'127.0.0.1:{port}','--token-file','/run/secrets/token'])

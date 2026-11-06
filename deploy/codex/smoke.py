@@ -80,8 +80,8 @@ def main():
         client_config = work / "pair/client.toml"
         key = tomllib.loads(client_config.read_text())["api_key"]
         basalt_config = work / "basalt.json"
-        basalt_config.write_text(json.dumps({"server": {"model": "/models/model.basalt", "privacy": True,
-            "vision": "off", "host": "127.0.0.1"}, "engine": {"max-context": args.context, "kv": "int8"}}))
+        basalt_config.write_text(json.dumps({"version": 2, "server": {"host": "127.0.0.1", "privacy": True},
+            "models": [{"model": "/models/model.basalt", "vision": "off", "max-context": args.context, "kv": "int8"}]}))
         names = ["link-codex-basalt-" + uuid.uuid4().hex[:10], "link-codex-agent-" + uuid.uuid4().hex[:10]]
         children = []
         common = ["--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",

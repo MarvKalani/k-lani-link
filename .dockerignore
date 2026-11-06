@@ -1,7 +1,5 @@
 **
 !deploy/
-!deploy/basalt-entrypoint.py
-!deploy/healthcheck.py
 !target/
 !target/release/
 !target/release/k-lani-link
@@ -34,7 +32,5 @@
 !.thinkrail-build/
 !.thinkrail-build/thinkrail
 
-!deploy/managed/
-!deploy/managed/manager.py
 !deploy/desktop/
 !deploy/desktop/**

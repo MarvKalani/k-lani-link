@@ -241,6 +241,27 @@ enum Command {
         #[arg(long)]
         config: PathBuf,
     },
+    /// Inside the network-less model container only.
+    #[cfg(unix)]
+    #[command(hide = true)]
+    Backend {
+        #[command(subcommand)]
+        action: Backend,
+    },
+}
+
+#[cfg(unix)]
+#[derive(Subcommand)]
+enum Backend {
+    /// Load catalog models one at a time behind the private control socket.
+    Supervise,
+    /// Run one Basalt model in its privacy profile; extra arguments go to Basalt.
+    Start {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Exit 0 when the model socket answers; prints nothing.
+    Health,
 }
 fn main() -> std::process::ExitCode {
     #[cfg(windows)]
@@ -419,6 +440,16 @@ async fn run(cli: Cli) -> Result<()> {
         interrupt.cancel();
     });
     match cli.command {
+        #[cfg(unix)]
+        Command::Backend { action } => match action {
+            Backend::Supervise => k_lani_link::supervisor::supervise(stop).await?,
+            Backend::Start { args } => k_lani_link::supervisor::start(&args)?,
+            Backend::Health => {
+                if !k_lani_link::supervisor::health().await {
+                    std::process::exit(1);
+                }
+            }
+        },
         Command::HttpsRelay { config } => {
             let settings = k_lani_link::mailbox::server::Settings::load(&config)?;
             k_lani_link::mailbox::server::run(settings, stop).await?;

@@ -4,7 +4,7 @@ services:
     mem_limit: ${LINK_BACKEND_MEMORY:-6g}
     memswap_limit: ${LINK_BACKEND_MEMORY:-6g}
     environment: {LINK_REQUIRE_NO_SWAP: '1'}
-    entrypoint: [/opt/basalt/.venv/bin/python, -B, /opt/link-manager.py]
+    entrypoint: [/usr/local/bin/k-lani-link, backend, supervise]
     command: []
     volumes:
       - '${LINK_MODEL_CATALOG:?Set the absolute path to models.json}:/run/secrets/models.json:ro'

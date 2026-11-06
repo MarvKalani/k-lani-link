@@ -61,6 +61,10 @@ hkdf = "0.12"
 lto = "thin"
 strip = true
 
+# Process groups, umask and core limits for the model supervisor.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # The notification-area icon; the same windows-sys release tokio already brings.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_Console", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

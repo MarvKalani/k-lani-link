@@ -86,7 +86,7 @@ one. See [Basalt's model format and conversion kit](https://github.com/jesdga95/
 
 ### Custom Basalt expert profiles
 
-Basalt 0.2.1 loads expert placement profiles separately from the model file. Its
+Basalt 0.3 loads expert placement profiles separately from the model file. Its
 bundled profile must match the model's layer and expert counts. For a custom or
 pruned pack, an operator can select an existing matching profile in the catalog:
 

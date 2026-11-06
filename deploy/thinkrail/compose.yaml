@@ -52,7 +52,7 @@ services:
       - './basalt.json:/run/secrets/basalt.json:ro'
       - basalt_socket:/run/link
     healthcheck:
-      test: [CMD, /opt/basalt/.venv/bin/python, -B, /opt/link-healthcheck.py]
+      test: [CMD, /usr/local/bin/k-lani-link, backend, health]
       interval: 5s
       timeout: 3s
       start_period: 180s

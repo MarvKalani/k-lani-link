@@ -1426,6 +1426,7 @@ dependencies = [
  "hyper-util",
  "ipnet",
  "k-lani-link-protocol",
+ "libc",
  "log",
  "objc2",
  "objc2-app-kit",

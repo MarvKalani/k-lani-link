@@ -6,9 +6,20 @@ RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
        /usr/local/cuda/lib64/libcublasLt.so.12 /lib/x86_64-linux-gnu/libnccl.so.2 /opt/llama/lib/ \
     && rm -f /opt/llama/llama /opt/llama/*bench* /opt/llama/*perplexity* /opt/llama/*quantize*
 
+# The supervisor, entrypoint and health probe: k-lani-link itself, statically linked so it
+# runs on the CUDA image's own libc. No interpreter of ours ships in the image.
+FROM rust:1.99.1-slim-trixie AS link
+RUN apt-get update && apt-get install -y --no-install-recommends musl-tools cmake g++ pkg-config \
+    && rm -rf /var/lib/apt/lists/* && rustup target add x86_64-unknown-linux-musl
+WORKDIR /source
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+COPY src ./src
+RUN cargo build --release --locked --jobs 2 --target x86_64-unknown-linux-musl
+
 FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04
 ARG BUILD_JOBS=2
-ARG BASALT_REVISION=1b3f69641c989f2c1b6b6faf1525a65574fa1446
+ARG BASALT_REVISION=a274a20c65775d1dfabe718a15dd9cac6f42e326
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build g++ git python3 python3-venv ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -34,9 +45,7 @@ RUN if getent passwd 1000 >/dev/null; then \
     else useradd --create-home --uid 1000 link; fi \
     && mkdir -p /run/link /home/link/.cache \
     && chown -R 1000:1000 /run/link /home/link
-COPY deploy/basalt-entrypoint.py /opt/link-entrypoint.py
-COPY deploy/healthcheck.py /opt/link-healthcheck.py
-COPY deploy/managed/manager.py /opt/link-manager.py
+COPY --from=link /source/target/x86_64-unknown-linux-musl/release/k-lani-link /usr/local/bin/k-lani-link
 COPY --from=llama /opt/llama /opt/llama
 ENV PYTHONDONTWRITEBYTECODE=1 CUDA_CACHE_DISABLE=1
 COPY integrations/basalt/numeric-metrics.patch /tmp/link-numeric-metrics.patch
@@ -45,4 +54,4 @@ RUN git apply --check /tmp/link-numeric-metrics.patch \
     && .venv/bin/python -B -m unittest serve.tests.test_numeric_metrics serve.tests.test_privacy -q
 COPY LICENSE LICENSING.md COMMERCIAL-LICENSE.md /usr/share/doc/k-lani-link/
 USER 1000:1000
-ENTRYPOINT ["/opt/basalt/.venv/bin/python", "-B", "/opt/link-entrypoint.py"]
+ENTRYPOINT ["/usr/local/bin/k-lani-link", "backend", "start"]

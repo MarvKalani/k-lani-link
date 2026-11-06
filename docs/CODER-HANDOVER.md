@@ -76,7 +76,7 @@ below now carries the product name. The former names are not recorded in this re
 
 The Basalt patches (`privacy.patch`, `numeric-metrics.patch`) were edited only on added
 lines, so they still apply to the pinned commit `71116cc3`; the health field in the patched
-server is now `link_privacy`. `src/backend.rs`, `deploy/managed/manager.py`, the mocks in the
+server is now `link_privacy`. `src/backend.rs`, `src/supervisor/manager.rs`, the mocks in the
 tests and every document agree with it.
 
 ### What this breaks, on purpose

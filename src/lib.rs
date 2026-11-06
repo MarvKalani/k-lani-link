@@ -14,6 +14,8 @@ pub mod qr;
 pub mod routing;
 pub mod shutdown;
 pub mod signal;
+#[cfg(unix)]
+pub mod supervisor;
 pub mod ui;
 pub mod update;
 

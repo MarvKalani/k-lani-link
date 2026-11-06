@@ -7,7 +7,8 @@ COPY crates ./crates
 COPY src ./src
 RUN cargo build --release --locked --jobs 2
 
-FROM python:3.12-slim
+# Same Debian release as the build stage, so the binary finds the libc it was linked against.
+FROM debian:trixie-slim
 RUN useradd --create-home --uid 1000 link \
     && install -d -m 0700 -o 1000 -g 1000 /var/lib/link
 COPY --from=build /source/target/release/k-lani-link /usr/local/bin/k-lani-link

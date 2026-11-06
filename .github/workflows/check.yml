@@ -26,7 +26,6 @@ jobs:
           cargo test --manifest-path deploy/mailbox-bench/Cargo.toml --locked
       - run: python3 -B -m unittest discover -s deploy/thinkrail -p 'test_*.py'
       - run: python3 -B -m unittest discover -s deploy/opencode -p 'test_*.py'
-      - run: python3 -B -m unittest discover -s deploy/managed -p 'test_*.py'
       - run: python3 -B -m unittest discover -s deploy/desktop -p 'test_*.py'
       - name: Check the PHP relay (syntax and core behavior, no web server)
         run: |
