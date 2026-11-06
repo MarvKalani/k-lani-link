@@ -103,6 +103,18 @@ class ModelsTest(unittest.TestCase):
         self.assertIsNone(self.manager.snapshot()['active_model'])
         self.assertFalse(self.manager.socket.exists())
 
+    def test_llama_can_use_its_documented_unrestricted_reasoning_budget(self):
+        self.doc['models'][-1]['reasoning_budget_tokens']=-1
+        self.catalog.write_text(json.dumps(self.doc))
+        _,self.manager.models=catalog_from_file(self.catalog)
+        code,_=self.manager.command({'action':'load','model':'Mellum2.1-Q8_0'})
+        self.assertEqual(code,200)
+        args=self.manager.process.args
+        self.assertEqual(args[args.index('--reasoning-budget')+1],'-1')
+        self.doc['models'][0]['reasoning_budget_tokens']=-1
+        self.catalog.write_text(json.dumps(self.doc))
+        with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+
     def test_operator_expert_profile_reaches_basalt_without_exposing_its_path(self):
         path=self.root/'custom.prof';path.write_bytes(b'operator-selected fixture')
         self.doc['models'][0]['expert_profile']=str(path)
@@ -165,6 +177,44 @@ class ModelsTest(unittest.TestCase):
         with patch('manager.host_swap_disabled',return_value=True):
             self.assertEqual(self.manager.command({'action':'load','model':'beta'})[0],200)
         self.assertIsNotNone(first.poll())
+
+    def test_qwen_sampling_and_context_fitting_reach_basalt_without_remote_policy_changes(self):
+        sampling = {'temperature':1.0,'top_p':0.95,'top_k':20,'min_p':0.0,'presence_penalty':0.0,'repetition_penalty':1.0}
+        self.doc['models'][0].update(reasoning_budget_tokens=0,answer_room=False,fit_max_tokens=True,sampling=sampling)
+        self.catalog.write_text(json.dumps(self.doc))
+        _,self.manager.models=catalog_from_file(self.catalog)
+        code,state=self.manager.command({'action':'load','model':'alpha'})
+        self.assertEqual(code,200)
+        args=self.manager.process.args
+        self.assertEqual(args[args.index('--reasoning-budget-tokens')+1],'0')
+        self.assertIn('--no-answer-room',args);self.assertIn('--fit-max-tokens',args)
+        for key,value in sampling.items():
+            self.assertEqual(args[args.index('--'+key.replace('_','-'))+1],str(value))
+        self.assertNotIn('sampling',json.dumps(state))
+        self.assertEqual(self.manager.command({'action':'load','model':'alpha','sampling':sampling})[0],400)
+        self.manager.stop_engine()
+        self.manager.models['alpha']['fit_max_tokens']=False
+        self.assertEqual(self.manager.command({'action':'load','model':'alpha'})[0],200)
+        self.assertNotIn('--fit-max-tokens',self.manager.process.args)
+        self.assertNotIn('--no-fit-max-tokens',self.manager.process.args)
+
+    def test_sampling_settings_are_validated_and_not_applied_to_other_engines(self):
+        invalid=[{'temperature':True},{'temperature':float('nan')},{'top_p':0},{'top_p':1.1},
+            {'top_k':2.5},{'top_k':-1},{'min_p':-0.1},{'repetition_penalty':0},
+            {'presence_penalty':float('inf')},{'before_load':'curl example.org'},[],None]
+        for value in invalid:
+            with self.subTest(sampling=value):
+                doc=json.loads(json.dumps(self.doc));doc['models'][0]['sampling']=value
+                self.catalog.write_text(json.dumps(doc))
+                with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+        for key,value in [('sampling',{'temperature':1.0}),('answer_room',False),('fit_max_tokens',True)]:
+            doc=json.loads(json.dumps(self.doc));doc['models'][-1][key]=value
+            self.catalog.write_text(json.dumps(doc))
+            with self.assertRaises(ValueError):catalog_from_file(self.catalog)
+        for key in ('answer_room','fit_max_tokens'):
+            doc=json.loads(json.dumps(self.doc));doc['models'][0][key]='false'
+            self.catalog.write_text(json.dumps(doc))
+            with self.assertRaises(ValueError):catalog_from_file(self.catalog)
 
     def test_catalog_rejects_unknown_fields_and_invalid_profiles(self):
         for field,value in [('parallel',9),('context_tokens',True),('slot_full_context','yes'),('before_load','curl example.org'),

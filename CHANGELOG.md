@@ -13,6 +13,10 @@ tagged versions and downloads are listed on
 - The Cloudflare relay groups compressed IPv6 addresses by their actual /64 for
   failed-authentication limits. Its pinned Wrangler toolchain includes the Undici
   security fixes; subnet regressions and the full npm audit run in CI.
+- Managed Qwen examples use the published thinking-mode sampling settings and
+  native context without a separate thinking cap or automatic answer reservation.
+  Basalt fits requested output to the context remaining after the prompt. OpenCode
+  starters no longer impose a 16k/64k output cap or force medium reasoning effort.
 - The Windows MXC terminal starter is available in `deploy/mxc`, with pinned
   tools, an offline import option and a recorded 12-check sandbox acceptance.
   Its pilot scope and shell-tool limitations are documented in the setup guide.

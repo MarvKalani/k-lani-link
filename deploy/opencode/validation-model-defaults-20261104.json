@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-04",
+  "passed": true,
+  "opencode_version": "2.2.0",
+  "basalt_version": "0.2.1",
+  "model": "Qwen3.8-FN-GSQ-RCO-Coder",
+  "context_tokens": 262144,
+  "separate_thinking_cap": null,
+  "automatic_answer_reservation": false,
+  "fit_output_to_remaining_context": true,
+  "sampling": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 0.0,
+    "repetition_penalty": 1.0
+  },
+  "model_default_reasoning_effort": "xhigh",
+  "backend_launch": {
+    "--reasoning-budget-tokens": "0",
+    "--max-context": "262144",
+    "--temperature": "1.0",
+    "--top-p": "0.95",
+    "--top-k": "20",
+    "--min-p": "0.0",
+    "--presence-penalty": "0.0",
+    "--repetition-penalty": "1.0"
+  },
+  "request_parameters": [
+    {
+      "model": "Qwen3.8-FN-GSQ-RCO-Coder",
+      "max_tokens": 256000,
+      "prior_reasoning_messages": 0
+    },
+    {
+      "model": "Qwen3.8-FN-GSQ-RCO-Coder",
+      "max_tokens": 256000,
+      "prior_reasoning_messages": 1
+    },
+    {
+      "model": "Qwen3.8-FN-GSQ-RCO-Coder",
+      "max_tokens": 256000,
+      "prior_reasoning_messages": 2
+    },
+    {
+      "model": "Qwen3.8-FN-GSQ-RCO-Coder",
+      "max_tokens": 256000,
+      "prior_reasoning_messages": 3
+    }
+  ],
+  "agent": {
+    "exit_code": 0,
+    "elapsed_seconds": 27.34,
+    "event_types": {
+      "step_start": 4,
+      "reasoning": 4,
+      "tool_use": 3,
+      "step_finish": 3,
+      "text": 1
+    },
+    "reasoning_events": 4,
+    "tools": [
+      "shell",
+      "write",
+      "shell"
+    ],
+    "file_verified": true,
+    "seed_unchanged": true,
+    "no_commit": true,
+    "final_marker_seen": true,
+    "swap_disabled": true
+  },
+  "budget_control_test": {
+    "passed": true,
+    "scope": "mock engine, not real model reasoning",
+    "generated_reasoning_bytes": 33001,
+    "thinking_budget": null,
+    "answer_room": false,
+    "requested_output": 256000,
+    "fitted_output": 251892,
+    "completed_answer": true
+  },
+  "host_swap_disabled": true,
+  "idle_restored": true,
+  "opencode_image": "sha256:94b18399704e29398998688097136e071e12dc769c4443a2c2731123ea83b710",
+  "basalt_image": "sha256:cb6a75775fc8bf178611aaeda5215db381de308ed533c7bf0c552272450bf03e",
+  "scope": "Short synthetic agent task through a fresh local encrypted tunnel. Backend launch arguments and actual request fields checked. No full 256k/1M model-quality or throughput qualification. OpenCode 2.2.0 has its own 256000-token output ceiling and fits it to input estimates. Windows MXC was not rerun. Existing transport timeouts still apply.",
+  "recommendation_source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next#best-practices"
+}

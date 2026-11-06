@@ -141,7 +141,7 @@ try {
         $context = 131072
         if ($m.PSObject.Properties['context_length'] -and $m.context_length) { $context = [int]$m.context_length }
         $entries[$modelKey] = [ordered]@{ id = $m.id; name = "$($m.id) via k-lani-link"
-            limit = @{ context = $context; output = 16384 }; reasoning = $true; tool_call = $true
+            limit = @{ context = $context; output = $context }; reasoning = $true; tool_call = $true
             interleaved = @{ field = 'reasoning_content' }; modalities = @{ input = @('text'); output = @('text') }
             cost = @{ input = 0; output = 0; cache_read = 0; cache_write = 0 } }
     }

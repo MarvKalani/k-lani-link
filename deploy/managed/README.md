@@ -7,6 +7,23 @@ weights, accepts commands or accepts model paths from the remote API.
 
 ## Backend computer
 
+The Qwen examples follow its [published thinking-mode sampling settings](https://huggingface.co/Qwen/Qwen3.8-Flash-Next#best-practices):
+temperature 1.0, top-p 0.95, top-k 20, min-p 0, presence penalty 0 and repetition
+penalty 1. `sampling` sets validated Basalt launch defaults; request fields still
+take precedence. `reasoning_budget_tokens: 0` plus `answer_room: false` removes
+both the separate thinking cap and Basalt's automatic answer reservation.
+`fit_max_tokens: true` fits requested output to the context remaining after the
+actual prompt. The model can finish sooner; using the whole context need not
+produce a complete answer. Qwen's template supplies `xhigh` when the client does
+not override it. The native 262,144-token context is retained; Qwen recommends
+YaRN extension only when longer contexts are needed.
+
+These three optional settings (`sampling`, `answer_room`, `fit_max_tokens`) apply
+only to Basalt; older catalogs keep their defaults. Do not copy the zero-budget
+meaning to llama.cpp: in that engine zero ends thinking immediately, while an
+explicit `reasoning_budget_tokens: -1` uses its unrestricted setting. The example
+does not claim independent 262k-thinking/131k-final limits or a tested 1M context.
+
 Build the current images with the production Compose file. Copy
 [`models.example.json`](models.example.json) to a private operator directory.
 Its IDs (`coder`, `nvfp4`) are the model aliases advertised by Basalt; the files

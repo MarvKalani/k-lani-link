@@ -29,6 +29,11 @@ das gesamte Benutzerprofil sowie Junctions im gewählten Pfad werden abgewiesen.
 Das Kontrollfeld liefert Adresse, API-Schlüssel und Modelle automatisch. Bei einem
 abweichenden privaten Kontrollfeldordner gibt es `-PanelDirectory`.
 
+Der Starter leitet die gemeldete Kontextgröße als mögliche Ausgabeobergrenze
+weiter und setzt keinen zusätzlichen 16k-/64k-Deckel. Denken und finale Antwort
+teilen sich den nach der Eingabe verbleibenden Kontext. Für den verwalteten
+Qwen-Backendbetrieb die aktuellen Beispielprofile mit `fit_max_tokens` verwenden.
+
 ### Was freigegeben ist
 
 | Bereich | Zugriff aus der Sandbox |
@@ -127,6 +132,10 @@ Windows process sandbox. It shares the Windows kernel.
 Use `-Project`, optionally `-Model` or `-Prompt`, or `-CheckIsolation` as shown
 above. `-PanelDirectory` selects a non-default private control-panel directory.
 The launcher reads the local address/key and discovers the models automatically.
+The launcher passes the advertised context as the possible output ceiling,
+without an additional 16k/64k cap. Thinking and the final answer share the context
+left after the input. Use the current managed Qwen examples with `fit_max_tokens`
+on the backend; an older backend may reject a request that exceeds its remaining context.
 Only the selected project and private temporary session data are writable.
 Tools are read-only, other user files are not granted, and external network
 access is limited to the exact local API endpoint, normally `127.0.0.1:8787`.

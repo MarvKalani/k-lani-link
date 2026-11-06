@@ -27,6 +27,7 @@ class RuntimeBoundary(TestCase):
             {"action": "provider.use", "resource": "*", "effect": "deny"},
             {"action": "provider.use", "resource": "link", "effect": "allow"}])
         self.assertEqual(config["share"], "disabled")
+        self.assertNotIn("reasoning_effort", config["providers"]["link"]["body"])
 
     def test_craft_tools_are_opt_in_local_processes_with_wordcraft_roots(self):
         self.assertNotIn("mcp", runtime.configuration(MODEL))
@@ -48,10 +49,14 @@ class RuntimeBoundary(TestCase):
         self.assertEqual(offered["Mellum"]["limit"]["context"], 131072)
         self.assertEqual(config["model"], "link/basalt")
 
-    def test_context_uses_the_lower_declared_limit_and_reserves_input_room(self):
+    def test_context_uses_the_lower_declared_limit_without_an_arbitrary_output_cap(self):
         models = runtime.backend_models({"data": [{"id": "small", "context_length": 8192, "meta": {"n_ctx": 4096}}]})
         limits = runtime.configuration(models)["providers"]["link"]["models"]["basalt"]["limit"]
-        self.assertEqual(limits, {"context": 4096, "output": 2048})
+        self.assertEqual(limits, {"context": 4096, "output": 4096})
+        for context in (32768, 131072, 262144):
+            with self.subTest(context=context):
+                limits = runtime.configuration([{"id": "coder", "context": context}])["providers"]["link"]["models"]["basalt"]["limit"]
+                self.assertEqual(limits, {"context": context, "output": context})
 
     def test_a_loaded_model_is_the_initial_choice_without_hiding_other_models(self):
         models = runtime.backend_models({"data": [

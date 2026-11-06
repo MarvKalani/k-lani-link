@@ -24,7 +24,15 @@ MAX_REPLY = 64 * 1024
 ENGINES = ("basalt", "llama")
 LLAMA_KV = ("q8_0", "q4_0", "f16")
 LLAMA = "/opt/llama/llama-server"
-BASALT_SETTINGS = {"expert_profile", "memory_mode", "prefill_cpu_share", "pool_workers"}
+BASALT_SETTINGS = {"expert_profile", "memory_mode", "prefill_cpu_share", "pool_workers", "sampling", "answer_room", "fit_max_tokens"}
+BASALT_SAMPLING = {
+    "temperature": lambda value: value >= 0,
+    "top_p": lambda value: 0 < value <= 1,
+    "top_k": lambda value: type(value) is int and value >= 0,
+    "min_p": lambda value: 0 <= value <= 1,
+    "presence_penalty": lambda value: True,
+    "repetition_penalty": lambda value: value > 0,
+}
 
 
 def model_id(value):
@@ -67,7 +75,7 @@ def catalog_from_file(path):
             profile.setdefault("kv", "q8_0")
             profile["slot_full_context"] = True
         for key, default, low, high in [("context_tokens", 262144, 4096, 1048576), ("parallel", 1, 1, 8),
-                ("reasoning_budget_tokens", 2048, 0, 65536)]:
+                ("reasoning_budget_tokens", 2048, -1 if engine == "llama" else 0, 65536)]:
             value = profile.setdefault(key, default)
             if type(value) is not int or not low <= value <= high:
                 raise ValueError("invalid model setting")
@@ -76,6 +84,15 @@ def catalog_from_file(path):
                 and isinstance(prefill, str) and prefill in ("auto", "auto:8192", "auto:16384", "auto:32768")):
             raise ValueError("invalid prefill setting")
         if engine == "basalt":
+            for key in ("answer_room", "fit_max_tokens"):
+                if key in profile and type(profile[key]) is not bool:
+                    raise ValueError("invalid Basalt token policy")
+            sampling = profile.get("sampling", {})
+            if not isinstance(sampling, dict) or set(sampling) - BASALT_SAMPLING.keys():
+                raise ValueError("invalid Basalt sampling settings")
+            for key, value in sampling.items():
+                if type(value) not in (int, float) or not math.isfinite(value) or not BASALT_SAMPLING[key](value):
+                    raise ValueError("invalid Basalt sampling value")
             if profile.setdefault("memory_mode", "mmap") not in ("mmap", "resident"):
                 raise ValueError("invalid expert memory mode")
             if "prefill_cpu_share" in profile:
@@ -253,6 +270,12 @@ class Manager:
             for key, flag in (("prefill_cpu_share", "--prefill-cpu-share"), ("pool_workers", "--pool-workers")):
                 if key in profile:
                     args += [flag, str(profile[key])]
+            if "answer_room" in profile:
+                args.append("--answer-room" if profile["answer_room"] else "--no-answer-room")
+            if profile.get("fit_max_tokens"):
+                args.append("--fit-max-tokens")
+            for key, value in profile.get("sampling", {}).items():
+                args += ["--" + key.replace("_", "-"), str(value)]
             if self.metrics:
                 args += ["--privacy-metrics-file", str(self.runtime / "performance.json")]
         self.process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

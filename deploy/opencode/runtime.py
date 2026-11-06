@@ -65,7 +65,7 @@ def configuration(models, craft=False):
             alias = "model-" + alias
         label = str(context // 1024) + "K" if context % 1024 == 0 else str(context)
         entries[alias] = {"modelID": name, "name": name + " · k-lani-link · " + label,
-            "limit": {"context": context, "output": min(16384, context // 2)},
+            "limit": {"context": context, "output": context},
             "capabilities": {"tools": True, "input": ["text"], "output": ["text"], "reasoning": {"supported": True}},
             "cost": {"input": 0, "output": 0, "cache": {"read": 0, "write": 0}}}
     config = {"model": "link/basalt", "default_agent": "build", "update": "disable", "share": "disabled",
@@ -73,7 +73,7 @@ def configuration(models, craft=False):
         "providers": {"link": {"name": "Local models via k-lani-link", "env": ["LINK_API_KEY"],
             "package": "@opencode/ai/providers/openai-compatible", "settings": {"baseURL": "http://127.0.0.1:8787/v1"},
             "compatibility": {"reasoningField": "reasoning_content", "maxTokensField": "max_tokens", "streamUsage": True},
-            "body": {"store": False, "reasoning_effort": "medium"},
+            "body": {"store": False},
             "models": entries}},
         "policies": [{"action": "provider.use", "resource": "*", "effect": "deny"},
             {"action": "provider.use", "resource": "link", "effect": "allow"}],

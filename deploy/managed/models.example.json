@@ -1,7 +1,45 @@
 {
   "default": "coder",
   "models": [
-    {"id": "coder", "path": "/models/coder.basalt", "context_tokens": 262144, "parallel": 2, "slot_full_context": true, "memory_mode": "resident", "prefill": "auto", "reasoning_budget_tokens": 2048},
-    {"id": "nvfp4", "path": "/models/nvfp4.basalt", "context_tokens": 262144, "parallel": 2, "slot_full_context": true, "memory_mode": "resident", "prefill": "auto", "reasoning_budget_tokens": 2048}
+    {
+      "id": "coder",
+      "path": "/models/coder.basalt",
+      "context_tokens": 262144,
+      "parallel": 2,
+      "slot_full_context": true,
+      "memory_mode": "resident",
+      "prefill": "auto",
+      "reasoning_budget_tokens": 0,
+      "answer_room": false,
+      "fit_max_tokens": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 0.0,
+        "repetition_penalty": 1.0
+      }
+    },
+    {
+      "id": "nvfp4",
+      "path": "/models/nvfp4.basalt",
+      "context_tokens": 262144,
+      "parallel": 2,
+      "slot_full_context": true,
+      "memory_mode": "resident",
+      "prefill": "auto",
+      "reasoning_budget_tokens": 0,
+      "answer_room": false,
+      "fit_max_tokens": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 0.0,
+        "repetition_penalty": 1.0
+      }
+    }
   ]
 }

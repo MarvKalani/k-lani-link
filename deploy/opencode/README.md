@@ -29,6 +29,25 @@ verbundenen Basalt-Servers. Ohne eine gültige Kontextangabe startet der Contain
 nicht mit einem erfundenen 256k-Limit. Nach Änderungen am Katalog OpenCode neu
 starten, damit seine Modellauswahl neu eingelesen wird.
 
+Der Starter setzt keinen eigenen 16k-/64k-Ausgabedeckel und erzwingt keine
+gemeinsame Denkstufe für alle Modelle. Er meldet die Kontextgröße als mögliche
+Ausgabeobergrenze; OpenCode 2.2.0 berechnet daraus den Platz, den seine gemessene
+oder geschätzte Eingabe noch lässt, und hat selbst eine Obergrenze von 256.000
+Ausgabetokens. Qwens Template-Vorgabe bleibt `xhigh`.
+
+Die [verwalteten Qwen-Beispiele](../managed/models.example.json) verwenden die
+offiziellen Sampling-Werte und keine zusätzliche Denkbegrenzung. Basalt passt
+mit `fit_max_tokens` die Ausgabe an den tatsächlich verbleibenden Kontext an;
+seine automatische Antwortreservierung ist in diesen Beispielen abgeschaltet.
+Eingabe, Verlauf, Werkzeugbeschreibungen, Denken und Antwort teilen sich weiterhin
+das native 262.144-Token-Fenster. Lange Verläufe müssen rechtzeitig gekürzt werden.
+Ein Ende am Kontext-/Ausgabelimit garantiert keine vollständige Antwort.
+
+[Qwens große getrennte Budgets](https://huggingface.co/Qwen/Qwen3.8-Flash-Next#best-practices)
+von 262.144 Denk- und 131.072 Antworttokens beziehen sich auf den auf 1M erweiterten
+Betrieb. Dieses Profil bleibt beim nativen Kontext; es behauptet weder eine 1M-
+Abnahme noch unabhängig durchgesetzte Limits für Denken und finale Antwort.
+
 ## Voraussetzungen und Swap
 
 Linux x86_64, UID/GID 1000, Docker Compose/BuildKit, Python ≥3.11 und die
@@ -119,6 +138,11 @@ Netzwerk-, Privilegien-, Zugangsdaten- und Swap-Grenzen wurden im laufenden
 Container geprüft. Das ist ein lokaler Funktionstest des Coder-Modells, kein
 WAN-Benchmark und kein allgemeiner Qualitätsnachweis für alle angebotenen Modelle.
 [Numerischer Testnachweis](validation-20261104.json).
+
+Die aktuelle Abnahme mit Qwen-Vorgaben ist in
+[validation-model-defaults-20261104.json](validation-model-defaults-20261104.json)
+getrennt dokumentiert. Sie prüft die tatsächlichen Anfrageparameter und einen
+kurzen Lese-/Schreib-/Shell-Ablauf, nicht eine vollständige 256k-/1M-Auslastung.
 
 ```sh
 python3 -B deploy/opencode/verify.py
