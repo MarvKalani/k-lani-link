@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-07",
+  "upstream_commit": "a274a20c65775d1dfabe718a15dd9cac6f42e326",
+  "upstream_source_version": "0.3 with the 0.3.1 fixes (unreleased)",
+  "previous_commit": "1b3f69641c989f2c1b6b6faf1525a65574fa1446",
+  "patch_sha256": {
+    "privacy.patch": "876088da5387590cd878bdcc5e4e21cfd6363bccb60e3c3fec1ec75e068b2167",
+    "numeric-metrics.patch": "83b7a4e3b1ba4ba12c5bb0ccb28b66e15ae8965baafa5a33b444feded36cb2b3"
+  },
+  "supervisor": "k-lani-link backend supervise (Rust, static musl binary in the image)",
+  "image_id": "sha256:c59db7d29248c2b075ad5cac9f5f149c1a55f8130cc6cc7dca129d0109360bdb",
+  "checks": {
+    "container_build": true,
+    "privacy_and_numeric_tests": 10,
+    "serve_tests_run": 951,
+    "serve_tests_skipped": 4,
+    "serve_suite_passed": true,
+    "unpatched_serve_tests_run": 941,
+    "supervisor_rust_tests_passed": 15,
+    "network_mode": "none",
+    "readonly_root": true,
+    "logging_driver": "none",
+    "container_memory_bytes": 23622320128,
+    "swap_guard_refused_start_with_host_swap_on": true,
+    "functional_run_with_swap_guard_off": true,
+    "privacy_mode_routes_refused": [
+      "/metrics",
+      "/v1/status",
+      "/status",
+      "/api/logs",
+      "/props"
+    ],
+    "clean_stop_exit_code": 0,
+    "idle_state_restored": true
+  },
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "gpu_memory_mib": 16303
+  },
+  "models": [
+    {
+      "id": "Qwen3.8-FN-GSQ-RCO-Coder",
+      "engine": "basalt",
+      "parallel": 1,
+      "context_per_slot": 262144,
+      "privacy": "basalt",
+      "loaded_as_default": true,
+      "answer_correct": true
+    },
+    {
+      "id": "Qwen3.8-FN-GSQ-RCO-Coder-Parallel",
+      "engine": "basalt",
+      "parallel": 2,
+      "context_per_slot": 262144,
+      "privacy": "basalt",
+      "load_seconds": 12.4,
+      "two_concurrent_answers_through_tunnel": true
+    },
+    {
+      "id": "Mellum2.1-12B-A2.5B-Thinking-Q8_0",
+      "engine": "llama",
+      "parallel": 2,
+      "context_per_slot": 131072,
+      "privacy": "supervised",
+      "load_seconds": 11.3,
+      "answer_correct": true
+    }
+  ],
+  "tunnel": {
+    "transport": "WebRTC with a local signaling server",
+    "load_on_demand": true,
+    "switches_by_request": [
+      "Coder -> Mellum (9.0 s incl. answer)",
+      "Mellum -> Coder (11.8 s incl. answer)",
+      "Parallel -> Mellum while a Parallel request was queued (12.0 s)"
+    ],
+    "unknown_model_status": 404,
+    "all_answers_correct": true
+  },
+  "limits": [
+    "Prompts were synthetic one-word tasks; no throughput or answer-quality benchmark.",
+    "Host swap was on, so the run used LINK_REQUIRE_NO_SWAP=0; production keeps the guard on and swap off.",
+    "Basalt 0.3's RAM guard was not stressed with long contexts."
+  ]
+}

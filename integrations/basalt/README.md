@@ -42,8 +42,10 @@ vorhanden sein; der [Supervisor](../../deploy/managed/README.md#custom-basalt-ex
 kann es ausdrücklich über `expert_profile` auswählen. Die Integration verändert
 keine Modellgewichte und aktiviert keine Bildverarbeitung.
 
-[Validierung vom 4. November 2026](validation-20261104.json), noch mit Basalt 0.2.1
-(die GPU-Prüfung des 0.3-Stands steht aus): Container-Build,
+[Validierung vom 7. November 2026](validation-20261107.json) für diesen Stand: Coder,
+Coder-Parallel und Mellum laden, wechseln bei Bedarf und antworten durch einen
+verschlüsselten Tunnel. Ältere [Validierung vom 4. November 2026](validation-20261104.json)
+mit Basalt 0.2.1: Container-Build,
 Datenschutz- und Servertests sowie echte Coder-/Mellum-Antworten durch einen
 verschlüsselten k-lani-link-Tunnel. Für den 256-Experten-Coder wurde ein neutrales
 Platzierungsprofil ergänzt; daraus wird keine Leistungssteigerung abgeleitet.
