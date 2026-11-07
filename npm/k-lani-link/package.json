@@ -1,0 +1,10 @@
+{
+  "name": "k-lani-link",
+  "version": "0.0.0-source",
+  "private": true,
+  "description": "Source of the npm starter; scripts/npm-pack.sh writes the published package.json.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

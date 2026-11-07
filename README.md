@@ -229,6 +229,14 @@ may block them. Native operation does not provide Docker's application isolation
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)
 · [Setup, platform limits and checksums](deploy/portable/README.md).
 
+## Install with npm
+
+```sh
+npm install -g k-lani-link
+```
+
+The same portable program for your platform; update with `npm install -g k-lani-link@latest`.
+
 ## Free below the income/revenue threshold. Otherwise €4.99 once.
 
 One license covers **one person**, on any number of devices and containers,

@@ -7,6 +7,10 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- k-lani-link can be packed for npm (`npm install -g k-lani-link`) from a published
+  release with `scripts/npm-pack.sh <tag>`: a small Node starter plus one
+  `@k-lani/link-<os>-<cpu>` package per platform, made from the release binaries
+  after checking SHA256SUMS and its signature. Nothing is published automatically.
 - The model container no longer runs scripts of ours in Python: its model
   supervisor, single-model entrypoint and health probe are now part of the
   k-lani-link program (`k-lani-link backend supervise|start|health`), copied into

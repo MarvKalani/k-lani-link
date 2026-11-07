@@ -34,3 +34,6 @@ deploy/php-relay/standalone/data/*
 deploy/cloudflare-relay/node_modules/
 deploy/cloudflare-relay/.wrangler/
 deploy/cloudflare-relay/.dev.vars
+
+# npm packages packed from a release (scripts/npm-pack.sh)
+/.artifacts/
