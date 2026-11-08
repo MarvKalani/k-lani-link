@@ -22,6 +22,8 @@ tagged versions and downloads are listed on
   support. The privacy and numeric-metrics patches are rebased; in privacy mode
   the new router starts no telemetry. `deploy/basalt.json` uses Basalt's config
   format 2, which this version requires.
+- The model image's llama.cpp for GGUF models moves to build b12182 (pinned by
+  digest). Mellum 2.1 loads and answers on the GPU with it.
 - The control panel frees a request's upload slot once its body is read. Before, a
   request waiting for its answer (for example during a model swap) kept its slot, so
   more than 24 waiting requests across all model computers were refused early.

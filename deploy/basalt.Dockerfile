@@ -1,6 +1,6 @@
 # llama.cpp for GGUF models in the managed catalog (deploy/managed). Pinned by digest; it
-# brings its own CUDA 12 libraries, which only its process loads.
-FROM ghcr.io/ggml-org/llama.cpp@sha256:f25bfa096802cdf35ceb7d124816387a1e3ed5cbfc869eb242246cd29ab29352 AS llama
+# brings its own CUDA 12 libraries, which only its process loads. server-cuda-b12182.
+FROM ghcr.io/ggml-org/llama.cpp@sha256:77e84a5d6d885c07afbda0ae2fe48f4943f5181c8c8fe3b2e4231e8a1498bb24 AS llama
 RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
     && cp -L /usr/local/cuda/lib64/libcudart.so.12 /usr/local/cuda/lib64/libcublas.so.12 \
        /usr/local/cuda/lib64/libcublasLt.so.12 /lib/x86_64-linux-gnu/libnccl.so.2 /opt/llama/lib/ \
