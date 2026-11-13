@@ -15,7 +15,7 @@ axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 bytes = "1"
 base64 = "0.22"
 futures-util = "0.3"
-getrandom = "0.2"
+getrandom = "0.4"
 k-lani-link-protocol = { path = "../../crates/k-lani-link-protocol" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "http2"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
