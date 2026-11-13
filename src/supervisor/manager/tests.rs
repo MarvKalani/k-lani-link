@@ -48,6 +48,7 @@ impl Fixture {
         Settings {
             runtime: self.root.clone(),
             basalt: vec!["fake-basalt".into()],
+            basalt_answer_room_value: true,
             llama: vec![self.root.join("llama-server").display().to_string()],
             metrics: false,
             timeout: Duration::from_millis(800),
@@ -463,7 +464,7 @@ async fn qwen_sampling_and_context_fitting_reach_basalt_without_remote_policy_ch
     assert_eq!(code, StatusCode::OK);
     let args = fake.last().args;
     assert_eq!(value_of(&args, "--reasoning-budget-tokens").unwrap(), "0");
-    assert!(args.iter().any(|a| a == "--no-answer-room"));
+    assert_eq!(value_of(&args, "--answer-room").unwrap(), "0");
     assert!(args.iter().any(|a| a == "--fit-max-tokens"));
     for (flag, value) in [
         ("--temperature", "1.0"),
@@ -483,6 +484,13 @@ async fn qwen_sampling_and_context_fitting_reach_basalt_without_remote_policy_ch
     assert_eq!(load(&mut manager, "alpha").await.0, StatusCode::OK);
     let args = fake.last().args;
     assert!(!args.iter().any(|a| a.contains("fit-max-tokens")));
+    let mut legacy = fixture.settings();
+    legacy.basalt_answer_room_value = false;
+    assert!(
+        launch_args(&legacy, &manager.catalog.models[0])
+            .iter()
+            .any(|arg| arg == "--no-answer-room")
+    );
 }
 
 #[test]

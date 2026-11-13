@@ -52,6 +52,8 @@ pub trait Process: Send + Sync {
 pub struct Settings {
     pub runtime: PathBuf,
     pub basalt: Vec<String>,
+    /// Basalt 0.3.3 and later accept a token reserve in place of a Boolean switch.
+    pub basalt_answer_room_value: bool,
     pub llama: Vec<String>,
     pub metrics: bool,
     pub timeout: Duration,
@@ -64,6 +66,8 @@ impl Settings {
         Self {
             runtime,
             basalt: BASALT.iter().map(|s| (*s).to_owned()).collect(),
+            basalt_answer_room_value: std::fs::read_to_string(super::BASALT_OPTIONS)
+                .is_ok_and(|options| options.contains("type=answer_room")),
             llama: vec![LLAMA.to_owned()],
             metrics,
             timeout: Duration::from_secs(180),
@@ -244,10 +248,16 @@ pub fn launch_args(settings: &Settings, profile: &Profile) -> Vec<String> {
             if let Some(workers) = profile.pool_workers {
                 args.extend([s("--pool-workers"), workers.to_string()]);
             }
-            match profile.answer_room {
-                Some(true) => args.push(s("--answer-room")),
-                Some(false) => args.push(s("--no-answer-room")),
-                None => {}
+            if let Some(enabled) = profile.answer_room {
+                if settings.basalt_answer_room_value {
+                    args.extend([s("--answer-room"), s(if enabled { "auto" } else { "0" })]);
+                } else {
+                    args.push(s(if enabled {
+                        "--answer-room"
+                    } else {
+                        "--no-answer-room"
+                    }));
+                }
             }
             if profile.fit_max_tokens {
                 args.push(s("--fit-max-tokens"));

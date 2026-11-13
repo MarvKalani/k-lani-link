@@ -70,6 +70,5 @@ complete application tasks as well as tokens per second.
    workflow gap. Engine KV state is model/version-specific and must not be treated
    as a portable chat file. Persistence must remain an explicit choice.
 
-These are product options, not claims that the integrations or external approvals
-already exist. Audio, many-to-many routing and durable asynchronous jobs remain
-outside the current scope described in [backend capabilities](../deploy/BACKENDS.md).
+The [backend capabilities](../deploy/BACKENDS.md) document tracks the current
+scope, including file-based speech, and the remaining options.

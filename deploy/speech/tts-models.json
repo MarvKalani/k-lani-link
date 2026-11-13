@@ -1,0 +1,5 @@
+{
+  "audio8_model": "/models/audio8",
+  "ming_model": "/models/ming",
+  "ming_source": "/opt/ming"
+}

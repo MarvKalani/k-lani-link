@@ -319,6 +319,7 @@ mod tests {
                 id: 1,
                 method: "POST".into(),
                 path: "private-sensitive-marker".into(),
+                content_type: None,
             })
             .unwrap();
         assert!(!String::from_utf8_lossy(&packet).contains("private-sensitive-marker"));

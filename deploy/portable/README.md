@@ -244,8 +244,9 @@ tunnel does not require a new session.
 
 ## Downloads, signatures and security software
 
-The portable downloads are **unsigned**, without Windows publisher
-signing or Apple Developer ID notarization. On Apple Silicon a linker-generated
+Release checksums carry an Ed25519 signature for the k-lani-link updater.
+Windows publisher signing and Apple Developer ID notarization are separate.
+On Apple Silicon a linker-generated
 ad-hoc signature may be present; it does not identify a verified publisher.
 SmartScreen, Gatekeeper or company policy may warn or block these downloads.
 Do not disable protection or bypass your organisation's policy to run them.

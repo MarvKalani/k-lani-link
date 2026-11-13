@@ -1,8 +1,58 @@
+diff --git a/serve/api/documents.py b/serve/api/documents.py
+index e505e3ef..c70dcd24 100644
+--- a/serve/api/documents.py
++++ b/serve/api/documents.py
+@@ -67,17 +67,21 @@ def expand_documents(content: list) -> list:
+ 
+ 
+ @contextlib.contextmanager
+-def sources(allowed: ImageSources):
++def sources(allowed: ImageSources, *, private: bool = False):
+     """While a request is turned into messages: a document named by URL or path is read under `allowed`, the policy
+     its images get. Outside one, every such document is refused."""
+     _request.allowed = allowed
++    _request.private = private
+     try:
+         yield
+     finally:
+         _request.allowed = None
++        _request.private = False
+ 
+ 
+ def _fetch(source: str, name: str) -> bytes:
++    if getattr(_request, "private", False):
++        raise ValueError("privacy mode requires inline document data")
+     try:
+         return load_image(source, getattr(_request, "allowed", None) or ImageSources())
+     except ImageRefused as e:
+@@ -198,6 +202,10 @@ def _read(data: bytes, media: str, name: str, context: str | None, want=None) ->
+     if media == "application/pdf" or (pdf and media in ("", "application/octet-stream")):
+         if not pdf:
+             raise ValueError(f"document {name!r} is not a PDF (it does not start with %PDF-)")
++        if getattr(_request, "private", False):
++            with _parses:
++                pages, read, items = _read_pdf(data, name, want)
++            return _framed(name, pages, read, context, items)
+         key = f"pdf:{hashlib.sha256(data).hexdigest()}:{want!r}"
+         with _cache_lock:
+             hit = _cache.get(key)
+@@ -272,8 +280,9 @@ def _read_pdf(data: bytes, name: str, want) -> tuple[int, str | None, tuple]:
+         text = []
+     if text:
+         items.append(_text_item("\n".join(text)))
+-    print(f"[server] document: {_quoted(name)} {n} pages" + (f", read {read}" if read else "") +
+-          f", {scans} as images, {chars} chars of text, {time.monotonic() - t0:.2f}s", flush=True)
++    if not getattr(_request, "private", False):
++        print(f"[server] document: {_quoted(name)} {n} pages" + (f", read {read}" if read else "") +
++              f", {scans} as images, {chars} chars of text, {time.monotonic() - t0:.2f}s", flush=True)
+     return n, read, tuple(items)
+ 
+ 
 diff --git a/serve/config.py b/serve/config.py
-index 9ae39b89..5a2698fd 100644
+index 87a63ef4..ae5ab90a 100644
 --- a/serve/config.py
 +++ b/serve/config.py
-@@ -277,6 +277,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str], server_argv=(),
+@@ -284,6 +284,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str], server_argv=(),
                  ctx = int(src[at + 1])
                  src[at + 1] = str(slot_share(ctx, a.parallel))
                  a.shared_context = ctx                     # the total, for the startup line
@@ -12,7 +62,7 @@ index 9ae39b89..5a2698fd 100644
      return a, file_argv + cli, file_words, cli_words
  
  
-@@ -490,6 +493,9 @@ def build_parser() -> argparse.ArgumentParser:
+@@ -521,6 +524,9 @@ def build_parser() -> argparse.ArgumentParser:
                                   allow_abbrev=False)
      ap.add_argument("--mock-engine", action="store_true",
                      help="run a scripted engine instead of the model, for clients and tests (no --model needed)")
@@ -23,10 +73,10 @@ index 9ae39b89..5a2698fd 100644
      ap.add_argument("--engine-bin", help=argparse.SUPPRESS)      # set by `basalt serve`
      ap.add_argument("--alias", help="the model name the API reports (default: the name stored in the model file)")
 diff --git a/serve/engine/mock.py b/serve/engine/mock.py
-index 22f4ca71..dcd4ca68 100644
+index c859ff05..4b862d0e 100644
 --- a/serve/engine/mock.py
 +++ b/serve/engine/mock.py
-@@ -18,12 +18,13 @@ class MockEngine:
+@@ -19,12 +19,13 @@ class MockEngine:
      """Replays scripted completions as token ids plus the end-of-turn token; a list gives one script per request, the last repeating."""
  
      def __init__(self, tokenizer, script: str | list[str], max_context: int = 32768, delay_s: float = 0.0,
@@ -41,7 +91,7 @@ index 22f4ca71..dcd4ca68 100644
          self.peak = 0                                   # most requests generating at once
          self.requests: list[tuple[list[int], dict]] = []    # (prompt, sampling) of each request, in arrival order
          end = tokenizer.encode(IM_END, parse_special=True)
-@@ -60,9 +61,10 @@ class MockEngine:
+@@ -61,9 +62,10 @@ class MockEngine:
                  self.cv.notify_all()
  
      def _run(self, ids, max_new, sampling, cancel, embeddings=None):
@@ -56,7 +106,7 @@ index 22f4ca71..dcd4ca68 100644
          if self.route:
              script = self.scripts[self.route(list(ids))]
 diff --git a/serve/handler.py b/serve/handler.py
-index 7bf39f85..a17bc42a 100644
+index edafc1c7..e44182a9 100644
 --- a/serve/handler.py
 +++ b/serve/handler.py
 @@ -5,6 +5,7 @@ import json
@@ -67,7 +117,47 @@ index 7bf39f85..a17bc42a 100644
  import sys
  import threading
  import time
-@@ -268,6 +269,9 @@ def make_handler(target: Service | Router):
+@@ -18,17 +19,18 @@ from serve.api.responses import error_body as responses_error_body
+ from serve import ROOT
+ from serve.api.anthropic import anthropic_collect, anthropic_events
+ from serve.api.documents import sources as document_sources
+-from serve.engine.errors import ClientGone, EngineDied, EngineError, EngineStarting, EngineStuck, GpuBusy, ModelBusy
+ from serve.api.grammar import REQUEST_KEY as GRAMMAR_KEY
+ from serve.api.logit_bias import REQUEST_KEY as BIAS_KEY, checked as checked_bias
+ from serve.api.logprobs import REQUEST_KEY as LOGPROBS_KEY, checked as checked_logprobs
+ from serve.config import checked_sampling
++from serve.engine.errors import ClientGone, EngineDied, EngineError, EngineStarting, EngineStuck, GpuBusy, ModelBusy
++from serve.engine.image_source import ImageSources
+ from serve.frontend import anthropic_to_messages, forced_call, openai_to_messages
+ from serve.api.openai import openai_chunks, openai_collect
+ from serve.api.responses import ResponsesError
+ from serve.prompt import primed
++from serve.live import AnswerNowRefused, LiveRequest
+ from serve.security import host_allowed, host_names_for, key_matches, origin_allowed, peer_of, remote_reason
+-from serve.live import AnswerNowRefused
+ from serve.router import Router
+ from serve.service import LOG_FIRST_LINES, LOG_MAX_LINES, QUEUE_BEAT_S, Service, _debug_req
+ from serve.api.structured import anthropic_format, check_format
+@@ -91,6 +93,9 @@ def make_handler(target: Service | Router):
+ 
+         def _open_live(self, rid: str, req: dict) -> None:
+             """Register this request under its response id (and the client's x-client-request-id) for answer now."""
++            if svc.privacy:
++                self.live = LiveRequest(rid, None, None)   # response IDs still work without a request registry
++                return
+             client = (self.headers.get("x-client-request-id") or "").strip()[:256] or None
+             self.live = router.live.open(rid, self._session_id(req), client)
+ 
+@@ -186,6 +191,8 @@ def make_handler(target: Service | Router):
+ 
+         def _image_access(self):
+             """What this request may name as an image, from its own connection."""
++            if svc.privacy:
++                return ImageSources(remote_only=True, why="privacy")
+             why = "remote-only" if svc.image_sources.remote_only else remote_reason(self.client_address, self.headers)
+             return replace(svc.image_sources, local=not why, why=why, peer=peer_of(self.client_address))
+ 
+@@ -300,6 +307,9 @@ def make_handler(target: Service | Router):
  
          def do_GET(self):
              path = self.path.split("?")[0].rstrip("/")
@@ -77,7 +167,7 @@ index 7bf39f85..a17bc42a 100644
              if path.startswith("/fonts/"):
                  name = path[len("/fonts/"):]
                  f = ROOT / "serve" / "web" / "fonts" / name
-@@ -323,7 +327,11 @@ def make_handler(target: Service | Router):
+@@ -355,7 +365,11 @@ def make_handler(target: Service | Router):
                  self._json(200, {"status": "ok", "max_context": shown.engine.max_context, "model": shown.model,
                                   "images": shown.vision is not None, "api_key": bool(svc.api_key),
                                   "loaded": shown.loaded(), "loading": shown.loading, "service": "basalt",
@@ -90,7 +180,7 @@ index 7bf39f85..a17bc42a 100644
              elif path == "/status":
                  if not self._authorized():                  # it shows the last answer's tail
                      return
-@@ -360,6 +368,9 @@ def make_handler(target: Service | Router):
+@@ -394,6 +408,9 @@ def make_handler(target: Service | Router):
              if not self._authorized():
                  return
              path = self.path.split("?")[0].rstrip("/")   # clients post /v1/messages?beta=true
@@ -100,7 +190,41 @@ index 7bf39f85..a17bc42a 100644
              if path.startswith("/v1/") and self._foreign_page():
                  return
              if path in ("/unload", "/load") and not self._control_body():
-@@ -835,11 +846,40 @@ class Server(ThreadingHTTPServer):
+@@ -488,7 +505,7 @@ def make_handler(target: Service | Router):
+                     return
+                 self.svc.request_ctx.path = path
+                 self.svc.request_ctx.model = self.svc.model  # always the served name, never the requested one
+-                with document_sources(self._image_access()):   # a document by URL or path follows the image rules
++                with document_sources(self._image_access(), private=svc.privacy):
+                     if path == "/v1/responses":
+                         self._responses(req)
+                     elif path == "/v1/chat/completions":
+@@ -533,7 +550,7 @@ def make_handler(target: Service | Router):
+                 self.turn = None
+             if self.watch_done is not None:
+                 self.watch_done.set()
+-            if self.live is not None:
++            if self.live is not None and not svc.privacy:
+                 router.live.close(self.live)
+ 
+         def _props(self):
+@@ -798,10 +815,11 @@ def make_handler(target: Service | Router):
+                 raise ResponsesError(str(e).replace("response_format", "text.format"), "text.format") from None
+             req[GRAMMAR_KEY] = self.svc.grammar_for(tools, req.get("tool_choice"), req.get("tools"),
+                                                responses_api.text_format(req))
+-            noted = self.svc.__dict__.setdefault("hosted_tools_noted", set())   # once per tool
+-            if set(skipped) - noted:
+-                print(f"[server] warning: /v1/responses ignores hosted tools {', '.join(sorted(set(skipped) - noted))}", flush=True)
+-                noted.update(skipped)
++            if skipped and not self.svc.privacy:
++                noted = self.svc.__dict__.setdefault("hosted_tools_noted", set())   # once per tool
++                if set(skipped) - noted:
++                    print(f"[server] warning: /v1/responses ignores hosted tools {', '.join(sorted(set(skipped) - noted))}", flush=True)
++                    noted.update(skipped)
+             try:
+                 self.svc.reasoning_budget(req)                    # a bad value is a 400 before streaming
+             except ValueError as e:
+@@ -903,12 +921,41 @@ class Server(ThreadingHTTPServer):
              super().handle_error(request, client_address)
  
  
@@ -111,9 +235,9 @@ index 7bf39f85..a17bc42a 100644
 +    def server_bind(self):
 +        socketserver.TCPServer.server_bind(self)
 +        self.server_name, self.server_port = "localhost", 0
-+        os.chmod(self.server_address, 0o600)
-+        info = os.stat(self.server_address)
++        info = os.stat(self.server_address, follow_symlinks=False)
 +        self.socket_identity = (info.st_dev, info.st_ino)
++        os.chmod(self.server_address, 0o600)
 +
 +    def get_request(self):
 +        connection, _ = super().get_request()
@@ -133,7 +257,7 @@ index 7bf39f85..a17bc42a 100644
      router = target if isinstance(target, Router) else Router([target])
      svc = router.front
      svc.host_names = host_names_for(host, svc.allowed_hosts, svc.trusted_origins)
-     router.start_telemetry()
+-    router.start_telemetry()
 -    httpd = Server((host, port), make_handler(router))
 +    if unix_socket:
 +        if not hasattr(socket, "AF_UNIX") or not os.path.isabs(unix_socket):
@@ -141,14 +265,16 @@ index 7bf39f85..a17bc42a 100644
 +        httpd = UnixServer(unix_socket, make_handler(router))
 +    else:
 +        httpd = Server((host, port), make_handler(router))
+     httpd.router = router
++    router.start_telemetry()
      threading.Thread(target=httpd.serve_forever, daemon=True).start()
      return httpd
 diff --git a/serve/privacy.py b/serve/privacy.py
 new file mode 100644
-index 00000000..bec5b390
+index 00000000..c745741d
 --- /dev/null
 +++ b/serve/privacy.py
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,48 @@
 +"""Explicit text-only serving without application logs or diagnostic retention."""
 +from __future__ import annotations
 +
@@ -185,35 +311,36 @@ index 00000000..bec5b390
 +        raise ValueError("privacy requires a loopback listener")
 +    if args.debug or args.request_lines or args.open or args.vision != "off":
 +        raise ValueError("privacy forbids debug, request-lines, open and vision")
-+    if args.allowed_host or args.cors_origin:
-+        raise ValueError("privacy forbids extra browser origins and Host names")
++    if args.allowed_host or args.cors_origin or args.image_url_host or args.image_dir:
++        raise ValueError("privacy forbids extra browser origins, Host names and external media sources")
 +    if args.unix_socket and not os.path.isabs(args.unix_socket):
 +        raise ValueError("unix-socket requires an absolute path")
 +    for word in engine_words:
 +        name = word.split("=", 1)[0]
-+        if name.startswith(("--dump", "--log", "--trace", "--expert-profile-save")) or name in (
-+                "--draft-log", "--profile", "--stage-timing", "--vision", "--vision-mmproj"):
++        if name.startswith(("--diag-", "--dump", "--log", "--trace", "--expert-profile-save")) or name in (
++                "--draft-log", "--profile", "--stage-timing", "--wait-stats", "--decode-timing",
++                "--vision", "--vision-external", "--vision-mmproj"):
 +            raise ValueError("privacy forbids engine diagnostics and image input")
 +        if name in ("--conversation-cache-dir", "--conversation-cache-disk-mib"):
 +            raise ValueError("privacy forbids writing conversations to disk")
 diff --git a/serve/router.py b/serve/router.py
-index edbf9681..5bcb2e60 100644
+index 020b9a11..8f724dd0 100644
 --- a/serve/router.py
 +++ b/serve/router.py
-@@ -159,6 +159,8 @@ class Router:
+@@ -162,6 +162,8 @@ class Router:
  
      def start_telemetry(self) -> None:
          """One hardware sampler over the cards of every model; the speeds are the shown model's."""
-+        if getattr(self.front, "privacy", False):          # no hardware sampler in the private profile
++        if getattr(self.front, "privacy", False):
 +            return
-         if getattr(self.front, "telemetry", None) is None:
+         current = getattr(self.front, "telemetry", None)
+         if current is None or current.stopped():
              from serve.util.telemetry import Telemetry
-             cards = list(dict.fromkeys(i for svc in self.services for i in (getattr(svc, "gpu_indices", None) or [0])))
 diff --git a/serve/server.py b/serve/server.py
-index b8fdf59c..13fc5028 100644
+index c3b659cf..d86518ac 100644
 --- a/serve/server.py
 +++ b/serve/server.py
-@@ -42,6 +42,7 @@ from serve.service import Service  # noqa: E402
+@@ -43,6 +43,7 @@ from serve.service import Service  # noqa: E402
  from serve.util.logbuf import ColorStream, LogBuffer, TeeStream, tail_file  # noqa: E402
  from serve.util.console import LEGEND, tagged  # noqa: E402
  from serve.util.text import ByteTokenizer  # noqa: E402
@@ -221,7 +348,7 @@ index b8fdf59c..13fc5028 100644
  
  
  SWAP_START_TRIES = 2      # a swap's load: a second try for VRAM still being released, not a third for clients to wait on
-@@ -199,6 +200,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+@@ -226,6 +227,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
          sampling_defaults = {**sampling_defaults_from_config(cfg), **a.sampling_launch}
          if a.lazy and not multi:
              drop_sidecar_vision(cfg)
@@ -230,7 +357,7 @@ index b8fdf59c..13fc5028 100644
          shown = [x for x in cfg["items"] if x not in cfg.get("shared_items", ())]
          shown += sampling_items(sampling_defaults) + [x for x in [vision_item(cfg.get("vision"), cfg)] if x]
          print(model_line(cfg["model_name"], cfg.get("name_width", 0), shown), flush=True)
-@@ -215,8 +218,10 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+@@ -242,8 +245,10 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
              print(tagged("model", "unloaded, the first request loads it"), flush=True)
          if cfg.get("log"):                              # follow the engine's log file
              threading.Thread(target=tail_file, args=(logs, cfg["log"], "eng"), daemon=True).start()
@@ -242,7 +369,7 @@ index b8fdf59c..13fc5028 100644
          has_grammar = known is not None and "--grammar" in known
          if a.grammar and not has_grammar:
              print(tagged("warning", "grammar is on but this engine has no --grammar; requests go without one"), flush=True)
-@@ -231,14 +236,15 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+@@ -258,7 +263,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
              vision.attach(engine)
      else:
          engine, vision, sampling_defaults = MockEngine(tok, a.script or [
@@ -251,16 +378,18 @@ index b8fdf59c..13fc5028 100644
 +            record_requests=not a.privacy), None, dict(a.sampling_launch)
      # the model's exported template, else the bundled one
      dialect = dialect_for(cfg.get("arch"))
-     tpl = tpath / "chat_template.jinja"
-     svc = Service(engine, tok, dialect.template(tpl if tpl.exists() else ROOT / "serve/chat_template.jinja"),
+     template = files["chat_template.jinja"].decode("utf-8") if "chat_template.jinja" in files else \
+@@ -266,7 +272,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+     svc = Service(engine, tok, dialect.template(template),
                    model_name=cfg.get("model_name", "basalt"), vision=vision,
                    sampling_defaults=sampling_defaults, fit_max_tokens=a.fit_max_tokens, grammar=a.grammar,
--                  grammar_engine=bool(a.mock_engine or has_grammar), dialect=dialect)
-+                  grammar_engine=bool(a.mock_engine or has_grammar), dialect=dialect, privacy=a.privacy)
+-                  grammar_engine=bool(a.mock_engine or has_grammar), dialect=dialect, video_max_tokens=a.video_max_tokens)
++                  grammar_engine=bool(a.mock_engine or has_grammar), dialect=dialect, video_max_tokens=a.video_max_tokens,
++                  privacy=a.privacy)
      svc.logs = logs
      svc.idle_unload_s = a.idle_unload or 0
      svc.idle_sleep_s = a.idle_sleep or 0
-@@ -270,6 +276,8 @@ def check_models(services: list[Service]) -> None:
+@@ -298,6 +305,8 @@ def check_models(services: list[Service]) -> None:
  
  
  def main() -> int:
@@ -269,24 +398,24 @@ index b8fdf59c..13fc5028 100644
      ap = build_parser()
      engine_bin = ap.parse_known_args(sys.argv[1:])[0].engine_bin
      try:
-@@ -279,10 +287,13 @@ def main() -> int:
+@@ -307,10 +316,13 @@ def main() -> int:
          fail(f"--config: {e}")
      a = settings[0][0]                                  # the options every model shares read the same in each
      multi = len(settings) > 1
-+    if a.privacy and "--privacy" not in sys.argv[1:]:   # set by a config file
++    if a.privacy and "--privacy" not in sys.argv[1:]:
 +        silence_stdio()
      service.DEBUG, engine_process.REQUEST_LINES = a.debug, a.request_lines
 -    logs = LogBuffer()                                  # this process's and the engine's output
 -    sys.stdout, sys.stderr = (TeeStream(ColorStream.wrap(sys.stdout), logs, "srv"),
 -                              TeeStream(ColorStream.wrap(sys.stderr), logs, "srv"))
-+    logs = NullLogBuffer() if a.privacy else LogBuffer()   # this process's and the engine's output
++    logs = NullLogBuffer() if a.privacy else LogBuffer()
 +    if not a.privacy:
 +        sys.stdout, sys.stderr = (TeeStream(ColorStream.wrap(sys.stdout), logs, "srv"),
 +                                  TeeStream(ColorStream.wrap(sys.stderr), logs, "srv"))
      print(tagged("legend", LEGEND), flush=True)          # first line, so the key precedes every value
-     known = engine_flags_of(a.engine_bin) if a.engine_bin else None
-     cfgs = [check_model(m, file_engine, cli_engine, used_argv, known)
-@@ -293,10 +304,11 @@ def main() -> int:
+     problems = model_file_problems(settings)
+     for line in problems:
+@@ -326,10 +338,11 @@ def main() -> int:
          image_sources = image_sources_of(a.image_url_host, a.image_dir, a.image_remote_only)
      except ValueError as e:
          fail(str(e))
@@ -302,7 +431,7 @@ index b8fdf59c..13fc5028 100644
      width = max(len(c.get("model_name") or "") for c in cfgs) + 1
      shared = [x for x in cfgs[0].get("items", []) if all(x in c.get("items", []) for c in cfgs[1:])] if multi else []
      line, shared_sleep = shared_line(shared, [m[0].idle_sleep for m in settings])
-@@ -336,7 +348,7 @@ def main() -> int:
+@@ -372,7 +385,7 @@ def main() -> int:
          print(tagged("cors", ",".join(svc.cors_origins)), flush=True)
          if "*" in svc.cors_origins and not svc.api_key:
              print(tagged("warning", "any web page can use the model (--api-key KEY)"), flush=True)
@@ -311,7 +440,7 @@ index b8fdf59c..13fc5028 100644
      here = "127.0.0.1" if a.host in ("0.0.0.0", "", "::") else a.host
  
      def announcer(s: Service, m):
-@@ -403,7 +415,7 @@ def main() -> int:
+@@ -446,7 +459,7 @@ def main() -> int:
      except KeyboardInterrupt:
          if not rc:
              print("[server] stopping (Ctrl+C again to force)", flush=True)
@@ -321,31 +450,31 @@ index b8fdf59c..13fc5028 100644
              closers += [getattr(s.engine, "close", None), s.vision.close if s.vision else None]
          for close in filter(None, closers):
 diff --git a/serve/service.py b/serve/service.py
-index 0e4eca89..1ff206d6 100644
+index 5db379cd..3bd7135a 100644
 --- a/serve/service.py
 +++ b/serve/service.py
-@@ -14,6 +14,7 @@ from serve.engine.errors import EngineDied, EngineSilent, EngineStartError, Engi
+@@ -14,6 +14,7 @@ from typing import Iterator
+ from serve.engine.errors import EngineDied, EngineSilent, EngineStartError, EngineStarting, EngineStuck, GpuBusy, ModelBusy
  from serve.engine.mock import Engine
- from serve.frontend import ChatTemplate, Event, images_of, mark_think_literals, unmark_think_literals
- from serve.util.logbuf import LogBuffer
+ from serve.frontend import ChatTemplate, Event, images_of, mark_think_literals, media_of, unmark_think_literals
 +from serve.privacy import NullLogBuffer
+ from serve.util.logbuf import LogBuffer
  from serve.security import LOOPBACK_NAMES
  from serve.models import Dialect, dialect_for
- from serve.prompt import CTX_SLACK, PromptText, overflow_error, room_error
-@@ -89,8 +90,11 @@ class Service:
+@@ -94,7 +95,11 @@ class Service:
      def __init__(self, engine: Engine, tokenizer, template: ChatTemplate, model_name: str = "basalt",
                   vision: Vision | None = None, sampling_defaults: dict | None = None,
                   fit_max_tokens: bool = False, grammar: bool = GRAMMAR_DEFAULT, grammar_engine: bool = True,
--                 dialect: Dialect | None = None):
-+                 dialect: Dialect | None = None, privacy: bool = False):
-         self.engine, self.tok, self.template, self.model, self.vision = engine, tokenizer, template, model_name, vision
+-                 dialect: Dialect | None = None, video_max_tokens: int = VIDEO_MAX_TOKENS):
++                 dialect: Dialect | None = None, video_max_tokens: int = VIDEO_MAX_TOKENS,
++                 privacy: bool = False):
 +        if privacy and vision is not None:
-+            raise ValueError("privacy requires vision disabled")
++            raise ValueError("privacy mode is text only")
 +        self.privacy = privacy
+         self.engine, self.tok, self.template, self.model, self.vision = engine, tokenizer, template, model_name, vision
          self.dialect = dialect or dialect_for(None)      # how this model's prompts and replies are written
          self.literals = self.dialect.literal_tags(control_literals(tokenizer))   # control texts that stay text inside a message
-         self.fit_max_tokens = fit_max_tokens          # clamp the output cap instead of a 400
-@@ -106,7 +110,7 @@ class Service:
+@@ -112,7 +117,7 @@ class Service:
          self.images_waiting = 0                         # bytes of read images waiting for their turn to encode
          # put a non-default reasoning effort in a system turn before the answer so the cached prefix survives
          self.effort_end = False
@@ -353,20 +482,20 @@ index 0e4eca89..1ff206d6 100644
 +        self.logs = NullLogBuffer() if privacy else LogBuffer()
          # origins allowed to call /v1/* (CORS; "*" = any); empty: no CORS headers
          self.cors_origins: list[str] = []
-         # origins treated as the server's own page for the load/unload/VRAM controls (no wildcard)
-@@ -178,8 +182,9 @@ class Service:
+         self.max_payload = 256 << 20                     # the most a JSON request body may hold, in bytes
+@@ -197,8 +202,9 @@ class Service:
              return budget
-         room = max_new - min(max(ANSWER_RESERVE_MIN, max_new // 4), max_new // 2)
+         room = max_new - reserve
          if budget is None or budget > room:
--            print(f"[server] thinking budget {room} tokens, output cap {max_new} (--no-answer-room disables)",
+-            print(f"[server] thinking budget {room} tokens, output cap {max_new} (answer-room {self.answer_room})",
 -                  flush=True)
 +            if not self.privacy:
-+                print(f"[server] thinking budget {room} tokens, output cap {max_new} (--no-answer-room disables)",
++                print(f"[server] thinking budget {room} tokens, output cap {max_new} (answer-room {self.answer_room})",
 +                      flush=True)
              return room
          return budget
  
-@@ -860,6 +865,8 @@ class Service:
+@@ -992,6 +998,8 @@ class Service:
          return ids, kwargs.get("enable_thinking", True) is not False, max_new
  
      def _note(self, n, evs, st=None, rate=None):
@@ -375,7 +504,7 @@ index 0e4eca89..1ff206d6 100644
          with self.status_lock:
              s = self.status if st is None else st
              s["generated"] = n
-@@ -892,6 +899,8 @@ class Service:
+@@ -1024,6 +1032,8 @@ class Service:
  
      def live_line(self, now: float) -> str | None:
          """One line for every request that is generating; None when none is."""
@@ -384,7 +513,7 @@ index 0e4eca89..1ff206d6 100644
          with self.status_lock:
              reqs = [st for st, _ in self.live_reqs.values()] or ([self.status] if self.status.get("busy") else [])
              rows = []
-@@ -913,6 +922,8 @@ class Service:
+@@ -1045,6 +1055,8 @@ class Service:
  
      def _progress(self, last_print, every=1.0, st=None):
          """Print progress while a request runs: its prompt read, then the shared live line."""
@@ -393,7 +522,7 @@ index 0e4eca89..1ff206d6 100644
          now = time.time()
          with self.status_lock:
              s = dict(self.status if st is None else st)
-@@ -1082,9 +1093,11 @@ class Service:
+@@ -1234,9 +1246,11 @@ class Service:
                                          ended_thinking = True
                                          break
                                      finish = "stop"
@@ -407,7 +536,7 @@ index 0e4eca89..1ff206d6 100644
                                  seg.append(t)
                                  if parser.state == "reasoning":
                                      run_n = run_n + 1 if t == run_id else 1
-@@ -1187,7 +1200,8 @@ class Service:
+@@ -1363,7 +1377,8 @@ class Service:
                                  break                   # no room for the call: "length"
                          for t in extra:
                              n += 1
@@ -415,13 +544,17 @@ index 0e4eca89..1ff206d6 100644
 +                            if DEBUG and not self.privacy:
 +                                raw_ids.append(t)
                              thinking_n += parser.state == "reasoning"
+                             state0 = parser.state
                              evs = cut(parser.feed(detok.push(t)))
-                             self._note(n, evs, st, rate)
-@@ -1219,42 +1233,51 @@ class Service:
+@@ -1401,46 +1416,54 @@ class Service:
                                  if last.get("offloaded") is not None and routed else None
                              ssd_share = round(last["file_reads"] / routed, 3) if last.get("file_reads") and routed else None
                              seen = prompt_tokens_seen(len(ids), last)   # less than len(ids) when cancelled mid-read
 -                            self.requests_done += 1
+-                            for key, add in (("prompt", seen), ("reused", last.get("reused") or 0), ("written", n),
+-                                             ("prompt_ms", last.get("prompt_ms") or 0.0),
+-                                             ("decode_ms", last.get("decode_ms") or 0.0)):
+-                                self.totals[key] += add
 -                            if st.get("slot") is not None:
 -                                self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
 -                                                              "accepted": last.get("drafts_accepted"), "at": time.time()}
@@ -442,24 +575,6 @@ index 0e4eca89..1ff206d6 100644
 -                                "ttft_s": round(ttft, 2) if ttft is not None else None,
 -                                "draft_len": round(dl, 2) if dl is not None else None})
 -                            self._note_best(self.history[-1])
-+                            if not self.privacy:
-+                                self.requests_done += 1
-+                                if st.get("slot") is not None:
-+                                    self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
-+                                                                  "accepted": last.get("drafts_accepted"), "at": time.time()}
-+                                self.history.append({
-+                                    "id": f"r_{self.requests_done:04d}", "path": path, "slot": self._slot_of(st),
-+                                    "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,
-+                                    "prompt_tokens": seen, "reused": last.get("reused"), "output_tokens": n,
-+                                    "prompt_ms": last.get("prompt_ms"),
-+                                    "decode_tok_s": round(last["generated"] / (last["decode_ms"] / 1000), 1)
-+                                    if n and last.get("generated") and last.get("decode_ms") else None,
-+                                    "hit_rate": hit_rate, "pcie_share": pcie_share, "ssd_share": ssd_share,
-+                                    "drafts_offered": last.get("drafts_offered"),
-+                                    "drafts_accepted": last.get("drafts_accepted"),
-+                                    "ttft_s": round(ttft, 2) if ttft is not None else None,
-+                                    "draft_len": round(dl, 2) if dl is not None else None})
-+                                self._note_best(self.history[-1])
                              fresh = getattr(self.engine, "last", None)
                              if fresh is not None and fresh is not before:      # a DONE line arrived for this request
                                  timings = request_timings(seen, n, last)
@@ -478,10 +593,31 @@ index 0e4eca89..1ff206d6 100644
 -                            if DEBUG and raw_ids:
 -                                print(f"[server] raw: {self.tok.decode(raw_ids)!r}", flush=True)
 +                            if not self.privacy:
++                                self.requests_done += 1
++                                for key, add in (("prompt", seen), ("reused", last.get("reused") or 0), ("written", n),
++                                                 ("prompt_ms", last.get("prompt_ms") or 0.0),
++                                                 ("decode_ms", last.get("decode_ms") or 0.0)):
++                                    self.totals[key] += add
++                                if st.get("slot") is not None:
++                                    self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
++                                                                  "accepted": last.get("drafts_accepted"), "at": time.time()}
++                                self.history.append({
++                                    "id": f"r_{self.requests_done:04d}", "path": path, "slot": self._slot_of(st),
++                                    "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,
++                                    "prompt_tokens": seen, "reused": last.get("reused"), "output_tokens": n,
++                                    "prompt_ms": last.get("prompt_ms"),
++                                    "decode_tok_s": round(last["generated"] / (last["decode_ms"] / 1000), 1)
++                                    if n and last.get("generated") and last.get("decode_ms") else None,
++                                    "hit_rate": hit_rate, "pcie_share": pcie_share, "ssd_share": ssd_share,
++                                    "drafts_offered": last.get("drafts_offered"),
++                                    "drafts_accepted": last.get("drafts_accepted"),
++                                    "ttft_s": round(ttft, 2) if ttft is not None else None,
++                                    "draft_len": round(dl, 2) if dl is not None else None})
++                                self._note_best(self.history[-1])
 +                                now = time.time()
-+                                rate = n / max(1e-6, now - ft) if ft else 0.0
-+                                print(done_line(self._slot_of(st), seen, n, finish, cancel.is_set(), timings, ttft, rate,
-+                                                dl, hit_rate, pcie_share, ssd_share), flush=True)
++                                tokens_per_second = n / max(1e-6, now - ft) if ft else 0.0
++                                print(done_line(self._slot_of(st), seen, n, finish, cancel.is_set(), timings, ttft,
++                                                tokens_per_second, dl, hit_rate, pcie_share, ssd_share), flush=True)
 +                                if finish == "length" and parser.state == "reasoning":
 +                                    print("[server] warning: max tokens reached while thinking, no answer "
 +                                          "(set reasoning_budget_tokens, or start with --reasoning-budget-tokens)",
@@ -497,7 +633,7 @@ index 0e4eca89..1ff206d6 100644
                          st["busy"] = False
                          st.pop("tail", None)                     # drop the tail once done
                          st.pop("tool", None)
-@@ -1263,6 +1286,10 @@ class Service:
+@@ -1449,6 +1472,10 @@ class Service:
                              if self.live_reqs:              # the newest request still running
                                  self.status.update(list(self.live_reqs.values())[-1][0])
                              else:
@@ -510,14 +646,15 @@ index 0e4eca89..1ff206d6 100644
                                  self.status.pop("tool", None)
 diff --git a/serve/tests/test_privacy.py b/serve/tests/test_privacy.py
 new file mode 100644
-index 00000000..f06e5d77
+index 00000000..b5365a1d
 --- /dev/null
 +++ b/serve/tests/test_privacy.py
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,207 @@
 +"""Privacy admission, streaming parity, diagnostics retention and quiet process startup."""
 +from __future__ import annotations
 +
 +import contextlib
++import base64
 +import http.client
 +import io
 +import json
@@ -528,17 +665,21 @@ index 00000000..f06e5d77
 +import sys
 +import time
 +import unittest
++from unittest import mock
 +import urllib.error
 +import urllib.request
 +from pathlib import Path
 +
++from serve.api import documents
 +from serve.config import build_parser, parse_settings
 +from serve.engine.mock import MockEngine
 +from serve.frontend import ChatTemplate
 +from serve.handler import serve
 +from serve.privacy import NullLogBuffer
++from serve.router import Router
 +from serve.service import Service
 +from serve.util.text import ByteTokenizer
++from serve.tests.test_documents import make_pdf
 +
 +ROOT = Path(__file__).resolve().parents[2]
 +HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -560,7 +701,7 @@ index 00000000..f06e5d77
 +    def test_unix_socket_preserves_thinking_and_has_no_tcp_listener(self):
 +        tok = ByteTokenizer()
 +        engine = MockEngine(tok, "checking.</think>\n\nanswer", record_requests=False)
-+        svc = Service(engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++        svc = Service(engine, tok, ChatTemplate.from_file(ROOT / "serve/chat_template.jinja"), privacy=True)
 +        with tempfile.TemporaryDirectory() as directory:
 +            path = str(Path(directory) / "basalt.sock")
 +            httpd = serve(svc, unix_socket=path)
@@ -585,7 +726,11 @@ index 00000000..f06e5d77
 +    def test_diagnostic_network_and_image_options_are_rejected(self):
 +        for flags in (["--debug"], ["--request-lines"], ["--open"], ["--vision", "cpu"],
 +                      ["--host", "0.0.0.0"], ["--cors-origin", "*"], ["--allowed-host", "*"],
++                      ["--image-url-host", "example.invalid"], ["--image-dir", "/tmp"],
++                      ["--vision-external"],
 +                      ["--draft-log", "out"], ["--dump-routing", "out"],
++                      ["--diag-dump", "out"], ["--diag-logits=out"],
++                      ["--wait-stats"], ["--decode-timing"],
 +                      ["--expert-profile-save", "out"], ["--profile"],
 +                      ["--conversation-cache-dir", "out"], ["--conversation-cache-disk-mib", "64"]):
 +            with self.subTest(flags=flags), self.assertRaises(ValueError):
@@ -596,7 +741,7 @@ index 00000000..f06e5d77
 +    def test_answer_room_is_quiet_in_privacy_mode(self):
 +        tok = ByteTokenizer()
 +        svc = Service(MockEngine(tok, "done", record_requests=False), tok,
-+                      ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++                      ChatTemplate.from_file(ROOT / "serve/chat_template.jinja"), privacy=True)
 +        output = io.StringIO()
 +        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
 +            self.assertLess(svc.answer_budget({}, 4096, None), 4096)
@@ -611,8 +756,9 @@ index 00000000..f06e5d77
 +    def test_api_streams_without_history_metrics_or_image_downloads(self):
 +        tok = ByteTokenizer()
 +        engine = MockEngine(tok, "</think>\n\nprivate answer", record_requests=False)
-+        svc = Service(engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
-+        httpd = serve(svc, port=0)
++        svc = Service(engine, tok, ChatTemplate.from_file(ROOT / "serve/chat_template.jinja"), privacy=True)
++        router = Router([svc])
++        httpd = serve(router, port=0)
 +        base = f"http://127.0.0.1:{httpd.server_address[1]}"
 +        try:
 +            status, body = request(base, "/health")
@@ -621,6 +767,7 @@ index 00000000..f06e5d77
 +            for path in ("/", "/metrics", "/api/logs", "/status", "/slots", "/props", "/web/app.js"):
 +                self.assertEqual(request(base, path)[0], 404)
 +            self.assertEqual(request(base, "/v1/unload", {})[0], 404)
++            self.assertEqual(request(base, "/v1/answer_now", {})[0], 404)
 +            prompt = {"model": svc.model, "messages": [{"role": "user", "content": "private question"}], "stream": True}
 +            with contextlib.redirect_stdout(io.StringIO()):
 +                status, body = request(base, "/v1/chat/completions", prompt)
@@ -633,6 +780,7 @@ index 00000000..f06e5d77
 +            self.assertFalse(svc.history)
 +            self.assertFalse(svc.slot_last)
 +            self.assertFalse(svc.best)
++            self.assertFalse(any(svc.totals.values()))
 +            self.assertEqual(svc.requests_done, 0)
 +            self.assertIsNone(svc.last_timings)
 +            self.assertEqual(svc.logs.since(), ([], 0))
@@ -640,9 +788,44 @@ index 00000000..f06e5d77
 +            self.assertFalse(engine.requests)
 +            self.assertFalse(engine.last_prompt)
 +            self.assertNotIn("tail", svc.status)
++            self.assertFalse(router.live.live)
++            self.assertFalse(router.live.finished)
 +            image = {"model": svc.model, "messages": [{"role": "user", "content": [
 +                {"type": "image_url", "image_url": {"url": "http://127.0.0.1:1/must-not-fetch"}}]}]}
 +            self.assertEqual(request(base, "/v1/chat/completions", image)[0], 400)
++        finally:
++            svc.stop()
++            httpd.shutdown()
++            httpd.server_close()
++
++    def test_document_inputs_cannot_fetch_files_or_leave_cached_text(self):
++        tok = ByteTokenizer()
++        svc = Service(MockEngine(tok, "answer", record_requests=False), tok,
++                      ChatTemplate.from_file(ROOT / "serve/chat_template.jinja"), privacy=True)
++        httpd = serve(svc, port=0)
++        base = f"http://127.0.0.1:{httpd.server_address[1]}"
++        try:
++            for source in ("http://127.0.0.1:1/document.txt", "/etc/hostname"):
++                part = {"type": "input_file", "file_url": source}
++                with mock.patch.object(documents, "load_image") as fetch:
++                    status, body = request(base, "/v1/responses", {
++                        "model": svc.model, "input": [{"role": "user", "content": [part]}]})
++                    self.assertEqual(status, 400, body)
++                    fetch.assert_not_called()
++            pdf = base64.b64encode(make_pdf(["synthetic private document"])).decode("ascii")
++            with documents._cache_lock:
++                cached = dict(documents._cache)
++            with contextlib.redirect_stdout(io.StringIO()):
++                status, body = request(base, "/v1/responses", {
++                    "model": svc.model, "input": [{"role": "user", "content": [
++                        {"type": "input_file", "file_data": f"data:application/pdf;base64,{pdf}"},
++                        {"type": "input_text", "text": "Read this synthetic file."}]}],
++                    "tools": [{"type": "unrecognized_private_marker"}]})
++            self.assertEqual(status, 200, body)
++            self.assertIn("id", json.loads(body))
++            self.assertNotIn("hosted_tools_noted", vars(svc))
++            with documents._cache_lock:
++                self.assertEqual(dict(documents._cache), cached)
 +        finally:
 +            svc.stop()
 +            httpd.shutdown()

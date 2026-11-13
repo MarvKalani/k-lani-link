@@ -1,0 +1,74 @@
+name: Basalt backend
+
+on:
+  schedule:
+    # Upstream tags do not trigger events in this repository.
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      basalt_tag:
+        description: Basalt tag such as v0.3.3. Leave empty to check the latest stable tag.
+        type: string
+      publish:
+        description: Push the tested backend image to GitHub Container Registry.
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - '.github/workflows/basalt.yml'
+      - '.github/workflows/basalt-image.yml'
+      - '.dockerignore'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'src/**'
+      - 'LICENSE'
+      - 'LICENSING.md'
+      - 'COMMERCIAL-LICENSE.md'
+      - 'deploy/basalt.Dockerfile'
+      - 'deploy/compose.yaml'
+      - 'deploy/thinkrail/compose.yaml'
+      - 'integrations/basalt/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/basalt.yml'
+      - '.github/workflows/basalt-image.yml'
+      - '.dockerignore'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'src/**'
+      - 'LICENSE'
+      - 'LICENSING.md'
+      - 'COMMERCIAL-LICENSE.md'
+      - 'deploy/basalt.Dockerfile'
+      - 'deploy/compose.yaml'
+      - 'deploy/thinkrail/compose.yaml'
+      - 'integrations/basalt/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: basalt-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (!inputs.publish || github.ref != format('refs/heads/{0}', github.event.repository.default_branch)))
+    uses: ./.github/workflows/basalt-image.yml
+    permissions:
+      contents: read
+    with:
+      basalt_tag: ${{ inputs.basalt_tag || '' }}
+
+  publish:
+    if: github.event_name == 'schedule' || (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)))
+    uses: ./.github/workflows/basalt-image.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      basalt_tag: ${{ inputs.basalt_tag || '' }}
+      publish: true

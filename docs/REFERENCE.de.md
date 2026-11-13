@@ -290,6 +290,10 @@ erreichbar, scheitert die Anfrage. `GET /v1/models` liefert die zusammengeführt
 aller Backends, die die Prüfung bestanden haben, `upstream` zuerst; der Verbindungstest im
 Bedienfeld zeigt also alle Modelle.
 
+Auf Unix kann ein weiteres Backend einen privaten Unix-Socket verwenden.
+Setze dazu in seinem `[[backends]]`-Eintrag `upstream_socket = "/absoluter/pfad/backend.sock"`
+und eine Loopback-Adresse wie `upstream = "http://localhost"`.
+
 Ein weiteres Backend muss auf Loopback liegen, außer mit `allow_network_upstream = true`:
 dann ist eine private IP-Adresse (RFC 1918, Link-Local, IPv6 Unique-Local oder
 `100.64.0.0/10`, das Tailscale nutzt) über `http` oder jeder Host über `https` erlaubt.
@@ -301,15 +305,24 @@ Modellwechsel wartet also auch auf Anfragen an anderen Backends.
 
 ## Unterstützte APIs
 
-Der Tunnel trägt eine feste Routentabelle (`ROUTES` im Protokoll-Crate, mit ihm
-versioniert). Request- und Response-Bodies laufen unverändert durch; ändert ein Backend
-sein eigenes API-Format, muss hier nichts angepasst werden. Ein Host ohne eine neuere Zeile
-antwortet mit 404.
+Beide Peers prüfen die Routen anhand der Freigabeliste im Protokoll-Crate.
+Request- und Response-Bodies laufen unverändert durch. Beim Videostart und bei
+der Dateitranskription wird der geprüfte Multipart-`Content-Type` mit Boundary weitergegeben.
+Status und Download verwenden eine begrenzte Job-ID.
 
 | API | Routen | Typische Clients |
 | --- | --- | --- |
 | OpenAI | `GET /v1/models`, `POST /v1/chat/completions`, `/v1/responses`, `/v1/embeddings` | OpenCode, Cline, Continue, Codex mit eigenem Provider |
+| OpenAI Images | `POST /v1/images/generations` | OpenAI-kompatible Bildclients und Skripte mit einem [passenden Backend](../integrations/comfyui/README.md) |
+| OpenAI Videos | `POST /v1/videos`, `GET /v1/videos/{id}`, `GET /v1/videos/{id}/content` | Multipart-Upload des Startbilds, Jobstatus und MP4-Download über den [ComfyUI-Adapter](../integrations/comfyui/README.md#animate-an-image-through-the-link) |
+| OpenAI Audio | `POST /v1/audio/speech`, `POST /v1/audio/transcriptions` | Sprachausgabe und Dateitranskription mit [NeMo-Speech.cpp](../integrations/nemo-speech/README.md) |
 | Anthropic Messages | `POST /v1/messages`, `/v1/messages/count_tokens` | Claude Code über `ANTHROPIC_BASE_URL` |
+
+Das [Compose-Profil für Sprache](../deploy/speech/README.md) startet Audio8,
+Ming und Nemotron. Der native Client kann Audio über `[local_audio.speech]`
+und `[local_audio.transcriptions]` in der privaten TOML lokal verarbeiten.
+Eine konfigurierte Audio-Route bleibt auch bei Ausfall des Tunnels oder des
+lokalen Sprachdiensts lokal.
 
 Ob ein Backend eine Route anbietet, entscheidet das Backend; prüfe deine Version von
 llama.cpp, LM Studio oder Basalt. `/v1/embeddings` schickt Text (etwa Code zur
@@ -413,11 +426,9 @@ sollten zuerst Modellliste, Streaming, Tool-Calling und Abbruch gegen diese
 Schnittstelle bestehen, bevor sie die funktionierende Version ersetzen. Der MVP
 lädt selbst keine Inferenzserver-Updates herunter.
 
-Unterstützte Routen: `GET /v1/models`, `POST /v1/chat/completions` und
-`POST /v1/responses`. JSON- und SSE-Antworten sowie HTTP-Statuscodes werden
-weitergegeben. Es gibt keine Übersetzung zwischen diesen API-Formaten.
-Basalts Responses-Implementierung ist zustandslos; dies ist keine vollständige
-Implementierung aller OpenAI-Dienste.
+Die [Liste der unterstützten APIs](#unterstützte-apis) enthält alle Inferenzrouten.
+Antwortdaten und HTTP-Statuscodes werden im API-Format des Backends weitergegeben.
+Basalts Responses-Implementierung ist zustandslos.
 
 Standardmäßig eine aktive Anfrage pro Geräte-Paar. `max_concurrent_requests`
 (1–8) und `max_queued_requests` (0–16) begrenzen Streams und Warteschlange;

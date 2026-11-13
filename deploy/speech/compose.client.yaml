@@ -1,0 +1,9 @@
+# Add after the client Compose file when speech runs on the client computer.
+services:
+  client:
+    volumes:
+      - type: bind
+        source: ${LINK_SPEECH_SOCKET_DIR:?Set the private speech socket directory}
+        target: /run/link-speech
+        read_only: true
+        bind: {create_host_path: false}

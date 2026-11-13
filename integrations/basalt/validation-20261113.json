@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-13",
+  "upstream_tag": "v0.3.3",
+  "upstream_commit": "2729e2288f59e01836ddd7fcc630810ada98995a",
+  "patch_sha256": {
+    "privacy.patch": "6b5c1f1abf3e2a41eff9ea818dd9795b53bb44c46090ce983f70c0251c4159eb",
+    "numeric-metrics.patch": "325e9c089ec169c2bae033d2edd635e4041e1997fcc235ed5169eb6fdb8e2834"
+  },
+  "image": {
+    "local_tag": "k-lani-link-basalt:v0.3.3-validation",
+    "local_id": "sha256:81dbd36d2c4ec37f4f85fcdc44ec0af2a856cf72b30b6ac7b6889e0da9c6f476",
+    "platform": "linux/amd64",
+    "docker_reported_bytes": 4709066501,
+    "runtime_smoke_passed": true,
+    "docker_archive_export_and_load_passed": true,
+    "network_mode": "none",
+    "read_only_root": true,
+    "logging_driver": "none"
+  },
+  "cuda_13_5": {
+    "toolkit_version": "13.5.0",
+    "driver_version": "615.71.09",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "context_per_slot": 8192,
+    "https_chat_streaming": true,
+    "basalt_serve": {"passed": 1106, "failed": 0, "skipped": 7}
+  },
+  "tests": {
+    "basalt_serve": {"passed": 1106, "failed": 0, "skipped": 7},
+    "image_privacy_and_numeric_metrics": {"passed": 11, "failed": 0},
+    "link_rust": {"passed": 205, "failed": 0, "ignored": 2},
+    "workflow_lint": true,
+    "workflow_source_selection": true,
+    "incompatible_patch_blocks_build": true
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5070 Ti",
+    "memory_mib": 16303,
+    "model": "Qwen3.8-FN-GSQ-RCO-Coder",
+    "context_per_slot": 8192,
+    "parallel": 1,
+    "expert_profile": "Neutral local ranking for 48 layers and 256 experts"
+  },
+  "webrtc": {
+    "signaling_stopped_before_inference": true,
+    "models": true,
+    "chat_completions_sse": true,
+    "responses_sse": true,
+    "messages_sse": true,
+    "messages_count_tokens": true
+  },
+  "https_mailbox": {
+    "relay": "Local with verified TLS",
+    "models": true,
+    "chat_completions_sse": true
+  },
+  "privacy_checks": {
+    "link_privacy_verified": true,
+    "external_document_refused": true,
+    "diagnostics_and_answer_now_return_404": true,
+    "numeric_snapshot_mode": "0600",
+    "socket_and_metrics_removed_on_shutdown": true
+  },
+  "supervisor": {
+    "loaded_on_demand": true,
+    "answer_room_false": true,
+    "unloaded_with_operator_key": true,
+    "link_stayed_connected": true,
+    "clean_stop": true
+  },
+  "test_scope": [
+    "Both Link peers ran locally. Requests used synthetic inputs and checked function at 8192 tokens of configured context.",
+    "Host swap was enabled. The functional run used the default LINK_REQUIRE_NO_SWAP=0.",
+    "Workflow validation ran locally. A hosted GitHub Actions run and registry push are pending."
+  ]
+}

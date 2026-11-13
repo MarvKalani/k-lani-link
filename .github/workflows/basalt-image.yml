@@ -1,0 +1,152 @@
+name: Build Basalt backend image
+
+on:
+  workflow_call:
+    inputs:
+      basalt_tag:
+        type: string
+        default: ''
+      publish:
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select and pin Basalt source
+        id: basalt
+        env:
+          REQUESTED_TAG: ${{ inputs.basalt_tag }}
+          EVENT: ${{ github.event_name }}
+        shell: bash
+        run: |
+          upstream=https://github.com/jesdga95/basalt.git
+          pinned=$(cat integrations/basalt/BASE_COMMIT)
+          [[ "$pinned" =~ ^[0-9a-f]{40}$ ]]
+          for compose in deploy/compose.yaml deploy/thinkrail/compose.yaml; do
+            grep -Fq "https://github.com/jesdga95/basalt.git#$pinned" "$compose"
+            grep -Fq "BASALT_REVISION:-$pinned" "$compose"
+          done
+          grep -Fxq "ARG BASALT_REVISION=$pinned" deploy/basalt.Dockerfile
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" && ( "$EVENT" == schedule || "$EVENT" == workflow_dispatch ) ]]; then
+            tag=$(git ls-remote --refs --tags --sort=-version:refname "$upstream" 'refs/tags/v*' |
+              awk '$2 ~ /^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+$/ && !found {found=1; sub(/^refs\/tags\//, "", $2); print $2}')
+            test -n "$tag"
+          fi
+          if [[ -n "$tag" ]]; then
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            revision=$(git ls-remote "$upstream" "refs/tags/$tag^{}" "refs/tags/$tag" |
+              awk '/\^\{\}$/ {peeled=$1; next} {tagged=$1} END {print peeled ? peeled : tagged}')
+          else
+            revision="$pinned"
+          fi
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          if [[ -z "$tag" ]]; then
+            tag=$(git ls-remote --tags "$upstream" |
+              awk -v sha="$revision" '$1 == sha && $2 ~ /^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+(\^\{\})?$/ && !found {
+                found=1
+                sub(/^refs\/tags\//, "", $2); sub(/\^\{\}$/, "", $2); print $2
+              }')
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || tag="commit-${revision:0:12}"
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-basalt"
+          # Rebuild for changes to the image inputs, including the embedded supervisor.
+          # Other Link changes and release tags do not change this image tag.
+          integration=$(git ls-files -z .dockerignore deploy/basalt.Dockerfile integrations/basalt/*.patch \
+            Cargo.toml Cargo.lock rust-toolchain.toml crates src LICENSE LICENSING.md COMMERCIAL-LICENSE.md |
+            xargs -0 sha256sum | sha256sum)
+          image_tag="$tag-${revision:0:12}-${integration:0:12}"
+          printf '%s\n' "revision=$revision" "tag=$tag" "image=$image:$image_tag" >> "$GITHUB_OUTPUT"
+          echo "Selected $tag ($revision)"
+
+      - name: Check whether the image already exists
+        id: existing
+        if: inputs.publish
+        env:
+          IMAGE: ${{ steps.basalt.outputs.image }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          config=$(mktemp -d)
+          trap 'rm -rf -- "$config"' EXIT
+          printf '%s' "$GHCR_TOKEN" |
+            docker --config "$config" login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null
+          if docker --config "$config" manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+            echo "Already built $IMAGE"
+          fi
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        id: builder
+        if: steps.existing.outputs.present != 'true'
+
+      - name: Prepare disk space for the CUDA build
+        if: steps.existing.outputs.present != 'true'
+        shell: bash
+        run: |
+          # The CUDA and llama.cpp build stages are larger than the final image.
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h "$RUNNER_TEMP"
+
+      - name: Build the backend and run its tests
+        id: image
+        if: steps.existing.outputs.present != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          # The temporary builder is removed before the image is loaded.
+          DOCKER_BUILD_SUMMARY: 'false'
+        with:
+          context: .
+          file: deploy/basalt.Dockerfile
+          platforms: linux/amd64
+          build-contexts: |
+            basalt_source=https://github.com/jesdga95/basalt.git#${{ steps.basalt.outputs.revision }}
+          build-args: |
+            BASALT_REVISION=${{ steps.basalt.outputs.revision }}
+            BUILD_JOBS=4
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.basalt.outputs.tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: ${{ steps.basalt.outputs.image }}
+          outputs: type=docker,dest=${{ runner.temp }}/basalt-image.tar
+
+      - name: Check the built runtime without a GPU
+        if: steps.image.outcome == 'success'
+        env:
+          BUILDER: ${{ steps.builder.outputs.name }}
+          IMAGE: ${{ steps.basalt.outputs.image }}
+        shell: bash
+        run: |
+          docker buildx rm "$BUILDER"
+          docker load --input "$RUNNER_TEMP/basalt-image.tar"
+          docker run --rm --network none --entrypoint /bin/sh "$IMAGE" -ec '
+            test -f /usr/share/doc/k-lani-link/basalt-tests-passed
+            /opt/basalt/bin/basalt serve --help | grep -F -- --privacy
+            LD_LIBRARY_PATH=/opt/llama/lib:/opt/llama /opt/llama/llama-server --version
+          '
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        if: inputs.publish && steps.image.outcome == 'success'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the tested image
+        if: inputs.publish && steps.image.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.basalt.outputs.image }}
+        shell: bash
+        run: |
+          docker push "$IMAGE"
+          digest=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'Basalt backend image `%s@%s`\n' "$IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"

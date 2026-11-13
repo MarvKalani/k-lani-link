@@ -14,7 +14,7 @@ use axum::{
 use k_lani_link_protocol::{
     Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES, RESPONSE_WINDOW,
     UPLOAD_SECONDS, accepted_query, allowed_route, control_body_valid, decode_data,
-    management_route, route_api,
+    management_route, multipart_content_type, multipart_route, route_api,
 };
 use std::{
     collections::HashMap,
@@ -26,6 +26,8 @@ use std::{
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
+
+mod local_audio;
 
 #[derive(Clone)]
 pub struct Link {
@@ -41,6 +43,8 @@ struct Pending {
 #[derive(Clone)]
 pub struct Gateway {
     config: Config,
+    local_audio: Arc<local_audio::AudioRoutes>,
+    audio_slot: Arc<Semaphore>,
     link: Arc<Mutex<Option<Link>>>,
     pending: Arc<Mutex<HashMap<u64, Pending>>>,
     slot: Arc<Semaphore>,
@@ -69,8 +73,12 @@ impl Gateway {
         config.validate()?;
         let management_token = crate::management::token(&config)?;
         let capacity = config.max_concurrent_requests + config.max_queued_requests;
+        let audio_slot = Arc::new(Semaphore::new(config.max_concurrent_requests));
+        let local_audio = Arc::new(local_audio::AudioRoutes::new(&config.local_audio)?);
         Ok(Self {
             config,
+            local_audio,
+            audio_slot,
             link: Default::default(),
             pending: Default::default(),
             slot: Arc::new(Semaphore::new(capacity)),
@@ -449,6 +457,10 @@ async fn health(State(gateway): State<Gateway>, headers: HeaderMap) -> Response 
         "relay_policy": gateway.config.relay,
         "transport": gateway.config.transport,
         "data_relay": gateway.config.transport == crate::config::Transport::Https,
+        "local_audio": {
+            "speech": gateway.config.local_audio.speech.is_some(),
+            "transcriptions": gateway.config.local_audio.transcriptions.is_some()
+        },
         "max_concurrent_requests": gateway.config.max_concurrent_requests,
         "max_queued_requests": gateway.config.max_queued_requests,
         "model_management": gateway.management_token.is_some()
@@ -490,21 +502,45 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
     {
         return api_error(api, StatusCode::NOT_FOUND, "route not available");
     }
-    if gateway.rejected.load(Ordering::SeqCst) {
+    let content_type = if multipart_route(method.as_str(), uri.path()) {
+        match headers
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+        {
+            Some(value) if multipart_content_type(value) => Some(value.to_owned()),
+            _ => {
+                return api_error(
+                    api,
+                    StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    "multipart/form-data with a valid boundary is required",
+                );
+            }
+        }
+    } else {
+        None
+    };
+    let local = gateway.local_audio.endpoint(method.as_str(), uri.path());
+    let list_audio = gateway.local_audio.enabled()
+        && method == axum::http::Method::GET
+        && uri.path() == "/v1/models";
+    let uses_tunnel = local.is_none() && !list_audio;
+    if uses_tunnel && gateway.rejected.load(Ordering::SeqCst) {
         return api_error(
             api,
             StatusCode::SERVICE_UNAVAILABLE,
             "pairing rejected; check the connection code, then restart",
         );
     }
-    if gateway.code_used.load(Ordering::SeqCst) && !gateway.is_connected() {
+    if uses_tunnel && gateway.code_used.load(Ordering::SeqCst) && !gateway.is_connected() {
         return api_error(
             api,
             StatusCode::SERVICE_UNAVAILABLE,
             "connection code consumed; pair with a new code",
         );
     }
-    let slots = if control {
+    let slots = if local.is_some() || list_audio && !gateway.is_connected() {
+        &gateway.audio_slot
+    } else if control {
         &gateway.control_slot
     } else {
         &gateway.slot
@@ -517,13 +553,14 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
         );
     };
     let link = gateway.link.lock().unwrap().clone();
-    let Some(mut link) = link.filter(|l| !l.closed.is_cancelled()) else {
+    let link = link.filter(|l| !l.closed.is_cancelled());
+    if link.is_none() && uses_tunnel {
         return api_error(
             api,
             StatusCode::SERVICE_UNAVAILABLE,
             "home peer is not connected",
         );
-    };
+    }
     let deadline =
         tokio::time::Instant::now() + Duration::from_secs(gateway.config.request_timeout_seconds);
     let limit = if control {
@@ -557,6 +594,107 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
             "invalid model control command",
         );
     }
+    let forward = Forward {
+        path: uri.path(),
+        method,
+        body,
+        content_type,
+        api,
+        deadline,
+        permit,
+    };
+    if let Some(endpoint) = local {
+        return endpoint
+            .forward(
+                forward.path,
+                forward
+                    .content_type
+                    .as_deref()
+                    .unwrap_or("application/json"),
+                forward.body,
+                forward.deadline,
+                forward.permit,
+            )
+            .await;
+    }
+    let remote = async {
+        match link {
+            Some(link) => tunnel_request(&gateway, link, forward).await,
+            None => api_error(
+                api,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "home peer is not connected",
+            ),
+        }
+    };
+    if list_audio {
+        let (local, remote) = tokio::join!(gateway.local_audio.models(), remote);
+        return merge_models(remote, local, &gateway.config.local_audio).await;
+    }
+    remote.await
+}
+
+async fn merge_models(
+    remote: Response,
+    mut local: Vec<serde_json::Value>,
+    config: &crate::config::LocalAudio,
+) -> Response {
+    if local.is_empty() && !remote.status().is_success() {
+        return remote;
+    }
+    let mut catalog = serde_json::json!({"object":"list"});
+    if remote.status().is_success() {
+        let remote = async {
+            let bytes = axum::body::to_bytes(remote.into_body(), 1024 * 1024)
+                .await
+                .ok()?;
+            let mut value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+            let models = value["data"].as_array_mut()?;
+            Some((std::mem::take(models), value))
+        }
+        .await;
+        if let Some((models, original)) = remote {
+            let has_alias = original.get("models").is_some();
+            for model in models {
+                let capability = model["capability"].as_str();
+                let replaced = capability == Some("speech") && config.speech.is_some()
+                    || capability == Some("transcription") && config.transcriptions.is_some();
+                if !replaced && local.iter().all(|known| known["id"] != model["id"]) {
+                    local.push(model);
+                }
+            }
+            catalog = original;
+            if has_alias {
+                catalog["models"] = serde_json::json!(local);
+            }
+        } else if local.is_empty() {
+            return error(StatusCode::BAD_GATEWAY, "invalid upstream model list");
+        }
+    }
+    catalog["data"] = serde_json::json!(local);
+    ([("cache-control", "no-store")], Json(catalog)).into_response()
+}
+
+struct Forward<'a> {
+    path: &'a str,
+    method: axum::http::Method,
+    body: Bytes,
+    content_type: Option<String>,
+    api: Option<Api>,
+    deadline: tokio::time::Instant,
+    permit: OwnedSemaphorePermit,
+}
+
+async fn tunnel_request(gateway: &Gateway, mut link: Link, request: Forward<'_>) -> Response {
+    let Forward {
+        path,
+        method,
+        body,
+        content_type,
+        api,
+        deadline,
+        permit,
+    } = request;
     let id = gateway.next.fetch_add(1, Ordering::Relaxed);
     let (tx, mut rx) = mpsc::channel(RESPONSE_WINDOW + 4);
     gateway.pending.lock().unwrap().insert(
@@ -578,7 +716,8 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
             .send(Frame::Request {
                 id,
                 method: method.to_string(),
-                path: uri.path().to_owned(),
+                path: path.to_owned(),
+                content_type,
             })
             .await?;
         for chunk in body.chunks(CHUNK_BYTES) {
@@ -636,6 +775,7 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
     let Ok(status) = StatusCode::from_u16(status) else {
         return api_error(api, StatusCode::BAD_GATEWAY, "invalid upstream status");
     };
+    let gateway = gateway.clone();
     let stream = async_stream::try_stream! {
         // Moving the guard INTO the generator retains cancellation even before first poll.
         let _keep_guard = &mut guard;
@@ -688,6 +828,168 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn local_audio_precedes_tunnel_and_never_falls_back() {
+        use crate::config::LocalAudioEndpoint;
+        use axum::routing::post;
+        use k_lani_link_protocol::{SPEECH_PATH, TRANSCRIPTIONS_PATH};
+        use tower::ServiceExt;
+
+        const LOCAL_KEY: &str = "local-audio-test-credential";
+        const FORM_TYPE: &str = "multipart/form-data; boundary=test";
+        const FORM: &str = "--test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n\r\naudio\r\n--test--\r\n";
+        let audio = Router::new()
+            .route(
+                "/v1/models",
+                get(|headers: HeaderMap| async move {
+                    assert_eq!(headers["authorization"], format!("Bearer {LOCAL_KEY}"));
+                    Json(
+                        serde_json::json!({"data":[{"id":"local-voice","capability":"speech"},
+                    {"id":"local-stt","capability":"transcription"}]}),
+                    )
+                }),
+            )
+            .route(
+                SPEECH_PATH,
+                post(|headers: HeaderMap, body: Bytes| async move {
+                    assert_eq!(headers["authorization"], format!("Bearer {LOCAL_KEY}"));
+                    assert_eq!(headers["content-type"], "application/json");
+                    assert_eq!(
+                        body.as_ref(),
+                        br#"{"model":"local-voice","input":"synthetic"}"#
+                    );
+                    ([("content-type", "audio/wav")], "wave")
+                }),
+            )
+            .route(
+                TRANSCRIPTIONS_PATH,
+                post(|headers: HeaderMap, body: Bytes| async move {
+                    assert_eq!(headers["authorization"], format!("Bearer {LOCAL_KEY}"));
+                    assert_eq!(headers["content-type"], FORM_TYPE);
+                    assert_eq!(body.as_ref(), FORM.as_bytes());
+                    Json(serde_json::json!({"text":"local"}))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut config = crate::config::tests::config();
+        let endpoint = LocalAudioEndpoint {
+            upstream: format!("http://{}", listener.local_addr().unwrap()),
+            upstream_api_key: LOCAL_KEY.into(),
+            upstream_socket: None,
+        };
+        config.local_audio.speech = Some(endpoint.clone());
+        config.local_audio.transcriptions = Some(endpoint);
+        let client_key = config.api_key.clone();
+        let server = tokio::spawn(async move { axum::serve(listener, audio).await.unwrap() });
+        let gateway = Gateway::new(config).unwrap();
+        gateway.rejected.store(true, Ordering::SeqCst);
+        let router = gateway.router();
+        let request = |method, path, content_type, body: &'static str| {
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("authorization", format!("Bearer {client_key}"))
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap()
+        };
+        let response = router
+            .clone()
+            .oneshot(request("GET", "/v1/models", "application/json", ""))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let catalog: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(catalog["data"][0]["id"], "local-voice");
+        assert_eq!(catalog["data"][1]["id"], "local-stt");
+        assert_eq!(catalog["data"][1]["local"], true);
+
+        let response = router
+            .clone()
+            .oneshot(request(
+                "POST",
+                SPEECH_PATH,
+                "application/json",
+                r#"{"model":"local-voice","input":"synthetic"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "audio/wav");
+        assert_eq!(
+            axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap(),
+            "wave"
+        );
+        let response = router
+            .clone()
+            .oneshot(request("POST", TRANSCRIPTIONS_PATH, FORM_TYPE, FORM))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap(),
+            r#"{"text":"local"}"#
+        );
+        let response = router
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/v1/chat/completions",
+                "application/json",
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let merged = merge_models(
+            Json(serde_json::json!({"object":"list","data":[
+                {"id":"remote-chat"},{"id":"remote-voice","capability":"speech"},
+                {"id":"local-voice","capability":"speech"}
+            ]}))
+            .into_response(),
+            gateway.local_audio.models().await,
+            &gateway.config.local_audio,
+        )
+        .await;
+        let body = axum::body::to_bytes(merged.into_body(), 4096)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["data"].as_array().unwrap().len(), 3);
+        assert_eq!(value["data"][2]["id"], "remote-chat");
+
+        server.abort();
+        let _ = server.await;
+        let (tx, mut rx) = mpsc::channel(4);
+        *gateway.link.lock().unwrap() = Some(Link {
+            tx,
+            closed: CancellationToken::new(),
+            recovering: Arc::new(AtomicBool::new(false)),
+            generation: 0,
+        });
+        let response = router
+            .oneshot(request(
+                "POST",
+                SPEECH_PATH,
+                "application/json",
+                r#"{"model":"local-voice","input":"synthetic"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert!(rx.try_recv().is_err());
+    }
 
     #[test]
     fn a_relay_that_keeps_refusing_is_called_busy_only_after_a_while() {

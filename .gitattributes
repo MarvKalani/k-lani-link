@@ -6,3 +6,5 @@
 *.yml text eol=lf
 *.Dockerfile text eol=lf
 Dockerfile text eol=lf
+# Unified diffs prefix blank context lines with one space.
+integrations/basalt/*.patch text eol=lf whitespace=-blank-at-eol

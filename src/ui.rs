@@ -324,6 +324,7 @@ fn imported(text: &str, directory: &std::path::Path) -> anyhow::Result<Config> {
     config.upstream_socket = None;
     config.upstream_api_key.clear();
     config.upstream = "http://127.0.0.1:8080".into();
+    config.local_audio = Default::default();
     config.allow_unverified_backend = false;
     config.include_loopback_candidate = false;
     if config.listen.port() == 0 {

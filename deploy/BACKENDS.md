@@ -75,10 +75,10 @@ omit `model_control_socket`: our model supervisor requires the verified privacy
 profile and cannot be combined with this opt-out. Set `upstream_api_key` privately
 if that local server requires authentication. Do not publish the host config.
 
-Only `GET /v1/models`, `POST /v1/chat/completions`, `POST /v1/responses`,
-`POST /v1/embeddings`, `POST /v1/messages` and `POST /v1/messages/count_tokens` are
-forwarded for inference. Ollama's native `/api` routes, engine administration, audio
-and other services are outside that allowlist. The backend must
+The [inference allowlist](../REFERENCE.md#supported-apis) includes image generation,
+video jobs and the audio endpoints for TTS and file transcription. Use the
+[ComfyUI adapter](../integrations/comfyui/README.md) for MiniMax H3 or
+[NeMo-Speech.cpp](../integrations/nemo-speech/README.md) for speech. The backend must
 implement the route the client uses; k-lani-link does not convert Chat Completions
 to Responses or normalize reasoning/tool-call formats. SSE and request JSON,
 including the `model` field, are passed through. If an engine itself selects
@@ -99,8 +99,8 @@ the total `--max-context` is shared across slots: 262,144 / 4 gives 65,536 token
 per slot. `--slot-full-context` gives every slot the full capacity, at greater
 memory cost. Its normal server has load/unload and status routes, but our privacy
 patch disables them. k-lani-link's route allowlist also rejects management calls.
-Sources: [pinned serving code](https://github.com/jesdga95/basalt/tree/a274a20c65775d1dfabe718a15dd9cac6f42e326/serve)
-and [configuration](https://github.com/jesdga95/basalt/blob/a274a20c65775d1dfabe718a15dd9cac6f42e326/docs/configuration/index.md).
+Sources: [pinned serving code](https://github.com/jesdga95/basalt/tree/v0.3.3/serve)
+and [configuration](https://github.com/jesdga95/basalt/blob/v0.3.3/docs/configuration/index.md).
 
 [Maya v1.1.34](https://github.com/mw00/project-maya/releases/tag/v1.1.34) adds
 the CYBER-FROST Qwen3.8 path. Its `--parallel` support applies to GLM, DeepSeek
@@ -190,8 +190,6 @@ until there is demand (owner decision, 2026-10-30):
 - Many-to-many deployment inside one network (many frontends and backends connecting
   directly by IP). Inside a network without a firewall between them, tools can reach
   backends directly; that is an API gateway, not this tunnel.
-- Speech (`/v1/audio/transcriptions`, `/v1/audio/speech`): needs multipart uploads,
-  binary responses and request content-type passthrough.
 - Gemini API (Gemini CLI): the model sits in the URL path, so it needs path-pattern
   routes; its subscription terms would need the same review as Claude's.
 - Asynchronous job mode ("dead drop"): an encrypted job is left on any store-and-forward

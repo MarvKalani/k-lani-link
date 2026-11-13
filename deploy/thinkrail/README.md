@@ -39,7 +39,7 @@ Internetrecherche und Paketdownloads im Agenten funktionieren in diesem Profil n
 ## Voraussetzungen und erster Start
 
 Linux x86_64, Docker mit Compose/BuildKit, Python ≥3.11, Git, UID/GID 1000,
-NVIDIA Container Toolkit, CUDA-13.2-kompatibler Treiber und eine passende GPU.
+NVIDIA Container Toolkit, CUDA-13.5-kompatibler Treiber und eine passende GPU.
 Referenz: RTX 5070 Ti, 16 GiB VRAM, 32 GiB Host-RAM. Für andere Benutzer-IDs
 zuerst Compose-Benutzer, Socket-Volumes und Image-Verzeichnisse anpassen.
 Nur eine Laborinstanz pro Host verwenden; Projektname und UI-Port sind fest.

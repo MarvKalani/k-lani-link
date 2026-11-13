@@ -1,10 +1,12 @@
-//! Host only: choose between `upstream` and the further `backends` by the request's model.
-use crate::config::Config;
+//! Host only: choose a backend by model or by a configured media route.
+use crate::config::{Backend, Config};
 use anyhow::{Result, ensure};
+use k_lani_link_protocol::{SPEECH_PATH, TRANSCRIPTIONS_PATH, video_route};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
     collections::HashMap,
+    path::Path,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -34,7 +36,7 @@ pub struct Routes {
     config: Config,
     /// May be bound to `upstream_socket`, so it only ever serves `upstream`.
     primary: reqwest::Client,
-    network: reqwest::Client,
+    backends: Vec<reqwest::Client>,
     catalog: Mutex<Option<Arc<Catalog>>>,
     /// With `load_on_demand`: the supervisor's last snapshot, kept current by the host.
     managed: Mutex<Option<crate::on_demand::Snapshot>>,
@@ -42,22 +44,28 @@ pub struct Routes {
 
 impl Routes {
     pub fn new(config: &Config) -> Result<Self> {
-        let builder = || {
-            reqwest::Client::builder()
+        let client = |socket: Option<&Path>| {
+            let builder = reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
-                .connect_timeout(Duration::from_secs(10))
-        };
-        let primary = builder();
-        #[cfg(unix)]
-        let primary = match &config.upstream_socket {
-            Some(path) => primary.unix_socket(path.clone()),
-            None => primary,
+                .connect_timeout(Duration::from_secs(10));
+            #[cfg(unix)]
+            let builder = match socket {
+                Some(path) => builder.unix_socket(path.to_owned()),
+                None => builder,
+            };
+            #[cfg(not(unix))]
+            let _ = socket;
+            builder.build()
         };
         Ok(Self {
             config: config.clone(),
-            primary: primary.build()?,
-            network: builder().build()?,
+            primary: client(config.upstream_socket.as_deref())?,
+            backends: config
+                .backends
+                .iter()
+                .map(|backend| client(backend.upstream_socket.as_deref()))
+                .collect::<Result<_, _>>()?,
             catalog: Mutex::new(None),
             managed: Mutex::new(None),
         })
@@ -67,13 +75,30 @@ impl Routes {
         !self.config.backends.is_empty()
     }
 
+    /// Media requests use the assigned service, including when it is unavailable.
+    pub fn media_backend(&self, method: &str, path: &str) -> Option<usize> {
+        let handles: fn(&Backend) -> bool = match (method, path) {
+            ("POST", SPEECH_PATH) => |backend| backend.speech,
+            ("POST", TRANSCRIPTIONS_PATH) => |backend| backend.transcriptions,
+            _ if video_route(method, path) => |backend| backend.video,
+            _ => return None,
+        };
+        Some(
+            self.config
+                .backends
+                .iter()
+                .position(handles)
+                .map_or(0, |index| index + 1),
+        )
+    }
+
     pub fn target(&self, index: usize) -> Target<'_> {
         match index
             .checked_sub(1)
-            .and_then(|i| self.config.backends.get(i))
+            .and_then(|i| self.config.backends.get(i).zip(self.backends.get(i)))
         {
-            Some(backend) => Target {
-                http: &self.network,
+            Some((backend, http)) => Target {
+                http,
                 upstream: &backend.upstream,
                 api_key: &backend.upstream_api_key,
                 verify: !backend.allow_unverified_backend,

@@ -801,6 +801,7 @@ async fn real_tls_negotiation_carries_frames_in_both_directions_and_advances_sav
             id: 1,
             method: "POST".into(),
             path: "/v1/chat/completions".into(),
+            content_type: None,
         })
         .await
         .unwrap();

@@ -1,0 +1,16 @@
+torch==2.14.1+cu130
+torchaudio==2.11.0+cu130
+torchcodec==0.17.0
+transformers==5.22.1
+huggingface-hub==2.4.0
+numpy==2.5.4
+soundfile==0.14.0
+safetensors==0.8.0
+accelerate==1.15.0
+diffusers==0.42.1
+x-transformers==2.31.11
+onnxruntime==1.31.1
+inflect==7.6.0
+einops==0.8.2
+loguru==0.7.3
+tokenizers==0.23.3

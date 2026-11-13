@@ -9,6 +9,10 @@
 | WordCraft 0.11.0 / GridCraft 0.12.1 | Optional local document and spreadsheet tools via MCP | [WordCraft](https://github.com/storytold/wordcraft/tree/v0.11.0), [GridCraft](https://github.com/storytold/gridcraft/tree/v0.12.1), MIT or Apache-2.0; notices in `THIRD_PARTY_LICENSES/craft/` and in the optional image |
 | Rust dependencies | HTTP, WebRTC and cryptography | Versions in `Cargo.lock`; license information of the respective crates |
 | Docker base images | Build and runtime environments | Official Rust, Python, NGINX, Ubuntu and NVIDIA CUDA images; their own terms apply |
+| Audio8-TTS-Realistic-Air | Optional speech synthesis | [Code and weights](https://huggingface.co/Edge0/Audio8-TTS-Realistic-Air), Apache-2.0 with upstream `NOTICE`; operator-supplied |
+| Ming 3.0 TTS 0.5B | Optional speech synthesis | [Inference code](https://github.com/inclusionAI/Ming-3.0-tts) and [weights](https://huggingface.co/inclusionAI/Ming-3.0-tts-0.5B), MIT; operator-supplied |
+| NeMo-Speech.cpp 0.3.0 | CPU runtime for the optional speech Compose profile | [NVIDIA release](https://github.com/NVIDIA/NeMo-Speech.cpp/releases/tag/v0.3.0), Apache-2.0; licenses and notices in the release archive |
+| Nemotron 3.5 ASR Streaming 0.6B | Optional file transcription | [Model and GGUF](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b), OpenMDW-1.1; operator-supplied |
 
 ThinkRail is downloaded directly as an official release during the image build and
 verified against a fixed SHA-256 checksum. Binaries and model weights are not

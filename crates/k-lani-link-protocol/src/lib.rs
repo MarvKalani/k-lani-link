@@ -34,6 +34,8 @@ pub enum Frame {
         id: u64,
         method: String,
         path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        content_type: Option<String>,
     },
     Data {
         id: u64,
@@ -138,14 +140,20 @@ pub enum Api {
     Anthropic,
 }
 
-/// Every route the tunnel carries. Bodies pass through unchanged, so a backend's own API
-/// revisions need no change here; supporting another route is one row, versioned with this
-/// crate. A host without the row answers 404, so an older host fails cleanly.
+pub const VIDEO_CREATE_PATH: &str = "/v1/videos";
+pub const SPEECH_PATH: &str = "/v1/audio/speech";
+pub const TRANSCRIPTIONS_PATH: &str = "/v1/audio/transcriptions";
+
+/// Fixed routes. Video status and content use the separate, validated job-ID pattern.
 pub const ROUTES: &[(Api, &str, &str)] = &[
     (Api::OpenAi, "GET", "/v1/models"),
     (Api::OpenAi, "POST", "/v1/chat/completions"),
     (Api::OpenAi, "POST", "/v1/responses"),
     (Api::OpenAi, "POST", "/v1/embeddings"),
+    (Api::OpenAi, "POST", "/v1/images/generations"),
+    (Api::OpenAi, "POST", VIDEO_CREATE_PATH),
+    (Api::OpenAi, "POST", SPEECH_PATH),
+    (Api::OpenAi, "POST", TRANSCRIPTIONS_PATH),
     (Api::Anthropic, "POST", "/v1/messages"),
     (Api::Anthropic, "POST", "/v1/messages/count_tokens"),
 ];
@@ -155,6 +163,56 @@ pub fn route_api(method: &str, path: &str) -> Option<Api> {
         .iter()
         .find(|(_, m, p)| *m == method && *p == path)
         .map(|(api, ..)| *api)
+        .or_else(|| video_job_route(method, path).then_some(Api::OpenAi))
+}
+
+pub fn video_route(method: &str, path: &str) -> bool {
+    (method == "POST" && path == VIDEO_CREATE_PATH) || video_job_route(method, path)
+}
+
+fn video_job_route(method: &str, path: &str) -> bool {
+    if method != "GET" {
+        return false;
+    }
+    let Some(suffix) = path.strip_prefix("/v1/videos/video_") else {
+        return false;
+    };
+    let id = suffix.strip_suffix("/content").unwrap_or(suffix);
+    !id.is_empty()
+        && id.len() <= 96
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+pub fn multipart_route(method: &str, path: &str) -> bool {
+    method == "POST" && matches!(path, VIDEO_CREATE_PATH | TRANSCRIPTIONS_PATH)
+}
+
+/// Validate the only caller-supplied header carried for multipart uploads.
+pub fn multipart_content_type(value: &str) -> bool {
+    let Some((kind, parameter)) = value.split_once(';') else {
+        return false;
+    };
+    let Some((name, boundary)) = parameter.split_once('=') else {
+        return false;
+    };
+    let boundary = boundary.trim_matches(' ');
+    let quoted = boundary
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'));
+    let bytes = quoted.unwrap_or(boundary).as_bytes();
+    kind.trim_matches(' ')
+        .eq_ignore_ascii_case("multipart/form-data")
+        && name.trim_matches(' ').eq_ignore_ascii_case("boundary")
+        && (1..=70).contains(&bytes.len())
+        && bytes.last() != Some(&b' ')
+        && bytes.iter().all(|&byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(byte, b'\'' | b'+' | b'_' | b'-' | b'.')
+                || (quoted.is_some()
+                    && matches!(byte, b'(' | b')' | b',' | b'/' | b':' | b'=' | b'?' | b' '))
+        })
 }
 
 pub fn allowed_route(method: &str, path: &str) -> bool {
@@ -533,12 +591,21 @@ mod tests {
             ("POST", "/v1/chat/completions", Api::OpenAi),
             ("POST", "/v1/responses", Api::OpenAi),
             ("POST", "/v1/embeddings", Api::OpenAi),
+            ("POST", "/v1/images/generations", Api::OpenAi),
+            ("POST", VIDEO_CREATE_PATH, Api::OpenAi),
+            ("POST", SPEECH_PATH, Api::OpenAi),
+            ("POST", TRANSCRIPTIONS_PATH, Api::OpenAi),
+            ("GET", "/v1/videos/video_valid-01", Api::OpenAi),
+            ("GET", "/v1/videos/video_valid-01/content", Api::OpenAi),
             ("POST", "/v1/messages", Api::Anthropic),
             ("POST", "/v1/messages/count_tokens", Api::Anthropic),
         ] {
             assert_eq!(route_api(method, path), Some(api), "{method} {path}");
         }
-        assert_eq!(ROUTES.len(), 6);
+        assert_eq!(ROUTES.len(), 10);
+        assert!(!allowed_route("GET", "/v1/images/generations"));
+        assert!(!allowed_route("GET", SPEECH_PATH));
+        assert!(!allowed_route("GET", TRANSCRIPTIONS_PATH));
         assert!(!allowed_route("GET", "/v1/messages"));
         assert!(!allowed_route("POST", "/v1/messages?beta=true"));
         assert_eq!(accepted_query(Api::Anthropic), Some("beta=true"));
@@ -552,6 +619,19 @@ mod tests {
             "/api/models/switch",
             "/api/models/settings",
             "/api/context",
+            "/prompt",
+            "/history",
+            "/view",
+            "/ws",
+            "/v1/images/edits",
+            "/v1/audio/transcriptions/realtime",
+            "/v1/audio/translations",
+            "/v1/realtime",
+            "/v1/videos/video_",
+            "/v1/videos/video_../content",
+            "/v1/videos/video_%2e%2e/content",
+            "/v1/videos/video_valid-01/extra/content",
+            "/v1/videos/video_valid-01/content?variant=thumbnail",
             "/settings",
             "/metrics",
             "/v1/models?x=1",
@@ -559,6 +639,29 @@ mod tests {
             assert!(!allowed_route("POST", path));
             assert!(!allowed_route("GET", path));
         }
+    }
+    #[test]
+    fn upload_preserves_only_a_valid_multipart_content_type() {
+        assert!(multipart_route("POST", VIDEO_CREATE_PATH));
+        assert!(multipart_route("POST", TRANSCRIPTIONS_PATH));
+        assert!(!multipart_route("POST", SPEECH_PATH));
+        assert!(!multipart_route("GET", TRANSCRIPTIONS_PATH));
+        assert!(multipart_content_type(
+            "multipart/form-data; boundary=--abc123"
+        ));
+        assert!(multipart_content_type(
+            "Multipart/Form-Data; BOUNDARY=\"a:b\""
+        ));
+        assert!(!multipart_content_type("multipart/form-data"));
+        assert!(!multipart_content_type("multipart/form-data; boundary="));
+        assert!(!multipart_content_type(
+            "multipart/form-data; boundary=abc\r\nHost: x"
+        ));
+        assert!(!multipart_content_type(
+            "multipart/form-data; boundary=\"abc \""
+        ));
+        assert!(!multipart_content_type("multipart/form-data; boundary=a:b"));
+        assert!(!multipart_content_type("application/json; boundary=abc"));
     }
 }
 

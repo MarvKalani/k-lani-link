@@ -1405,7 +1405,7 @@ dependencies = [
 
 [[package]]
 name = "k-lani-link"
-version = "1.2611.4"
+version = "1.2611.13"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "k-lani-link-protocol"
-version = "1.2611.4"
+version = "1.2611.13"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",

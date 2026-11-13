@@ -16,16 +16,17 @@ Start, wenn ein zusätzliches Netzwerkinterface vorhanden ist.
 ## Voraussetzungen
 
 Docker Compose, NVIDIA Container Toolkit und ein Blackwell-GPU-Treiber passend
-zu CUDA 13.2. Der Build lädt den festgelegten öffentlichen Basalt-Commit und wendet
+zu CUDA 13.5. Getestet auf der RTX 5070 Ti mit Treiber 615.71.09. Der Build lädt den
+festgelegten öffentlichen Basalt-Commit und wendet
 den mitgelieferten Datenschutz-/Socket-Patch an; siehe
 [`../integrations/basalt/privacy.patch`](../integrations/basalt/privacy.patch).
 Der Basalt-Commit steht in `BASE_COMMIT`. Der Patch ändert Python-Serving, keine
 CUDA-Rechenkerne. Nach einem Update zuerst Patch und Schnittstellentests prüfen.
 
-Das Image baut die Basalt-Binärdatei in seiner eigenen CUDA-/glibc-Umgebung.
-Das vermeidet eine Abhängigkeit von der glibc des Entwicklungsrechners. Das
-CUDA-Devel-Basisimage wird im MVP auch zur Laufzeit verwendet; eine kleinere
-Runtime-Variante ist noch kein Bestandteil dieses Builds.
+Der Build kompiliert Basalt im CUDA-Devel-Image. Das Backend-Image enthält die
+CUDA-Laufzeitbibliotheken, Python-Serving und den Supervisor.
+Der [separate Backend-Workflow](../integrations/basalt/README.md#basalt-unabhängig-vom-link-aktualisieren)
+baut Images unabhängig vom Link-Release.
 
 ## Vorbereitung
 

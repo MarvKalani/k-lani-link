@@ -31,6 +31,7 @@ async fn encrypted_pairing_with_selected_live_exchange() {
         include_loopback_candidate: true,
         resume_seconds: 0,
         backends: vec![],
+        local_audio: Default::default(),
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -55,6 +56,7 @@ async fn encrypted_pairing_with_selected_live_exchange() {
             id: 7,
             method: "GET".into(),
             path: "/v1/models".into(),
+            content_type: None,
         })
         .await
         .unwrap();

@@ -122,6 +122,7 @@ async fn mailbox_also_drops_a_delayed_answer_acknowledgement() {
         include_loopback_candidate: true,
         resume_seconds: 0,
         backends: vec![],
+        local_audio: Default::default(),
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -193,6 +194,7 @@ async fn check_connection_and_detachment(answer_delay: Duration) {
         include_loopback_candidate: true,
         resume_seconds: 0,
         backends: vec![],
+        local_audio: Default::default(),
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -228,6 +230,7 @@ async fn check_connection_and_detachment(answer_delay: Duration) {
             id: 1,
             method: "GET".into(),
             path: "/v1/models".into(),
+            content_type: None,
         })
         .await
         .unwrap();

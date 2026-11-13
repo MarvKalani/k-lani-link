@@ -13,6 +13,8 @@ Der private Modus:
 
 - öffnet keine `engine.log` und erstellt keine Logpuffer;
 - behält keine abgeschlossenen Request-Historien/Diagnosewerte oder Antwortvorschauen;
+- verweigert Dokumente aus URLs und lokalen Dateipfaden und umgeht den PDF-Cache
+  für direkt mitgesendete Dokumente;
 - startet keinen Hardware-Telemetrie-Sampler (dieser ist im normalen Basalt lokal,
   kein Beleg für eine externe Telemetrieübertragung);
 - deaktiviert Weboberfläche, Metrics, Logs, Status und Verwaltungsrouten;
@@ -27,10 +29,10 @@ diese Dateien auf tmpfs und der Server hat gar kein Netzwerkinterface.
 
 ## Updates
 
-Der aktuelle Quellstand ist Basalt **0.3** mit den Korrekturen für 0.3.1 (noch ohne
-eigenes Release), Commit `a274a20c65775d1dfabe718a15dd9cac6f42e326`. Das Image vermerkt ihn als
-`io.k-lani.basalt.revision`. Wer `BASALT_SOURCE_CONTEXT` überschreibt, setzt auch
-`BASALT_REVISION` passend zum verwendeten Quellstand.
+Der aktuelle Quellstand ist [Basalt v0.3.3](https://github.com/jesdga95/basalt/releases/tag/v0.3.3)
+mit Commit `2729e2288f59e01836ddd7fcc630810ada98995a`. Das Image
+vermerkt den Quellstand als `io.k-lani.basalt.revision`. Wer
+`BASALT_SOURCE_CONTEXT` überschreibt, setzt `BASALT_REVISION` auf den dazugehörigen Commit.
 
 Diese Version liest `.basalt`-Format 2, separate Expertenprofile und nur noch
 Konfigurationsdateien im Format 2 (`"version": 2` mit einer `models`-Liste, siehe
@@ -42,13 +44,10 @@ vorhanden sein; der [Supervisor](../../deploy/managed/README.md#custom-basalt-ex
 kann es ausdrücklich über `expert_profile` auswählen. Die Integration verändert
 keine Modellgewichte und aktiviert keine Bildverarbeitung.
 
-[Validierung vom 7. November 2026](validation-20261107.json) für diesen Stand: Coder,
-Coder-Parallel und Mellum laden, wechseln bei Bedarf und antworten durch einen
-verschlüsselten Tunnel. Ältere [Validierung vom 4. November 2026](validation-20261104.json)
-mit Basalt 0.2.1: Container-Build,
-Datenschutz- und Servertests sowie echte Coder-/Mellum-Antworten durch einen
-verschlüsselten k-lani-link-Tunnel. Für den 256-Experten-Coder wurde ein neutrales
-Platzierungsprofil ergänzt; daraus wird keine Leistungssteigerung abgeleitet.
+[Validierung vom 13. November 2026](validation-20261113.json) dokumentiert den
+v0.3.3-Build und den GPU-Test über den verschlüsselten Link.
+Die [Validierung vom 7. November](validation-20261107.json) dokumentiert
+Modellwechsel mit Coder und Mellum am vorherigen Basalt-Stand.
 
 Auf einem frischen Checkout des genannten Basalt-Commits:
 
@@ -71,6 +70,41 @@ Unix-Socket-Betrieb, leere Log-/Historienpuffer und lautlosen Prozessstart.
 Die nativen Coder-/NVFP4-Skripte wurden zusätzlich im Lazy-Modus geprüft, ohne
 eine GPU-Inferenz auszulösen. `basalt-probe` ist ein Hardware-/Benchmark-Werkzeug,
 kein interaktiver Chat-Test.
+
+### Basalt unabhängig vom Link aktualisieren
+
+Der [Basalt-Workflow](../../.github/workflows/basalt.yml) prüft täglich den
+neuesten stabilen Upstream-Tag. Manuell lässt sich auch ein bestimmter Tag
+auswählen. Änderungen an der Integration werden gegen `BASE_COMMIT` geprüft.
+Der Build bindet den Upstream-Commit fest, wendet beide Patches an und führt
+die Basalt-Server-Suite aus. Für GPU-Tests gilt der separate lokale Test mit
+einem vorhandenen Modell.
+
+Der Workflow baut und prüft ein Linux-amd64-Image.
+Auf dem Default-Branch veröffentlicht CI bei einem geplanten Lauf, nach
+Änderungen am Backend oder mit der manuellen Option `publish` nach
+`ghcr.io/marvkalani/k-lani-link-basalt`. Der Image-Tag enthält den
+Basalt-Tag, dessen Commit und einen Hash der Build-Eingaben. Ein
+Patch-Konflikt stoppt den Build vor der Veröffentlichung.
+
+Solange Inferenz-API, Privacy-Profil und Supervisor-Schnittstelle
+kompatibel bleiben, kann der Link mit der installierten Client-Version
+weiterlaufen. Setze in der privaten Compose-Umgebung `BASALT_IMAGE` auf
+das geprüfte Image, vorzugsweise per Digest. Für ein privates GHCR-Paket
+benötigt der Backend-Rechner Leserechte und `docker login ghcr.io`.
+Verwende alle Compose-Dateien
+deiner Installation. Die folgenden Befehle ersetzen nur den Backend-Dienst.
+
+```sh
+docker compose --env-file deploy/.env -f deploy/compose.yaml pull basalt
+docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --no-deps --no-build basalt
+```
+
+Für einen lokalen Build setzt du `BASALT_SOURCE_CONTEXT` und
+`BASALT_REVISION` auf denselben geprüften Commit und führst
+`docker compose build basalt` mit denselben Compose-Dateien aus.
+Laufende Anfragen können beim Austausch abbrechen. Das vorherige
+Image bleibt über seinen Tag oder Digest als Rückfall verfügbar.
 
 ## Explicit opt-in numeric measurements
 
@@ -103,12 +137,11 @@ its private inference socket. Basalt's generic administration API stays disabled
 The supervisor controls only preconfigured model IDs, requires the privacy health
 profile after each load, and verifies the actual parallel slots and context.
 The health response now includes the actual `parallel` value for this check.
+The catalog's Boolean `answer_room` setting maps to Basalt v0.3.3's
+`--answer-room auto` or `--answer-room 0`. Earlier images use the Boolean flags.
 The patch also keeps the answer-room calculation silent in privacy mode, and since
 `5d28effb` it refuses Basalt's disk tier for conversations (`--conversation-cache-dir`,
 `--conversation-cache-disk-mib`), which would write conversation state to disk.
-No CUDA kernels or model weights are changed by these integration patches. With both
-patches applied at `a274a20c`, Basalt's serve suite completes 951 tests successfully
-(4 skipped; the unpatched tree runs 941). In privacy mode the patch also keeps Basalt
-0.3's router from starting its telemetry. The tests use synthetic fixtures, including temporary executable mock
-engines; the test container therefore needs an executable temporary directory.
-The production container retains its non-executable temporary filesystems.
+The integration patches touch Python serving and tests. The suite uses temporary
+executable mock engines inside the build stage. The production container uses
+non-executable temporary filesystems.

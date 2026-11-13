@@ -7,6 +7,28 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.13
+
+- The Basalt image uses v0.3.3 with rebased privacy and numeric-metrics patches.
+  Private requests can supply documents inline. File-path and URL reads,
+  document caching and completed request-ID retention are disabled in privacy mode.
+  A separate workflow checks upstream tags and publishes tested backend images.
+  The build and runtime use CUDA 13.5.
+- The [local voice adapter](integrations/voice-tts/README.md) exposes Audio8
+  and Ming 3.0 with an operator-provided voice reference through the same
+  text-to-speech endpoint.
+- The [speech Compose profile](deploy/speech/README.md) adds Audio8, Ming and
+  Nemotron behind the OpenAI-compatible audio routes. The native client can
+  send configured audio routes to local services before the tunnel.
+- The browser chat supports dictation and local speech synthesis. Online
+  recognition requires explicit confirmation before the microphone starts.
+- The ComfyUI adapter serves MiniMax H3 video jobs through the OpenAI-compatible
+  `/v1/videos` API. The link carries the multipart first-frame upload and streams
+  the resulting MP4. See the [ComfyUI setup](integrations/comfyui/README.md).
+- The link carries `POST /v1/images/generations`. The loopback
+  [ComfyUI adapter](integrations/comfyui/README.md) exposes the local MiniMax H3
+  Image workflow on that route and returns PNGs as base64 JSON.
+
 - k-lani-link can be packed for npm (`npm install -g k-lani-link`) from a published
   release with `scripts/npm-pack.sh <tag>`: a small Node starter plus one
   `@k-lani/link-<os>-<cpu>` package per platform, made from the release binaries
@@ -17,11 +39,8 @@ tagged versions and downloads are listed on
   the image as one static binary. Catalog rules, launch flags, the control socket
   and the group stop are unchanged and covered by Rust tests. Basalt's own server
   remains Python. The host image runs on plain Debian instead of a Python image.
-- The Basalt image builds Basalt 0.3 with the 0.3.1 fixes (`a274a20c`): several
-  models per server, an 8,192-token default context and DeepSeek-V4.1-Flash
-  support. The privacy and numeric-metrics patches are rebased; in privacy mode
-  the new router starts no telemetry. `deploy/basalt.json` uses Basalt's config
-  format 2, which this version requires.
+- `deploy/basalt.json` uses Basalt's configuration format 2. The privacy
+  profile disables the router's hardware sampler.
 - The model image's llama.cpp for GGUF models moves to build b12182 (pinned by
   digest). Mellum 2.1 loads and answers on the GPU with it.
 - The control panel frees a request's upload slot once its body is read. Before, a

@@ -114,9 +114,11 @@ support the same endpoint and requested features, including streaming and tool c
 | Other local OpenAI-compatible chat servers | Generic connection available; integration and privacy validation remain backend-specific |
 | Gateway to cloud providers | Planned, with explicit cloud-use settings |
 
-The inference routes are `/v1/models`, `/v1/chat/completions`, `/v1/responses` and
-`/v1/embeddings` (OpenAI) and `/v1/messages` (Anthropic, for Claude Code with your own
-model); see [supported APIs](REFERENCE.md#supported-apis).
+The inference routes include `/v1/models`, `/v1/chat/completions`, `/v1/responses`,
+`/v1/embeddings`, `/v1/images/generations`, video jobs under `/v1/videos` and speech
+endpoints under `/v1/audio` (OpenAI)
+as well as `/v1/messages` (Anthropic, for Claude Code with your own model).
+See [supported APIs](REFERENCE.md#supported-apis).
 Model loading, KV-cache storage and other administration are separate capabilities.
 [API conventions and Open Responses](deploy/BACKENDS.md#api-conventions-and-open-responses).
 

@@ -21,6 +21,13 @@
 !integrations/basalt/
 !integrations/basalt/privacy.patch
 !integrations/basalt/numeric-metrics.patch
+!integrations/voice-tts/
+!integrations/voice-tts/serve.py
+!integrations/voice-tts/synthesize.py
+!deploy/speech/
+!deploy/speech/nemo-start.sh
+!deploy/speech/tts-models.json
+!deploy/speech/tts-requirements.txt
 !THIRD_PARTY_LICENSES/
 !THIRD_PARTY_LICENSES/**
 !deploy/thinkrail/

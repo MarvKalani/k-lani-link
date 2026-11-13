@@ -1,0 +1,63 @@
+name: k-lani-link-speech
+
+x-speech: &speech
+  platform: linux/amd64
+  user: '1000:1000'
+  network_mode: none
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: {driver: none}
+  ulimits: {core: 0}
+  restart: unless-stopped
+  stop_grace_period: 30s
+
+services:
+  voice-tts:
+    <<: *speech
+    image: k-lani-link-voice-tts:local
+    build: {context: ../.., dockerfile: deploy/speech/tts.Dockerfile}
+    gpus: all
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=256m,mode=1777']
+    volumes:
+      - type: bind
+        source: ${LINK_SPEECH_SOCKET_DIR:?Set the private speech socket directory}
+        target: /run/speech
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LINK_SPEECH_VOICE_DIR:?Set the private voice-reference directory}
+        target: /voice
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LINK_SPEECH_AUDIO8_MODEL:?Set the local Audio8 model directory}
+        target: /models/audio8
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LINK_SPEECH_MING_MODEL:?Set the local Ming model directory}
+        target: /models/ming
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LINK_SPEECH_MING_SOURCE:?Set the local Ming inference code directory}
+        target: /opt/ming
+        read_only: true
+        bind: {create_host_path: false}
+
+  nemotron:
+    <<: *speech
+    image: k-lani-link-nemotron:local
+    build: {context: ../.., dockerfile: deploy/speech/nemo.Dockerfile}
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777']
+    volumes:
+      - type: bind
+        source: ${LINK_SPEECH_SOCKET_DIR}
+        target: /run/speech
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LINK_SPEECH_NEMOTRON_MODEL:?Set the local Nemotron GGUF file}
+        target: /models/nemotron-3.5-asr-streaming-0.6b.q8_0.gguf
+        read_only: true
+        bind: {create_host_path: false}

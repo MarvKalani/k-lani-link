@@ -841,6 +841,7 @@ async fn run(cli: Cli) -> Result<()> {
                         include_loopback_candidate: false,
                         resume_seconds: 0,
                         backends: vec![],
+                        local_audio: Default::default(),
                         max_concurrent_requests: 1,
                         max_queued_requests: 0,
                         management_token_file: None,

@@ -2,17 +2,21 @@ use axum::{
     Json, Router,
     body::{Body, Bytes},
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{
+    Engine,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use futures_util::StreamExt;
 use k_lani_link::{
-    config::{Config, RelayPolicy},
+    config::{Backend, Config, RelayPolicy},
     gateway::Gateway,
     host, peer, signal,
 };
+use k_lani_link_protocol::{CHUNK_BYTES, SPEECH_PATH, TRANSCRIPTIONS_PATH};
 use std::{
     convert::Infallible,
     sync::{
@@ -21,6 +25,13 @@ use std::{
     },
     time::Duration,
 };
+
+const VIDEO_FORM: &[u8] = b"--link-test\r\nContent-Disposition: form-data; name=\"input_reference\"; filename=\"start.png\"\r\nContent-Type: image/png\r\n\r\n\0\xff\r\n--link-test--\r\n";
+const VIDEO_CONTENT_TYPE: &str = "multipart/form-data; boundary=\"link-test\"";
+const VIDEO_JOB: &str = "/v1/videos/video_test";
+const AUDIO_FORM: &[u8] = b"--audio-test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"sample.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFF\0\xff\r\n--audio-test--\r\n";
+const AUDIO_CONTENT_TYPE: &str = "multipart/form-data; boundary=audio-test";
+const SPEECH_UPSTREAM_KEY: &str = "local-test-credential";
 
 #[derive(Clone, Default)]
 struct Mock {
@@ -101,6 +112,7 @@ fn config(signaling_url: String, upstream: String) -> Config {
         include_loopback_candidate: true,
         resume_seconds: 0,
         backends: vec![],
+        local_audio: Default::default(),
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -121,10 +133,96 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         )
         .route("/v1/chat/completions", post(mock_chat))
         .route("/v1/responses", post(mock_chat))
+        .route(
+            "/v1/images/generations",
+            post(|Json(request): Json<serde_json::Value>| async move {
+                assert_eq!(request["model"], "minimax-h3-image");
+                assert_eq!(request["prompt"], "Full moon");
+                assert_eq!(request["size"], "1024x1024");
+                let image = STANDARD.encode(vec![7; 3 * k_lani_link_protocol::CHUNK_BYTES]);
+                Json(serde_json::json!({"created": 1, "data": [{"b64_json": image}]}))
+            }),
+        )
         .with_state(state.clone());
     let (upstream, upstream_task) = server(mock).await;
+    let (video_upstream, video_task) = server(
+        Router::new()
+            .route(
+                "/v1/videos",
+                post(|headers: HeaderMap, body: Bytes| async move {
+                    assert_eq!(headers["content-type"], VIDEO_CONTENT_TYPE);
+                    assert!(!headers.contains_key("authorization"));
+                    assert_eq!(body.as_ref(), VIDEO_FORM);
+                    Json(serde_json::json!({"id": "video_test", "status": "queued"}))
+                }),
+            )
+            .route(
+                VIDEO_JOB,
+                get(|| async { Json(serde_json::json!({"status": "completed"})) }),
+            )
+            .route(
+                "/v1/videos/video_test/content",
+                get(|| async {
+                    (
+                        [("content-type", "video/mp4")],
+                        vec![42; 3 * k_lani_link_protocol::CHUNK_BYTES],
+                    )
+                }),
+            ),
+    )
+    .await;
+    let (audio_upstream, audio_task) = server(
+        Router::new()
+            .route(
+                SPEECH_PATH,
+                post(
+                    |headers: HeaderMap, Json(request): Json<serde_json::Value>| async move {
+                        assert_eq!(
+                            headers["authorization"],
+                            format!("Bearer {SPEECH_UPSTREAM_KEY}")
+                        );
+                        assert_eq!(request["input"], "Der Vollmond leuchtet.");
+                        assert_eq!(request["response_format"], "wav");
+                        ([("content-type", "audio/wav")], vec![0xff; 3 * CHUNK_BYTES])
+                    },
+                ),
+            )
+            .route(
+                TRANSCRIPTIONS_PATH,
+                post(|headers: HeaderMap, body: Bytes| async move {
+                    assert_eq!(
+                        headers["authorization"],
+                        format!("Bearer {SPEECH_UPSTREAM_KEY}")
+                    );
+                    assert_eq!(headers["content-type"], AUDIO_CONTENT_TYPE);
+                    assert_eq!(body.as_ref(), AUDIO_FORM);
+                    Json(serde_json::json!({"text": "Der Vollmond leuchtet."}))
+                }),
+            ),
+    )
+    .await;
     let (signal_url, signal_task) = server(signal::router("s".repeat(32))).await;
-    let cfg = config(signal_url, upstream);
+    let mut cfg = config(signal_url, upstream);
+    cfg.backends.push(Backend {
+        upstream: video_upstream,
+        upstream_socket: None,
+        upstream_api_key: String::new(),
+        allow_unverified_backend: true,
+        allow_network_upstream: false,
+        video: true,
+        speech: false,
+        transcriptions: false,
+    });
+    cfg.backends.push(Backend {
+        upstream: audio_upstream,
+        upstream_socket: None,
+        upstream_api_key: SPEECH_UPSTREAM_KEY.into(),
+        allow_unverified_backend: true,
+        allow_network_upstream: false,
+        video: false,
+        speech: true,
+        transcriptions: true,
+    });
     cfg.validate().unwrap();
     let cfg_host = cfg.clone();
     let host_setup =
@@ -175,6 +273,101 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         .await
         .unwrap();
     assert_eq!(models["data"][0]["id"], "basalt-test");
+    let image: serde_json::Value = http
+        .post(format!("{base}/v1/images/generations"))
+        .bearer_auth(&cfg.api_key)
+        .json(&serde_json::json!({
+            "model": "minimax-h3-image",
+            "prompt": "Full moon",
+            "size": "1024x1024"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        STANDARD
+            .decode(image["data"][0]["b64_json"].as_str().unwrap())
+            .unwrap(),
+        vec![7; 3 * k_lani_link_protocol::CHUNK_BYTES],
+    );
+    let create = http
+        .post(format!("{base}/v1/videos"))
+        .bearer_auth(&cfg.api_key)
+        .body(VIDEO_FORM);
+    assert_eq!(
+        create.try_clone().unwrap().send().await.unwrap().status(),
+        StatusCode::UNSUPPORTED_MEDIA_TYPE
+    );
+    let queued: serde_json::Value = create
+        .header("content-type", VIDEO_CONTENT_TYPE)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(queued["id"], "video_test");
+    let status: serde_json::Value = http
+        .get(format!("{base}{VIDEO_JOB}"))
+        .bearer_auth(&cfg.api_key)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(status["status"], "completed");
+    let video = http
+        .get(format!("{base}{VIDEO_JOB}/content"))
+        .bearer_auth(&cfg.api_key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(video.headers()["content-type"], "video/mp4");
+    assert_eq!(
+        video.bytes().await.unwrap().as_ref(),
+        vec![42; 3 * k_lani_link_protocol::CHUNK_BYTES],
+    );
+    let audio = http
+        .post(format!("{base}{SPEECH_PATH}"))
+        .bearer_auth(&cfg.api_key)
+        .json(&serde_json::json!({
+            "model": "local-tts",
+            "input": "Der Vollmond leuchtet.",
+            "voice": "default",
+            "response_format": "wav"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(audio.headers()["content-type"], "audio/wav");
+    assert_eq!(
+        audio.bytes().await.unwrap().as_ref(),
+        vec![0xff; 3 * CHUNK_BYTES]
+    );
+    let transcript: serde_json::Value = http
+        .post(format!("{base}{TRANSCRIPTIONS_PATH}"))
+        .bearer_auth(&cfg.api_key)
+        .header("content-type", AUDIO_CONTENT_TYPE)
+        .body(AUDIO_FORM)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(transcript["text"], "Der Vollmond leuchtet.");
     // A 256K coding context can exceed the old 1 MiB JSON limit even without images.
     let large = serde_json::json!({"model":"basalt-test","messages":[{"role":"user","content":"x".repeat(1536 * 1024)}]});
     let response = http
@@ -304,6 +497,8 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         .unwrap();
     api_task.abort();
     upstream_task.abort();
+    video_task.abort();
+    audio_task.abort();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

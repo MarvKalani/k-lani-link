@@ -102,12 +102,72 @@ pub struct Config {
     /// whose `/v1/models` lists its model; unlisted models go to `upstream` as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub backends: Vec<Backend>,
+    /// Client only: serve the configured audio routes before entering the tunnel.
+    #[serde(default, skip_serializing_if = "LocalAudio::is_empty")]
+    pub local_audio: LocalAudio,
 }
-/// Host only: a further backend reached through the same tunnel, chosen by model name.
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalAudio {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speech: Option<LocalAudioEndpoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcriptions: Option<LocalAudioEndpoint>,
+}
+
+impl LocalAudio {
+    pub fn is_empty(&self) -> bool {
+        self.speech.is_none() && self.transcriptions.is_none()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalAudioEndpoint {
+    pub upstream: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_socket: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub upstream_api_key: String,
+}
+
+impl LocalAudioEndpoint {
+    fn check(&self) -> Result<()> {
+        let url = Url::parse(&self.upstream)?;
+        ensure!(
+            matches!(url.scheme(), "http" | "https")
+                && loopback_url(&url)
+                && url.path() == "/"
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.username().is_empty()
+                && url.password().is_none(),
+            "local audio upstream must be a loopback origin"
+        );
+        if let Some(socket) = &self.upstream_socket {
+            ensure!(
+                cfg!(unix) && socket.is_absolute(),
+                "local audio upstream_socket requires Unix and an absolute path"
+            );
+        }
+        ensure!(
+            self.upstream_api_key.is_empty()
+                || self.upstream_api_key.bytes().all(|c| c.is_ascii_graphic()),
+            "local audio upstream_api_key must contain visible ASCII"
+        );
+        Ok(())
+    }
+}
+
+/// Host only: a further backend reached through the same tunnel.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Backend {
     pub upstream: String,
+    /// Use a private Unix socket for this backend's HTTP requests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_socket: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub upstream_api_key: String,
     /// Forward prompts without confirming this backend's privacy profile (e.g. LM Studio).
@@ -117,6 +177,15 @@ pub struct Backend {
     /// then cross that network unencrypted) or any host over HTTPS.
     #[serde(default, skip_serializing_if = "is_false")]
     pub allow_network_upstream: bool,
+    /// Send all video jobs and their follow-up requests to this backend.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub video: bool,
+    /// Send text-to-speech requests to this backend.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub speech: bool,
+    /// Send multipart speech-to-text requests to this backend.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub transcriptions: bool,
 }
 impl Backend {
     fn check(&self) -> Result<()> {
@@ -129,7 +198,15 @@ impl Backend {
                 && url.password().is_none(),
             "backend upstream must be an origin, e.g. http://192.168.1.20:1234"
         );
-        let allowed = loopback_url(&url) && matches!(url.scheme(), "http" | "https")
+        let local = loopback_url(&url) && matches!(url.scheme(), "http" | "https");
+        if let Some(socket) = &self.upstream_socket {
+            ensure!(
+                cfg!(unix) && socket.is_absolute() && local,
+                "backend upstream_socket requires Unix, an absolute path and a loopback origin"
+            );
+            return Ok(());
+        }
+        let allowed = local
             || self.allow_network_upstream
                 && match url.scheme() {
                     "https" => true,
@@ -331,8 +408,37 @@ impl Config {
             "request timeout must be 10..3600 seconds"
         );
         ensure!(self.backends.len() <= 8, "at most 8 further backends");
+        ensure!(
+            self.backends.iter().filter(|backend| backend.video).count() <= 1,
+            "at most one further backend can handle video jobs"
+        );
+        ensure!(
+            self.backends
+                .iter()
+                .filter(|backend| backend.speech)
+                .count()
+                <= 1,
+            "at most one further backend can handle speech"
+        );
+        ensure!(
+            self.backends
+                .iter()
+                .filter(|backend| backend.transcriptions)
+                .count()
+                <= 1,
+            "at most one further backend can handle transcriptions"
+        );
         for backend in &self.backends {
             backend.check()?;
+        }
+        for audio in [
+            self.local_audio.speech.as_ref(),
+            self.local_audio.transcriptions.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            audio.check()?;
         }
         ensure!(
             self.resume_seconds == 0
@@ -476,6 +582,7 @@ pub fn generate_pair(
         include_loopback_candidate: false,
         resume_seconds: 0,
         backends: vec![],
+        local_audio: Default::default(),
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -516,9 +623,13 @@ pub(crate) mod tests {
         let check = |upstream: &str, network: bool| {
             Backend {
                 upstream: upstream.into(),
+                upstream_socket: None,
                 upstream_api_key: String::new(),
                 allow_unverified_backend: true,
                 allow_network_upstream: network,
+                video: false,
+                speech: false,
+                transcriptions: false,
             }
             .check()
             .is_ok()
@@ -544,9 +655,13 @@ pub(crate) mod tests {
         config.backends = vec![
             Backend {
                 upstream: "http://127.0.0.1:1".into(),
+                upstream_socket: None,
                 upstream_api_key: String::new(),
                 allow_unverified_backend: false,
                 allow_network_upstream: false,
+                video: false,
+                speech: false,
+                transcriptions: false,
             };
             9
         ];
@@ -578,6 +693,7 @@ pub(crate) mod tests {
             include_loopback_candidate: true,
             resume_seconds: 0,
             backends: vec![],
+            local_audio: Default::default(),
             max_concurrent_requests: 1,
             max_queued_requests: 0,
             management_token_file: None,

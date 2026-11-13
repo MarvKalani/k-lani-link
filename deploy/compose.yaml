@@ -1,15 +1,15 @@
 name: k-lani-link
 services:
   basalt:
-    image: k-lani-link-basalt:local
+    image: ${BASALT_IMAGE:-k-lani-link-basalt:local}
     build:
       context: ..
       dockerfile: deploy/basalt.Dockerfile
       additional_contexts:
-        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#a274a20c65775d1dfabe718a15dd9cac6f42e326}
+        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#2729e2288f59e01836ddd7fcc630810ada98995a}
       args:
         BUILD_JOBS: ${BASALT_BUILD_JOBS:-2}
-        BASALT_REVISION: ${BASALT_REVISION:-a274a20c65775d1dfabe718a15dd9cac6f42e326}
+        BASALT_REVISION: ${BASALT_REVISION:-2729e2288f59e01836ddd7fcc630810ada98995a}
     network_mode: none
     gpus: all
     environment: {LINK_NUMERIC_METRICS: '${LINK_NUMERIC_METRICS:-0}'}

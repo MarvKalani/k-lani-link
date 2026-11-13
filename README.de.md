@@ -119,9 +119,11 @@ einschließlich Streaming und Tool-Aufrufen.
 | Andere lokale OpenAI-kompatible Chat-Server | Allgemeine Anbindung vorhanden; Integration und Datenschutzprüfung erfolgen je Backend |
 | Gateway zu Cloud-Anbietern | Geplant, mit ausdrücklicher Cloud-Betriebsart |
 
-Die Inferenzrouten sind `/v1/models`, `/v1/chat/completions`, `/v1/responses` und
-`/v1/embeddings` (OpenAI) sowie `/v1/messages` (Anthropic, für Claude Code mit eigenem
-Modell); siehe [unterstützte APIs](docs/REFERENCE.de.md#unterstützte-apis).
+Zu den Inferenzrouten gehören `/v1/models`, `/v1/chat/completions`, `/v1/responses`,
+`/v1/embeddings`, `/v1/images/generations`, Videojobs unter `/v1/videos` und
+Sprachendpunkte unter `/v1/audio` (OpenAI)
+sowie `/v1/messages` (Anthropic, für Claude Code mit eigenem Modell).
+Siehe [unterstützte APIs](docs/REFERENCE.de.md#unterstützte-apis).
 Modellladen, KV-Cache-Speicherung und andere Verwaltungsfunktionen sind separat.
 [API-Konventionen und Open Responses](deploy/BACKENDS.md#api-conventions-and-open-responses).
 

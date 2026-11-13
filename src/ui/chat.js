@@ -12,6 +12,7 @@ const TITLE_CHARS = 80;
 let chatFront = 10;
 let chatCount = 0;
 let savedLoaded = false;
+let reading = null;
 
 function el(tag, className, text) {
   const element = document.createElement(tag);
@@ -110,10 +111,11 @@ function openChat(data = {}) {
   options.append(modelLabel, effortLabel);
   const input = el('textarea'); input.rows = 2;
   const send = el('button', 'chat-send'); send.type = 'submit';
-  form.append(options, input, send);
+  const audio = chatAudio(input);
+  form.append(options, input, send, audio.element);
   box.append(bar, log, note, form);
   chat.view = {
-    box, log, input, model, effort, send,
+    box, log, input, model, effort, send, cancelAudio: audio.cancel,
     // The texts that change only with the language.
     relabel() {
       close.title = t('chatClose'); close.setAttribute('aria-label', t('chatClose'));
@@ -121,6 +123,7 @@ function openChat(data = {}) {
       modelName.textContent = t('chatModel'); effortName.textContent = t('chatEffort');
       for (const option of effort.options) option.textContent = t(option.value ? 'effort_' + option.value : 'effortAuto');
       input.placeholder = t('chatPlaceholder'); send.textContent = t(chat.busy ? 'chatStop' : 'chatSend');
+      audio.relabel();
     },
     mark() {
       title.textContent = chat.title || t('chatUntitled'); box.setAttribute('aria-label', title.textContent);
@@ -177,6 +180,8 @@ function openChat(data = {}) {
   rename.addEventListener('click', renaming);
   title.addEventListener('dblclick', renaming);
   close.addEventListener('click', () => {
+    audio.cancel();
+    if (reading && box.contains(reading.button)) stopReading();
     if (chat.busy) chat.busy.abort();
     chats.delete(chat.id); box.remove();
   });
@@ -193,6 +198,7 @@ function openChat(data = {}) {
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight + 4, 180) + 'px'; });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    audio.cancel();
     if (chat.busy) { chat.busy.abort(); return; }
     const text = input.value.trim();
     if (!text) return;
@@ -204,6 +210,153 @@ function openChat(data = {}) {
     answer(chat);
   });
   return chat;
+}
+
+function chatAudio(input) {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const element = el('div', 'chat-audio');
+  const dictate = el('button', 'link'); dictate.type = 'button';
+  const mode = el('select', 'chat-audio-mode');
+  const local = new Option('', 'local'), online = new Option('', 'online');
+  mode.replaceChildren(local, online);
+  const status = el('span', 'chat-audio-status'); status.setAttribute('role', 'status');
+  const supportsLocal = Recognition && 'processLocally' in Recognition.prototype
+    && typeof Recognition.available === 'function';
+  element.hidden = !Recognition || !window.isSecureContext;
+  element.append(mode, dictate, status);
+  let current = null, pending = false, statusKey = '', attempt = 0;
+
+  function report(key) {
+    statusKey = key;
+    status.textContent = key ? t(key) : '';
+  }
+  function relabel() {
+    local.textContent = t('chatDictateLocal');
+    online.textContent = t('chatDictateOnline');
+    mode.setAttribute('aria-label', t('chatDictateMode'));
+    dictate.textContent = t(current ? 'chatDictateStop' : 'chatDictate');
+    dictate.disabled = pending || mode.value === 'local' && !supportsLocal;
+    mode.disabled = pending || !!current;
+    if (Recognition && mode.value === 'local' && !supportsLocal) report('chatDictateUnavailable');
+    else if (mode.value === 'online' && !statusKey) report('chatDictateDisclosure');
+    else report(statusKey);
+  }
+  function cancel() {
+    attempt++;
+    if (current) {
+      const recognition = current;
+      current = null;
+      try { recognition.abort(); } catch { /* the browser already stopped it */ }
+      report('');
+      relabel();
+    }
+  }
+  mode.addEventListener('change', () => {
+    report(mode.value === 'online' ? 'chatDictateDisclosure' : '');
+    relabel();
+  });
+  dictate.addEventListener('click', async () => {
+    if (current) {
+      try { current.stop(); } catch { cancel(); }
+      return;
+    }
+    const run = ++attempt;
+    const language = document.documentElement.lang === 'de' ? 'de-DE' : 'en-US';
+    const onDevice = mode.value === 'local';
+    try {
+      if (onDevice) {
+        pending = true; relabel();
+        const options = { langs: [language], processLocally: true };
+        const availability = await Recognition.available(options);
+        if (!element.isConnected || run !== attempt) return;
+        if (availability !== 'available') {
+          if (!['downloadable', 'downloading'].includes(availability) || typeof Recognition.install !== 'function') {
+            report('chatDictateUnavailable');
+            return;
+          }
+          if (!window.confirm(t('chatDictateInstall'))) return;
+          report('chatDictateInstalling');
+          if (!await Recognition.install(options)) { report('chatDictateUnavailable'); return; }
+        }
+      } else if (!window.confirm(t('chatDictateDisclosure'))) {
+        return;
+      }
+      if (!element.isConnected || run !== attempt) return;
+      for (const chat of chats.values()) {
+        if (!chat.view.box.contains(element)) chat.view.cancelAudio();
+      }
+      stopReading();
+      const recognition = new Recognition();
+      if ('processLocally' in recognition) recognition.processLocally = onDevice;
+      recognition.lang = language;
+      recognition.onresult = (event) => {
+        if (current !== recognition) return;
+        const text = Array.from(event.results).slice(event.resultIndex).filter((result) => result.isFinal)
+          .map((result) => result[0].transcript.trim()).filter(Boolean).join(' ');
+        if (!text) return;
+        input.value += (input.value && !/\s$/.test(input.value) ? ' ' : '') + text;
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+      };
+      recognition.onerror = (event) => {
+        if (current === recognition && event.error !== 'aborted') report('chatDictateFailed');
+      };
+      recognition.onend = () => {
+        if (current !== recognition) return;
+        current = null;
+        if (statusKey === 'chatDictateListening') report('');
+        relabel();
+      };
+      current = recognition;
+      report('chatDictateListening');
+      recognition.start();
+    } catch {
+      current = null;
+      report('chatDictateFailed');
+    } finally {
+      pending = false;
+      relabel();
+    }
+  });
+  return { element, relabel, cancel };
+}
+
+window.addEventListener('pagehide', () => {
+  for (const chat of chats.values()) chat.view.cancelAudio();
+  stopReading();
+});
+
+function stopReading() {
+  if (!reading) return;
+  const { button } = reading;
+  reading = null;
+  window.speechSynthesis.cancel();
+  button.textContent = t('chatReadAloud');
+}
+function readAloud(message, button) {
+  const wasReading = reading?.button === button;
+  stopReading();
+  if (wasReading) return;
+  const language = document.documentElement.lang.split(/[-_]/)[0].toLowerCase();
+  const voice = window.speechSynthesis.getVoices().find((voice) =>
+    voice.localService && voice.lang.split(/[-_]/)[0].toLowerCase() === language);
+  if (!voice) { button.textContent = t('chatNoLocalVoice'); return; }
+  for (const chat of chats.values()) chat.view.cancelAudio();
+  const utterance = new SpeechSynthesisUtterance(split(message).content);
+  utterance.voice = voice;
+  utterance.lang = voice.lang;
+  reading = { utterance, button };
+  button.textContent = t('chatReadStop');
+  utterance.onend = utterance.onerror = () => {
+    if (reading?.utterance !== utterance) return;
+    reading = null;
+    button.textContent = t('chatReadAloud');
+  };
+  try {
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    stopReading();
+  }
 }
 function place(box, x, y) {
   box.style.left = Math.min(Math.max(x, 60 - box.offsetWidth), innerWidth - 60) + 'px';
@@ -280,6 +433,12 @@ function view(chat, message, last) {
   box.append(el('div', 'msg-text'));
   if (message.role !== 'user') box.append(el('div', 'msg-meta'));
   paint(box, message);
+  if (message.role === 'assistant' && !message.stats?.live && !message.stats?.waiting && split(message).content
+    && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+    const read = el('button', 'link', t('chatReadAloud')); read.type = 'button';
+    read.addEventListener('click', () => readAloud(message, read));
+    box.querySelector('.msg-meta').append(read);
+  }
   if (last && !chat.busy && message.role !== 'user') {
     const retry = el('button', 'link', '↻ ' + t('chatRetry')); retry.type = 'button';
     retry.addEventListener('click', () => {
@@ -297,7 +456,11 @@ function paint(box, message) {
   const think = box.querySelector('.msg-think');
   if (think) { think.hidden = !shown.reasoning; think.querySelector('.msg-think-text').textContent = shown.reasoning; }
   const meta = box.querySelector('.msg-meta');
-  if (meta) { const retry = meta.querySelector('button'); meta.textContent = describe(message); if (retry) meta.append(retry); }
+  if (meta) {
+    const actions = [...meta.querySelectorAll('button')];
+    meta.textContent = describe(message);
+    meta.append(...actions);
+  }
 }
 // Some servers send the thinking inside the answer, between <think> tags.
 function split(message) {

@@ -1,8 +1,8 @@
 diff --git a/serve/config.py b/serve/config.py
-index 5a2698fd..a9e10399 100644
+index ae5ab90a..5ff2cff2 100644
 --- a/serve/config.py
 +++ b/serve/config.py
-@@ -277,6 +277,8 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str], server_argv=(),
+@@ -284,6 +284,8 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str], server_argv=(),
                  ctx = int(src[at + 1])
                  src[at + 1] = str(slot_share(ctx, a.parallel))
                  a.shared_context = ctx                     # the total, for the startup line
@@ -11,7 +11,7 @@ index 5a2698fd..a9e10399 100644
      if a.privacy:
          from serve.privacy import validate
          validate(a, file_words + cli_words)
-@@ -495,6 +497,8 @@ def build_parser() -> argparse.ArgumentParser:
+@@ -526,6 +528,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="run a scripted engine instead of the model, for clients and tests (no --model needed)")
      ap.add_argument("--privacy", action="store_true",
                      help="text-only loopback API without application logs, diagnostics UI or request history")
@@ -21,10 +21,10 @@ index 5a2698fd..a9e10399 100644
      ap.add_argument("--model", help="the .basalt model file: the engine, tokenizer, sampling and vision come from it")
      ap.add_argument("--engine-bin", help=argparse.SUPPRESS)      # set by `basalt serve`
 diff --git a/serve/handler.py b/serve/handler.py
-index a17bc42a..8da57e14 100644
+index e44182a9..5472542a 100644
 --- a/serve/handler.py
 +++ b/serve/handler.py
-@@ -331,7 +331,8 @@ def make_handler(target: Service | Router):
+@@ -369,7 +369,8 @@ def make_handler(target: Service | Router):
                                   "parallel": max(1, int(getattr(shown.engine, "batch", 0) or 0)),
                                   "link_privacy": {"version": 1, "application_logs": False,
                                                        "request_history": False, "diagnostics": False,
@@ -36,7 +36,7 @@ index a17bc42a..8da57e14 100644
                      return
 diff --git a/serve/numeric_metrics.py b/serve/numeric_metrics.py
 new file mode 100644
-index 00000000..3714e56e
+index 00000000..2e8e4554
 --- /dev/null
 +++ b/serve/numeric_metrics.py
 @@ -0,0 +1,96 @@
@@ -117,8 +117,8 @@ index 00000000..3714e56e
 +                temporary.unlink(missing_ok=True)
 +
 +    def start(self):
-+        self.service.numeric_metrics = True
 +        self.write()
++        self.service.numeric_metrics = True
 +        def run():
 +            while not self.done.wait(0.5):
 +                try:
@@ -137,10 +137,10 @@ index 00000000..3714e56e
 +        self.service.performance_last = None
 +        self.path.unlink(missing_ok=True)
 diff --git a/serve/server.py b/serve/server.py
-index 13fc5028..27f17ee7 100644
+index d86518ac..05489745 100644
 --- a/serve/server.py
 +++ b/serve/server.py
-@@ -348,6 +348,11 @@ def main() -> int:
+@@ -385,7 +385,18 @@ def main() -> int:
          print(tagged("cors", ",".join(svc.cors_origins)), flush=True)
          if "*" in svc.cors_origins and not svc.api_key:
              print(tagged("warning", "any web page can use the model (--api-key KEY)"), flush=True)
@@ -148,11 +148,18 @@ index 13fc5028..27f17ee7 100644
 +    if a.privacy_metrics_file:                          # the front model's numbers, as the stats page shows them
 +        from serve.numeric_metrics import NumericMetrics
 +        metrics = NumericMetrics(svc, Path(a.privacy_metrics_file))
-+        metrics.start()
      httpd = serve(router, host=a.host, port=a.port, unix_socket=a.unix_socket)
++    if metrics:
++        try:
++            metrics.start()
++        except (OSError, ValueError):
++            httpd.shutdown()
++            httpd.server_close()
++            raise
      here = "127.0.0.1" if a.host in ("0.0.0.0", "", "::") else a.host
  
-@@ -416,6 +421,8 @@ def main() -> int:
+     def announcer(s: Service, m):
+@@ -460,6 +471,8 @@ def main() -> int:
          if not rc:
              print("[server] stopping (Ctrl+C again to force)", flush=True)
          closers = [router.stop, httpd.shutdown, httpd.server_close]
@@ -162,19 +169,19 @@ index 13fc5028..27f17ee7 100644
              closers += [getattr(s.engine, "close", None), s.vision.close if s.vision else None]
          for close in filter(None, closers):
 diff --git a/serve/service.py b/serve/service.py
-index 1ff206d6..1faeea7e 100644
+index 3bd7135a..4a1fe6f4 100644
 --- a/serve/service.py
 +++ b/serve/service.py
-@@ -141,6 +141,8 @@ class Service:
+@@ -151,6 +151,8 @@ class Service:
          self.before_load = None
          self.vram_reserve = None                         # last POST /v1/vram reserve (None: the start's)
          self.reasoning_budget_tokens = 0                 # default thinking budget (0: none)
 +        self.numeric_metrics = False
 +        self.performance_last = None
-         self.answer_room = True                          # reserve output space when thinking
+         self.answer_room: str | int = "auto"             # answer reserve when thinking: "auto" or a fixed token count (0: none)
          self.thinking_loop_tokens = 256                  # one token repeated this often in the thinking ends it (0: off)
          self.anthropic_think_unasked = True               # "anthropic_thinking": "on_request" -> False
-@@ -865,7 +867,7 @@ class Service:
+@@ -998,7 +1000,7 @@ class Service:
          return ids, kwargs.get("enable_thinking", True) is not False, max_new
  
      def _note(self, n, evs, st=None, rate=None):
@@ -183,7 +190,7 @@ index 1ff206d6..1faeea7e 100644
              return
          with self.status_lock:
              s = self.status if st is None else st
-@@ -876,6 +878,8 @@ class Service:
+@@ -1009,6 +1011,8 @@ class Service:
              if s.get("first_token") is None:
                  s["first_token"] = time.time()
              (self.rate if rate is None else rate).append((time.time(), n))   # live rate window
@@ -192,7 +199,7 @@ index 1ff206d6..1faeea7e 100644
              for ev in evs:
                  if ev.kind == "reasoning":
                      s["phase"] = "thinking"
-@@ -1261,6 +1265,9 @@ class Service:
+@@ -1426,6 +1430,9 @@ class Service:
                                  if not self.privacy:
                                      self.last_timings = dict(timings, at=int(time.time())) if timings else None
                              self.last_request_at = time.time()
@@ -200,27 +207,32 @@ index 1ff206d6..1faeea7e 100644
 +                                from serve.numeric_metrics import completed
 +                                self.performance_last = completed(timings, ttft, n)
                              if not self.privacy:
-                                 now = time.time()
-                                 rate = n / max(1e-6, now - ft) if ft else 0.0
+                                 self.requests_done += 1
+                                 for key, add in (("prompt", seen), ("reused", last.get("reused") or 0), ("written", n),
 diff --git a/serve/tests/test_config.py b/serve/tests/test_config.py
-index 067dd944..6e28b481 100644
+index 8ea35032..d6fa987b 100644
 --- a/serve/tests/test_config.py
 +++ b/serve/tests/test_config.py
-@@ -489,8 +489,9 @@ class EveryOption(unittest.TestCase):
+@@ -509,13 +509,14 @@ class EveryOption(unittest.TestCase):
+             return 0.5 if SAMPLING_KEYS[act.dest][0] is float else 7
+         # a path the config file resolves against its own directory: absolute in this platform's own form, so the
+         # resolution leaves it as it is
+-        return str(Path(TMP.name) / "x") if act.dest in ("model", "tokenizer", "image_dir") else "x"
++        return str(Path(TMP.name) / "x") if act.dest in ("model", "tokenizer", "image_dir", "unix_socket") else "x"
+ 
      def test_every_server_option_by_both_paths(self):
          ap = build_parser()
          for name, act in server_options(ap).items():
--            # grammar and answer-room are on by default: their no- forms differ (test_grammar, test_answer_room_switch)
--            if name in ("api-key", "engine-bin", "grammar", "answer-room"):
-+            # grammar and answer-room are on by default: their no- forms differ (test_grammar, test_answer_room_switch);
-+            # privacy-metrics-file needs --privacy and an absolute path (test_numeric_metrics)
-+            if name in ("api-key", "engine-bin", "grammar", "answer-room", "privacy-metrics-file"):
+             # grammar is on by default: its no- form differs (test_grammar)
+-            if name in ("api-key", "engine-bin", "grammar"):
++            # The privacy metrics option requires privacy mode (test_numeric_metrics).
++            if name in ("api-key", "engine-bin", "grammar", "privacy-metrics-file"):
                  continue
              v = "localhost" if name == "host" else self.sample(act)
              if isinstance(act, argparse._AppendAction):
 diff --git a/serve/tests/test_numeric_metrics.py b/serve/tests/test_numeric_metrics.py
 new file mode 100644
-index 00000000..83614f5e
+index 00000000..8e7882a2
 --- /dev/null
 +++ b/serve/tests/test_numeric_metrics.py
 @@ -0,0 +1,92 @@
@@ -248,7 +260,7 @@ index 00000000..83614f5e
 +    def service(self):
 +        tok = ByteTokenizer()
 +        engine = MockEngine(tok, "checking.</think>\n\nPRIVATE_RESPONSE_MARKER", record_requests=False)
-+        return Service(engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"), privacy=True)
++        return Service(engine, tok, ChatTemplate.from_file(ROOT / "serve/chat_template.jinja"), privacy=True)
 +
 +    def test_whitelist_ignores_arbitrary_payload_fields(self):
 +        svc = self.service()

@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use k_lani_link_protocol::{
     ANTHROPIC_VERSION, Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES,
     RESPONSE_WINDOW, UPLOAD_SECONDS, allowed_route, control_body_valid, decode_data,
-    management_route, route_api,
+    management_route, multipart_content_type, multipart_route, route_api,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -18,6 +18,7 @@ struct Upload {
     id: u64,
     method: String,
     path: String,
+    content_type: Option<String>,
     body: Vec<u8>,
     started: Instant,
     control: bool,
@@ -553,7 +554,7 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                 let Some(frame) = frame else { break };
                 let id = frame.id();
                 match frame {
-                    Frame::Request { method, path, .. } => {
+                    Frame::Request { method, path, content_type, .. } => {
                         registry.evict_detached(id);
                         ensure!(id != 0 && !uploads.contains_key(&id) && !registry.jobs.contains_key(&id)
                             && !registry.outlets.contains_key(&id)
@@ -565,10 +566,16 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                         let capacity = if control { 1 } else { config.max_concurrent_requests + config.max_queued_requests };
                         if !(allowed_route(&method, &path) || control && config.model_control_socket.is_some()) {
                             reject(peer.tx(), id, 404, "route not available").await?;
+                        } else if !(if multipart_route(&method, &path) {
+                            content_type.as_deref().is_some_and(multipart_content_type)
+                        } else {
+                            content_type.is_none()
+                        }) {
+                            reject(peer.tx(), id, 415, "invalid request content type").await?;
                         } else if occupied >= capacity {
                             reject(peer.tx(), id, 429, "request capacity exhausted").await?;
                         } else {
-                            uploads.insert(id, Upload { id, method, path, body: vec![], started: Instant::now(), control, model: None });
+                            uploads.insert(id, Upload { id, method, path, content_type, body: vec![], started: Instant::now(), control, model: None });
                         }
                     }
                     Frame::Data { data, .. } => {
@@ -584,7 +591,8 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                             if upload.control && !control_body_valid(&upload.method, &upload.body) {
                                 reject(peer.tx(), id, 400, "invalid model control command").await?;
                             } else {
-                                if managed.is_some() && !upload.control {
+                                if managed.is_some() && !upload.control
+                                    && routes.media_backend(&upload.method, &upload.path).is_none() {
                                     upload.model = crate::on_demand::requested(&upload.body);
                                 }
                                 queue.push_back(upload);
@@ -723,8 +731,14 @@ async fn forward(
         let body = routes.model_list().await?;
         return respond(tx, credits, id, 200, &body).await;
     }
-    let index = routes.choose(&upload.body).await;
-    if let Some((status, message)) = routes.managed_refusal(index, &upload.body) {
+    let media = routes.media_backend(&upload.method, &upload.path);
+    let index = match media {
+        Some(index) => index,
+        None => routes.choose(&upload.body).await,
+    };
+    if media.is_none()
+        && let Some((status, message)) = routes.managed_refusal(index, &upload.body)
+    {
         let body = serde_json::to_vec(
             &serde_json::json!({"error": {"message": message, "code": status}}),
         )?;
@@ -740,7 +754,10 @@ async fn forward(
     let mut request = target
         .http
         .request(method, url)
-        .header("content-type", "application/json")
+        .header(
+            "content-type",
+            upload.content_type.as_deref().unwrap_or("application/json"),
+        )
         .body(upload.body);
     if !target.api_key.is_empty() {
         request = request.bearer_auth(target.api_key);
@@ -848,6 +865,7 @@ mod tests {
             id: 7,
             method: "POST".into(),
             path: "/v1/chat/completions".into(),
+            content_type: None,
             body: b"{}".to_vec(),
             started: Instant::now(),
             control: false,
@@ -969,9 +987,13 @@ mod tests {
     fn backend(upstream: String, unverified: bool) -> crate::config::Backend {
         crate::config::Backend {
             upstream,
+            upstream_socket: None,
             upstream_api_key: String::new(),
             allow_unverified_backend: unverified,
             allow_network_upstream: false,
+            video: false,
+            speech: false,
+            transcriptions: false,
         }
     }
     /// Runs one request through `forward` and returns the response body.
@@ -980,6 +1002,7 @@ mod tests {
             id: 1,
             method: method.into(),
             path: path.into(),
+            content_type: None,
             body: body.as_bytes().to_vec(),
             started: Instant::now(),
             control: false,
@@ -1027,6 +1050,98 @@ mod tests {
             .map(|m| (m["id"].as_str().unwrap(), m["owned_by"].as_str().unwrap()))
             .collect();
         assert_eq!(ids, [("alpha", "a"), ("shared", "a"), ("beta", "b")]);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn additional_backends_keep_their_unix_sockets_and_privacy_checks() {
+        use axum::{
+            Json, Router,
+            routing::{get, post},
+        };
+        use serde_json::json;
+        use tokio::net::UnixListener;
+
+        let dir = std::env::temp_dir().join(format!(
+            "link-routes-{}",
+            crate::config::random_secret().unwrap()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        let primary = named("a", Arc::new(vec!["alpha"].into()), true).await;
+        let mut backends = Vec::new();
+        let mut tasks = Vec::new();
+        for (id, private) in [("beta", true), ("gamma", false)] {
+            let socket = dir.join(id);
+            let listener = UnixListener::bind(&socket).unwrap();
+            let app = Router::new()
+                .route(
+                    "/health",
+                    get(move || async move {
+                        Json(json!({"link_privacy": {
+                            "version": 1, "application_logs": !private, "request_history": false,
+                            "diagnostics": false, "remote_images": false
+                        }}))
+                    }),
+                )
+                .route(
+                    "/v1/models",
+                    get(move || async move { Json(json!({"data": [{"id": id}]})) }),
+                )
+                .route(
+                    "/v1/chat/completions",
+                    post(move || async move { Json(json!({"backend": id})) }),
+                );
+            tasks.push(tokio::spawn(async move {
+                axum::serve(listener, app).await.unwrap();
+            }));
+            let mut entry = backend("http://localhost".into(), false);
+            entry.upstream_socket = Some(socket);
+            backends.push(entry);
+        }
+
+        let mut config = routed_config(primary, backends);
+        config.api_key = "a".repeat(32);
+        config.validate().unwrap();
+        let routes = Routes::new(&config).unwrap();
+        let list = ask(&routes, "GET", "/v1/models", "").await.unwrap();
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        let ids: Vec<_> = list["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["alpha", "beta"]);
+        let answer = ask(
+            &routes,
+            "POST",
+            "/v1/chat/completions",
+            r#"{"model":"beta"}"#,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&answer).unwrap()["backend"],
+            "beta"
+        );
+        assert!(
+            ask(
+                &routes,
+                "POST",
+                "/v1/chat/completions",
+                r#"{"model":"gamma"}"#
+            )
+            .await
+            .is_err()
+        );
+
+        config.backends[0].upstream_socket = Some("relative.sock".into());
+        assert!(config.validate().is_err());
+        for task in tasks {
+            task.abort();
+            let _ = task.await;
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[tokio::test]
