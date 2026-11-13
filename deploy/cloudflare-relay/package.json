@@ -4,7 +4,7 @@
   "description": "k-lani-link HTTPS mailbox relay for Cloudflare Workers",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "test": "node --test test/*.js",
@@ -12,6 +12,6 @@
     "dev": "wrangler dev"
   },
   "devDependencies": {
-    "wrangler": "4.157.0"
+    "wrangler": "4.160.0"
   }
 }

@@ -8,7 +8,7 @@ only**; nothing is written to Cloudflare storage. German guide: [ANLEITUNG.de.md
 
 ## Set up (about five minutes)
 
-You need Node.js 22 or newer and a Cloudflare account.
+You need Node.js 22.12 or newer and a Cloudflare account.
 
 ```sh
 cd deploy/cloudflare-relay
