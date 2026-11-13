@@ -100,7 +100,7 @@ services:
       - ui_socket:/run/thinkrail-ui
   ui:
     <<: *locked
-    image: nginx:1.29-alpine
+    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
     user: '1000:1000'
     entrypoint: [nginx, -g, 'daemon off;']
     network_mode: service:guard

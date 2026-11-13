@@ -8,7 +8,7 @@ RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
 
 # The supervisor, entrypoint and health probe: k-lani-link itself, statically linked so it
 # runs on the CUDA image's own libc. No interpreter of ours ships in the image.
-FROM rust:1.99.1-slim-trixie AS link
+FROM rust:1.99.1-slim-trixie@sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a47dd02d7 AS link
 RUN apt-get update && apt-get install -y --no-install-recommends musl-tools cmake g++ pkg-config \
     && rm -rf /var/lib/apt/lists/* && rustup target add x86_64-unknown-linux-musl
 WORKDIR /source
@@ -17,7 +17,7 @@ COPY crates ./crates
 COPY src ./src
 RUN cargo build --release --locked --jobs 2 --target x86_64-unknown-linux-musl
 
-FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04
+FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04@sha256:9a8b00be0596b5a2a088249ef1d5ed8e5cdd45bc662a4e6937e57af0cc495d1f
 ARG BUILD_JOBS=2
 ARG BASALT_REVISION=a274a20c65775d1dfabe718a15dd9cac6f42e326
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"

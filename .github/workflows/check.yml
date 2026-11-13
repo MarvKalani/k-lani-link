@@ -58,6 +58,31 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - run: rustup show active-toolchain
       - run: cargo build --release --locked
+  docker:
+    name: Docker dependency checks
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Free disk space for CUDA builds
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          if [[ -n "$(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- deploy/basalt.Dockerfile deploy/speech/tts.Dockerfile)" ]]; then
+            sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          fi
+      - name: Validate changed Compose files and build changed Dockerfiles
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: python3 -B deploy/check-docker-updates.py "$BASE_SHA" "$HEAD_SHA"
   audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

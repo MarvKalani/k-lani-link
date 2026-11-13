@@ -1,0 +1,76 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /deploy/mailbox-bench
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:15'
+      timezone: Europe/Berlin
+    groups:
+      cargo-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directories:
+      - /deploy/cloudflare-relay
+      - /npm/k-lani-link
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:25'
+      timezone: Europe/Berlin
+    groups:
+      npm-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:35'
+      timezone: Europe/Berlin
+
+  - package-ecosystem: docker
+    directories:
+      - /deploy
+      - /deploy/desktop
+      - /deploy/mailbox-bench
+      - /deploy/opencode
+      - /deploy/opencode/craft
+      - /deploy/proxy-lab
+      # This also covers the optional speech images when their recipes are present.
+      - /deploy/speech*
+      - /deploy/thinkrail
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:45'
+      timezone: Europe/Berlin
+    allow:
+      # The model server's separate pin is maintained with the GPU backend.
+      - dependency-name: debian
+      - dependency-name: nginx
+      - dependency-name: nvidia/cuda
+      - dependency-name: python
+      - dependency-name: rust
+      - dependency-name: ubuntu
+
+  - package-ecosystem: docker-compose
+    directories:
+      - /deploy
+      - /deploy/opencode
+      - /deploy/thinkrail
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:55'
+      timezone: Europe/Berlin
+    allow:
+      - dependency-name: nginx
+      - dependency-name: python
