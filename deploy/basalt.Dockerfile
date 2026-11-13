@@ -17,7 +17,7 @@ COPY crates ./crates
 COPY src ./src
 RUN cargo build --release --locked --jobs 2 --target x86_64-unknown-linux-musl
 
-FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu24.04@sha256:9a8b00be0596b5a2a088249ef1d5ed8e5cdd45bc662a4e6937e57af0cc495d1f
+FROM nvidia/cuda:13.5.0-cudnn-devel-ubuntu24.04@sha256:f24a2953ce729567af330c06d850a4f61f3a58df6901f9189d3319ea8881c107
 ARG BUILD_JOBS=2
 ARG BASALT_REVISION=a274a20c65775d1dfabe718a15dd9cac6f42e326
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
