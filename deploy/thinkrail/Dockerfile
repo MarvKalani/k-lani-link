@@ -1,9 +1,9 @@
-FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS installer
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS installer
 COPY deploy/thinkrail/download.py /opt/download.py
 COPY deploy/thinkrail/release.json /opt/release.json
 RUN python -B /opt/download.py /opt/thinkrail-install
 
-FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 RUN apt-get update && apt-get install -y --no-install-recommends git bash ripgrep ca-certificates libstdc++6 tini \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 --shell /bin/bash thinkrail \
