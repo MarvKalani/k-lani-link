@@ -45,7 +45,7 @@ sha2 = "0.10"
 subtle = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
-toml = "0.8"
+toml = "1.2"
 tower = { version = "0.5", default-features = false, features = ["util"] }
 # Disable transitive transport/HTTP logging at compile time, including debug builds.
 tracing = { version = "0.1", features = ["max_level_off", "release_max_level_off"] }
