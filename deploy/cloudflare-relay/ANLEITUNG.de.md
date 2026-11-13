@@ -7,7 +7,7 @@ Arbeitsspeicher, und er kann nichts lesen oder ändern. Technische Einzelheiten:
 
 ## Einrichten (etwa fünf Minuten)
 
-Du brauchst Node.js ab Version 22 und ein Cloudflare-Konto.
+Du brauchst Node.js ab Version 22.12 und ein Cloudflare-Konto.
 
 1. Im Ordner `deploy/cloudflare-relay` ein Terminal öffnen und `npm ci` ausführen.
 2. `npx wrangler login`: Der Browser öffnet sich, du meldest dich bei Cloudflare an.
