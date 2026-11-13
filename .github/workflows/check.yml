@@ -1,5 +1,10 @@
 name: Check
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 permissions:
   contents: read
 env:
@@ -8,6 +13,7 @@ env:
   CARGO_NET_RETRY: '5'
 jobs:
   source:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -45,6 +51,7 @@ jobs:
       - run: python3 -B deploy/check-names.py
       - run: python3 -B deploy/source-bundle.py
   release-build:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -56,11 +63,23 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - run: rustup show active-toolchain
       # Match rust-toolchain.toml explicitly; avoid cargo-install's implicit override warning.
       - run: cargo +1.99.1 install cargo-audit --version 0.22.2 --locked
-      - run: cargo audit
+      - name: Audit Cargo lockfiles against RustSec
+        shell: bash
+        run: |
+          status=0
+          for lockfile in Cargo.lock deploy/mailbox-bench/Cargo.lock; do
+            echo "::group::$lockfile"
+            cargo audit --file "$lockfile" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
   cloudflare:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -78,6 +97,7 @@ jobs:
       - run: npm test
       - run: npm audit --audit-level=low
   desktop-launcher:
+    if: github.event_name != 'schedule'
     runs-on: windows-2022
     timeout-minutes: 5
     steps:
