@@ -27,12 +27,15 @@ def changed_paths(base, head):
 
 
 def verify_compose(path):
-    # Inspect the recipe without requiring real mounts, keys or services from a base file.
+    # Expand required bind paths before Compose parses short volume syntax.
+    # Use disposable paths so CI needs no deployment configuration.
+    variables = re.findall(r"\$\{([A-Z_][A-Z0-9_]*)(?::\?|\?)", (ROOT / path).read_text())
+    env = {**os.environ, **dict.fromkeys(variables, "/tmp/k-lani-link-ci")}
     compose = (
         "docker", "compose", "--env-file", os.devnull, "--profile", "*", "-f", str(path), "config",
-        "--no-consistency", "--no-interpolate", "--no-path-resolution",
+        "--no-consistency", "--no-path-resolution",
     )
-    images = subprocess.check_output([*compose, "--images"], cwd=ROOT, text=True)
+    images = subprocess.check_output([*compose, "--images"], cwd=ROOT, env=env, text=True)
     for image in sorted(set(images.splitlines())):
         if image.startswith(("nginx:", "python:")):
             run("docker", "buildx", "imagetools", "inspect", image, stdout=subprocess.DEVNULL)
