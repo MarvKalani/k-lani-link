@@ -1062,10 +1062,9 @@ mod tests {
         use serde_json::json;
         use tokio::net::UnixListener;
 
-        let dir = std::env::temp_dir().join(format!(
-            "link-routes-{}",
-            crate::config::random_secret().unwrap()
-        ));
+        // The temporary directory on macOS already takes up much of the socket path.
+        let dir =
+            std::env::temp_dir().join(format!("lr-{}", &crate::config::random_id().unwrap()[..12]));
         std::fs::create_dir(&dir).unwrap();
         let primary = named("a", Arc::new(vec!["alpha"].into()), true).await;
         let mut backends = Vec::new();
