@@ -1,7 +1,7 @@
 //! Host only: choose a backend by model or by a configured media route.
-use crate::config::{Backend, Config};
+use crate::config::{Backend, Config, MODEL_CARD_README_BYTES, model_card_key};
 use anyhow::{Result, ensure};
-use k_lani_link_protocol::{SPEECH_PATH, TRANSCRIPTIONS_PATH, video_route};
+use k_lani_link_protocol::{IMAGE_EDITS_PATH, SPEECH_PATH, TRANSCRIPTIONS_PATH, video_route};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -40,6 +40,10 @@ pub struct Routes {
     catalog: Mutex<Option<Arc<Catalog>>>,
     /// With `load_on_demand`: the supervisor's last snapshot, kept current by the host.
     managed: Mutex<Option<crate::on_demand::Snapshot>>,
+    /// The configured model cards as `GET /v1/models` carries them, by model ID.
+    cards: HashMap<String, Value>,
+    /// Their READMEs, read at start: key → (model ID, text).
+    readmes: HashMap<String, (String, String)>,
 }
 
 impl Routes {
@@ -58,7 +62,28 @@ impl Routes {
             let _ = socket;
             builder.build()
         };
+        let mut cards = HashMap::new();
+        let mut readmes = HashMap::new();
+        for card in &config.model_cards {
+            let mut shown = serde_json::Map::new();
+            for (name, link) in [("page", &card.page), ("benchmarks", &card.benchmarks)] {
+                if !link.is_empty() {
+                    shown.insert(name.into(), Value::from(link.as_str()));
+                }
+            }
+            if let Some(path) = &card.readme {
+                let text = read_readme(path).map_err(|error| {
+                    anyhow::anyhow!("model card readme for {}: {error}", card.id)
+                })?;
+                let key = model_card_key(&card.id);
+                shown.insert("readme".into(), Value::from(key.as_str()));
+                readmes.insert(key, (card.id.clone(), text));
+            }
+            cards.insert(card.id.clone(), Value::Object(shown));
+        }
         Ok(Self {
+            cards,
+            readmes,
             config: config.clone(),
             primary: client(config.upstream_socket.as_deref())?,
             backends: config
@@ -80,6 +105,7 @@ impl Routes {
         let handles: fn(&Backend) -> bool = match (method, path) {
             ("POST", SPEECH_PATH) => |backend| backend.speech,
             ("POST", TRANSCRIPTIONS_PATH) => |backend| backend.transcriptions,
+            ("POST", IMAGE_EDITS_PATH) => |backend| backend.image_edits,
             _ if video_route(method, path) => |backend| backend.video,
             _ => return None,
         };
@@ -142,7 +168,20 @@ impl Routes {
 
     /// Whether `GET /v1/models` comes from the routes instead of a backend.
     pub fn lists_models(&self) -> bool {
-        self.is_routed() || self.config.load_on_demand
+        self.is_routed() || self.config.load_on_demand || !self.cards.is_empty()
+    }
+
+    /// A model entry with its configured card, which replaces one the backend sent.
+    fn with_card(&self, mut model: Value) -> Value {
+        if let Some(card) = model["id"].as_str().and_then(|id| self.cards.get(id)) {
+            model["card"] = card.clone();
+        }
+        model
+    }
+
+    /// The README of the model card with this key, and the model it belongs to.
+    pub fn readme(&self, key: &str) -> Option<&(String, String)> {
+        self.readmes.get(key)
     }
 
     /// The privacy check before a request reaches backend `index`, if it needs one.
@@ -197,7 +236,13 @@ impl Routes {
             *self.managed.lock().unwrap() = Some(snapshot.clone());
             managed = Some(snapshot);
         }
-        let mut data: Vec<Value> = managed.as_ref().map(|s| s.entries()).unwrap_or_default();
+        let mut data: Vec<Value> = managed
+            .as_ref()
+            .map(|s| s.entries())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|entry| self.with_card(entry))
+            .collect();
         if self.is_routed() || managed.is_none() {
             let catalog = self.catalog().await;
             ensure!(
@@ -243,6 +288,7 @@ impl Routes {
                     continue;
                 }
                 catalog.owner.insert(id.to_owned(), index);
+                let model = self.with_card(model);
                 let size = serde_json::to_vec(&model).map_or(usize::MAX, |entry| entry.len());
                 if verified && bytes + size < MODEL_LIST_BYTES {
                     bytes += size + 1;
@@ -284,4 +330,15 @@ impl Routes {
         .await;
         (models, verified)
     }
+}
+
+/// A model card's README: UTF-8 text of at most 32 KiB.
+fn read_readme(path: &Path) -> Result<String> {
+    let size = std::fs::metadata(path)?.len();
+    ensure!(
+        size <= MODEL_CARD_README_BYTES,
+        "the file is larger than 32 KiB"
+    );
+    String::from_utf8(std::fs::read(path)?)
+        .map_err(|_| anyhow::anyhow!("the file is not UTF-8 text"))
 }

@@ -120,12 +120,18 @@ einschließlich Streaming und Tool-Aufrufen.
 | Gateway zu Cloud-Anbietern | Geplant, mit ausdrücklicher Cloud-Betriebsart |
 
 Zu den Inferenzrouten gehören `/v1/models`, `/v1/chat/completions`, `/v1/responses`,
-`/v1/embeddings`, `/v1/images/generations`, Videojobs unter `/v1/videos` und
+`/v1/embeddings`, `/v1/images/generations` und `/v1/images/edits`, Videojobs unter `/v1/videos` und
 Sprachendpunkte unter `/v1/audio` (OpenAI)
 sowie `/v1/messages` (Anthropic, für Claude Code mit eigenem Modell).
 Siehe [unterstützte APIs](docs/REFERENCE.de.md#unterstützte-apis).
 Modellladen, KV-Cache-Speicherung und andere Verwaltungsfunktionen sind separat.
 [API-Konventionen und Open Responses](deploy/BACKENDS.md#api-conventions-and-open-responses).
+
+Chat-, Bild-, Video- und Sprachmodelle sind pro Endpunkt frei wählbar. Der
+jeweilige Dienst muss die passende API und das verwendete Datenformat
+unterstützen. Für PDF und DOCX braucht das Chat- oder Responses-Backend
+Unterstützung für direkt mitgesendete Anhänge. Basalt, MiniMax H3, Audio8,
+Ming und Nemotron sind getestete Beispiele.
 
 **Andere lokale Server:** Standardmäßig verlangt der Host das Datenschutzprofil
 des Backends. Für einen
@@ -234,10 +240,10 @@ Die nativen Varianten bestehen aus einem Programm ohne Installer:
 Windows x64/ARM64, macOS Intel/Apple Silicon und Linux x64/ARM64. Sie starten in
 PowerShell oder einem Terminal und verwenden denselben verschlüsselten Tunnel.
 Ein Doppelklick öffnet außerdem ein lokales Kontrollfeld im Browser: Es fragt
-Relay-Adresse und Kopplungscode ab, verbindet sich selbst und zeigt dann die drei Werte
-für deine KI-App. Kleine Chatfenster im Kontrollfeld probieren das Modell direkt aus;
-ein Chat bleibt nur, solange sein Fenster offen ist, außer du speicherst ihn auf diesem
-Computer. Unter Windows und macOS zeigt ein Symbol in der Taskleiste bzw. Menüleiste
+Relay-Adresse und Kopplungscode ab und öffnet nach dem Verbinden den Chat.
+Unter **Verbindung** findest du die OpenAI-URL, den Schlüssel und die Modell-IDs
+für deine KI-App. Gespeicherte Chattexte liegen auf diesem Computer.
+Unter Windows und macOS zeigt ein Symbol in der Taskleiste bzw. Menüleiste
 den Zustand und bietet Öffnen, Pausieren und Beenden.
 Die portablen Downloads sind unsigniert; Schutzsoftware oder
 Unternehmensrichtlinien können sie blockieren. Der native Betrieb bietet keine

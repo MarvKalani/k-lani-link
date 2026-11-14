@@ -305,19 +305,41 @@ cross that network **unencrypted**; `check` warns about it and about unverified 
 `max_concurrent_requests` is shared by all backends, and model management and its drain
 apply to `upstream` only, so a model switch also waits for requests on other backends.
 
+Multipart requests carry no readable `model`, so each kind goes to one assigned
+backend: `video = true`, `speech = true`, `transcriptions = true` or `image_edits = true`
+in at most one `[[backends]]` entry each; without one, `upstream` takes them.
+
+### Model cards
+
+The control panel shows a **Model card** button next to a model when `host.toml`
+describes it. The links open in the user's browser; the README is read once when the
+host starts (UTF-8 text, at most 32 KiB, absolute path) and shown as plain text.
+
+```toml
+[[model_cards]]
+id = "Qwen3.8-FN-GSQ-RCO-Coder"                  # as GET /v1/models lists it
+page = "https://huggingface.co/example/model"    # optional, https only
+benchmarks = "https://example.org/benchmarks"    # optional, https only
+readme = "/models/Qwen3.8-Coder/README.md"       # optional
+```
+
+The host adds `card` to that model's entry in `GET /v1/models` and answers
+`GET /v1/link/model-cards/{key}` with the README itself; no backend is asked.
+
 ## Supported APIs
 
 Both peers check the protocol crate's route allowlist. Request and response bodies
 pass through unchanged. Video creation and file transcription carry the validated
-multipart `Content-Type` with its boundary. Video status and downloads use a bounded job ID.
+multipart `Content-Type` with its boundary, as do image edits. Video status and downloads use a bounded job ID.
 
 | API | Routes | Typical clients |
 | --- | --- | --- |
 | OpenAI | `GET /v1/models`, `POST /v1/chat/completions`, `/v1/responses`, `/v1/embeddings` | OpenCode, Cline, Continue, Codex with a custom provider |
-| OpenAI Images | `POST /v1/images/generations` | OpenAI-compatible image clients and scripts with a [compatible backend](integrations/comfyui/README.md) |
+| OpenAI Images | `POST /v1/images/generations`, `POST /v1/images/edits` | OpenAI-compatible image clients and scripts with a [compatible backend](integrations/comfyui/README.md); edits upload one or more input images as multipart |
 | OpenAI Videos | `POST /v1/videos`, `GET /v1/videos/{id}`, `GET /v1/videos/{id}/content` | Multipart first-frame upload, job status and MP4 download via the [ComfyUI adapter](integrations/comfyui/README.md#animate-an-image-through-the-link) |
 | OpenAI Audio | `POST /v1/audio/speech`, `POST /v1/audio/transcriptions` | Text-to-speech and file transcription with [NeMo-Speech.cpp](integrations/nemo-speech/README.md) |
 | Anthropic Messages | `POST /v1/messages`, `/v1/messages/count_tokens` | Claude Code via `ANTHROPIC_BASE_URL` |
+| Model cards | `GET /v1/link/model-cards/{key}` | The control panel, for a README the host configures |
 
 The [speech Compose profile](deploy/speech/README.md) runs Audio8, Ming and
 Nemotron. The native client can route audio on-device through `[local_audio.speech]`

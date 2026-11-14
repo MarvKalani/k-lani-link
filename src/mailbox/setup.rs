@@ -37,6 +37,7 @@ pub fn config(options: Options, api_key: String) -> Config {
         resume_seconds: 0,
         backends: vec![],
         local_audio: Default::default(),
+        model_cards: Vec::new(),
     }
 }
 /// Where the host forwards requests. Only the host folder records it.

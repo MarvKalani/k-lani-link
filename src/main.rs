@@ -135,6 +135,9 @@ enum Command {
         /// Use a different private control-panel directory.
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        /// Use the OpenAI URL of a running native client, without opening another tunnel.
+        #[arg(long)]
+        client_config: Option<PathBuf>,
     },
     /// Look for a newer signed release on GitHub and replace this program with it. Running
     /// hosts and clients keep the old version until they are restarted.
@@ -293,6 +296,7 @@ fn main() -> std::process::ExitCode {
             command: Command::Ui {
                 no_open: false,
                 data_dir: None,
+                client_config: None,
             },
         })
     } else {
@@ -704,8 +708,13 @@ async fn run(cli: Cli) -> Result<()> {
             let mut store = k_lani_link::chain_state::Store::open(&options.state_dir, role)?;
             store.revoke()?;
         }
-        Command::Ui { no_open, data_dir } => {
+        Command::Ui {
+            no_open,
+            data_dir,
+            client_config,
+        } => {
             let directory = data_dir.map_or_else(k_lani_link::ui::default_directory, Ok)?;
+            let client = client_config.as_deref().map(Config::load).transpose()?;
             if let Ok(exe) = std::env::current_exe() {
                 k_lani_link::update::tidy(&exe);
             }
@@ -713,7 +722,7 @@ async fn run(cli: Cli) -> Result<()> {
             // panel's "update now" ends it so that the same happens at once.
             let mut installed = k_lani_link::ui::install_staged(&directory);
             if installed.is_none()
-                && k_lani_link::ui::run(directory.clone(), stop, !no_open).await?
+                && k_lani_link::ui::run(directory.clone(), stop, !no_open, client).await?
             {
                 installed = k_lani_link::ui::install_staged(&directory);
             }
@@ -842,6 +851,7 @@ async fn run(cli: Cli) -> Result<()> {
                         resume_seconds: 0,
                         backends: vec![],
                         local_audio: Default::default(),
+                        model_cards: Vec::new(),
                         max_concurrent_requests: 1,
                         max_queued_requests: 0,
                         management_token_file: None,
@@ -875,6 +885,8 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Check { config } => {
             let loaded = Config::load(&config)?;
             let _ = k_lani_link::management::token(&loaded)?;
+            // Reads the model cards' READMEs as the host would at its start.
+            k_lani_link::routing::Routes::new(&loaded)?;
             warn_if_loose(&config);
             warn_if_unverified(&loaded);
             // Explicitly requested by the operator, like --help.

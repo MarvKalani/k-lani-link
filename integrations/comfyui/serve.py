@@ -1,4 +1,4 @@
-"""Serve local MiniMax H3 workflows through the OpenAI Images and Videos APIs."""
+"""Serve local ComfyUI workflows through the OpenAI Images and Videos APIs."""
 
 import argparse
 import base64
@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 
 MODEL = "minimax-h3-image"
 VIDEO_MODEL = "minimax-h3-video"
+HYPERFLOW_MODEL = "hyperflow-h3-flash"
 REQUEST_FIELDS = {"model", "prompt", "size", "n", "seed", "response_format", "output_format"}
 VIDEO_FIELDS = {"model", "prompt", "size", "seconds", "seed", "input_reference"}
 VIDEO_PATH = re.compile(r"/v1/videos/(video_[0-9a-f]{32})(/content)?")
@@ -45,12 +46,13 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class Comfy:
-    def __init__(self, port, timeout, template):
+    def __init__(self, port, timeout, template, release_vram):
         self.origin = f"http://127.0.0.1:{port}"
         self.timeout = timeout
         self.template = template
         self.http = build_opener(ProxyHandler({}), NoRedirect())
         self.running = Lock()
+        self.release_vram = release_vram
 
     def open(self, path, payload=None, timeout=10, content_type="application/json"):
         if isinstance(payload, dict):
@@ -66,6 +68,17 @@ class Comfy:
             raise ApiError(502, "ComfyUI response exceeds the size limit")
         return data
 
+    def release_if_idle(self):
+        if not self.release_vram:
+            return
+        try:
+            queue = json.loads(self.request("/prompt", timeout=2))
+            if queue["exec_info"]["queue_remaining"] == 0:
+                self.request("/free", {"unload_models": True, "free_memory": True}, timeout=2)
+        except (OSError, HTTPException, ValueError, KeyError, TypeError, ApiError):
+            # A cache release must not change the result of a completed render.
+            pass
+
     def generate(self, prompt, width, height, seed):
         if not self.running.acquire(blocking=False):
             raise ApiError(429, "MiniMax H3 Image is busy")
@@ -73,7 +86,9 @@ class Comfy:
             workflow = deepcopy(self.template)
             workflow["4"]["inputs"].update(prompt=prompt, width=width, height=height)
             workflow["6"]["inputs"]["seed"] = seed
-            return self.render(workflow)
+            image = self.render(workflow)
+            self.release_if_idle()
+            return image
         finally:
             self.running.release()
 
@@ -134,7 +149,7 @@ class Comfy:
         return f"{filename} [temp]"
 
 
-def video_request(content_type, body):
+def video_request(content_type, body, models):
     if "\r" in content_type or "\n" in content_type:
         raise ApiError(400, "invalid multipart video upload")
     headers = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("ascii")
@@ -155,7 +170,8 @@ def video_request(content_type, body):
             if len(value) > MAX_REQUEST_BYTES:
                 raise ApiError(400, "video text field is too large")
             fields[name] = value.decode("utf-8")
-    if fields.get("model", VIDEO_MODEL) != VIDEO_MODEL:
+    model = fields.get("model", VIDEO_MODEL)
+    if model not in models:
         raise ApiError(404, "model not found")
     prompt = fields.get("prompt", "")
     if not prompt.strip():
@@ -181,24 +197,24 @@ def video_request(content_type, body):
         extension = "jpg"
     else:
         raise ApiError(400, "input_reference must be an uploaded PNG or JPEG")
-    return prompt, width, height, int(seconds), seed, image, extension
+    return model, prompt, width, height, int(seconds), seed, image, extension
 
 
 class VideoJobs:
-    def __init__(self, comfy, template):
+    def __init__(self, comfy, templates):
         self.comfy = comfy
-        self.template = template
+        self.templates = templates
         self.lock = Lock()
         self.jobs = {}
 
-    def create(self, prompt, width, height, seconds, seed, image, extension):
+    def create(self, model, prompt, width, height, seconds, seed, image, extension):
         prompt_id = uuid4()
         job_id = f"video_{prompt_id.hex}"
         now = int(time.time())
         job = {
             "id": job_id,
             "object": "video",
-            "model": VIDEO_MODEL,
+            "model": model,
             "status": "queued",
             "progress": 0,
             "created_at": now,
@@ -212,11 +228,12 @@ class VideoJobs:
                 raise ApiError(429, "video job limit reached")
             self.jobs[job_id] = job
         try:
-            workflow = deepcopy(self.template)
+            workflow = deepcopy(self.templates[model])
             workflow["5"]["inputs"]["image"] = self.comfy.upload_reference(job_id, image, extension)
             # H3's trained range starts near five seconds. Render enough frames for the trim.
             workflow["7"]["inputs"].update(prompt=prompt, width=width, height=height, length=max(124, seconds * 24))
-            workflow["9"]["inputs"]["seed"] = seed
+            noise = workflow["9"]["inputs"]
+            noise["noise_seed" if model == HYPERFLOW_MODEL else "seed"] = seed
             workflow["13"]["inputs"]["trim"]["trim"]["duration"] = float(seconds)
             if self.comfy.submit(workflow, str(prompt_id)) != str(prompt_id):
                 raise ApiError(502, "ComfyUI returned an unexpected video job ID")
@@ -339,12 +356,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self.local_request():
             return self.failure(403, "local requests only")
         if self.path == "/v1/models":
+            data = []
+            if self.server.comfy.template is not None:
+                data.append({"id": MODEL, "object": "model", "created": 0, "owned_by": "local", "capability": "image"})
+            data.extend(
+                {"id": model, "object": "model", "created": 0, "owned_by": "local",
+                 "capability": "video", "requires_input_reference": True}
+                for model in self.server.videos.templates
+            )
             return self.respond(200, {
                 "object": "list",
-                "data": [
-                    {"id": model, "object": "model", "created": 0, "owned_by": "local"}
-                    for model in (MODEL, VIDEO_MODEL)
-                ],
+                "data": data,
             })
         video = VIDEO_PATH.fullmatch(self.path)
         if video is None:
@@ -371,12 +393,13 @@ class Handler(BaseHTTPRequestHandler):
                 shutil.copyfileobj(upstream, self.wfile, length=64 * 1024)
             except (HTTPException, OSError):
                 pass
+        self.server.comfy.release_if_idle()
 
     def do_POST(self):
         if not self.local_request():
             return self.failure(403, "local requests only")
         video = self.path == "/v1/videos"
-        if not video and self.path != "/v1/images/generations":
+        if not video and (self.path != "/v1/images/generations" or self.server.comfy.template is None):
             return self.failure(404, "route not available")
         media_type = "multipart/form-data" if video else "application/json"
         if self.headers.get_content_type() != media_type:
@@ -391,7 +414,10 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(length)
             if len(body) != length:
                 raise ValueError
-            args = video_request(self.headers["Content-Type"], body) if video else image_request(json.loads(body))
+            args = (
+                video_request(self.headers["Content-Type"], body, self.server.videos.templates)
+                if video else image_request(json.loads(body))
+            )
         except ApiError as error:
             return self.failure(error.status, str(error))
         except (ValueError, TimeoutError):
@@ -415,17 +441,30 @@ def main():
     parser.add_argument("--port", type=int, default=8190)
     parser.add_argument("--comfy-port", type=int, default=8188)
     parser.add_argument("--timeout", type=int, default=540, help="render deadline in seconds")
+    parser.add_argument("--release-vram", action="store_true", help="release idle ComfyUI GPU memory after returning media")
+    parser.add_argument("--hyperflow-model", help="HyperFlow FL2VA checkpoint filename in ComfyUI's diffusion_models folder")
+    parser.add_argument("--disable-h3", action="store_true", help="disable MiniMax H3 and its video derivatives")
     args = parser.parse_args()
+    if args.disable_h3 and args.hyperflow_model:
+        parser.error("--disable-h3 and --hyperflow-model cannot be combined")
     if not (1 <= args.port <= 65535 and 1 <= args.comfy_port <= 65535):
         parser.error("ports must be between 1 and 65535")
     if args.port == args.comfy_port or args.timeout < 1:
         parser.error("use distinct ports and a positive timeout")
-    image = json.loads(Path(__file__).with_name("minimax-h3-image.json").read_text(encoding="utf-8"))
-    video = json.loads(Path(__file__).with_name("minimax-h3-video.json").read_text(encoding="utf-8"))
+    def load_workflow(name):
+        return json.loads(Path(__file__).with_name(name).read_text(encoding="utf-8"))
+
+    image = None if args.disable_h3 else load_workflow("minimax-h3-image.json")
+    videos = {} if args.disable_h3 else {VIDEO_MODEL: load_workflow("minimax-h3-video.json")}
+    if args.hyperflow_model:
+        hyperflow = load_workflow("hyperflow-h3-flash-video.json")
+        hyperflow["1"]["inputs"]["unet_name"] = args.hyperflow_model
+        videos[HYPERFLOW_MODEL] = hyperflow
     with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
-        server.comfy = Comfy(args.comfy_port, args.timeout, image)
-        server.videos = VideoJobs(server.comfy, video)
-        print(f"Serving {MODEL} and {VIDEO_MODEL} on http://127.0.0.1:{args.port}/v1", flush=True)
+        server.comfy = Comfy(args.comfy_port, args.timeout, image, args.release_vram)
+        server.videos = VideoJobs(server.comfy, videos)
+        served = [MODEL, *videos] if image is not None else []
+        print(f"ComfyUI adapter on http://127.0.0.1:{args.port}/v1 ({', '.join(served) or 'no models'})", flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:

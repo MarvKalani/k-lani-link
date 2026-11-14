@@ -1,18 +1,20 @@
 'use strict';
-// Chat windows. Each window is its own conversation and lives in this page until it is closed,
-// unless the user saves it: then the panel keeps it in its private folder on this computer.
+// Conversations stay in this page. The panel writes a private copy when the user saves one.
 // Model output is only ever shown as text, never as markup.
-const chatLayer = document.createElement('div');
-chatLayer.id = 'chats';
-document.body.append(chatLayer);
+const chatLayer = byId('chats');
 const chats = new Map();
 const efforts = ['', 'none', 'low', 'medium', 'high'];
 // The panel stores up to 120 characters; the page offers fewer.
 const TITLE_CHARS = 80;
-let chatFront = 10;
-let chatCount = 0;
+let activeChat = null;
+let initialChatOpened = false;
 let savedLoaded = false;
 let reading = null;
+const mediaNames = {
+  'minimax-h3-image': 'MiniMax H3 Image',
+  'minimax-h3-video': 'MiniMax H3 Turbo',
+  'hyperflow-h3-flash': 'HyperFlow H3 Flash'
+};
 
 function el(tag, className, text) {
   const element = document.createElement(tag);
@@ -46,6 +48,7 @@ function confirmed(button, question, work) {
 }
 // "/models/Name-Q8_0.gguf" → "Name-Q8_0"
 const short = (model) => model.replace(/^.*[\\/]/, '').replace(/\.gguf(@\d+)?$/i, '$1');
+const modelLabel = (id) => Object.hasOwn(mediaNames, id) ? mediaNames[id] : short(id);
 const thousands = (n) => n >= 10000 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 
 /* ---- saved chats in the panel ---- */
@@ -58,102 +61,162 @@ async function listSaved() {
   let value;
   try { value = await chatApi('GET', 'chats'); } catch { savedLoaded = false; return; }
   const list = byId('chat-list');
-  list.replaceChildren(...value.chats.map((saved) => {
+  const savedChats = value.chats.filter((saved) => !chats.has(saved.id));
+  list.replaceChildren(...savedChats.map((saved) => {
     const row = el('li');
-    const open = el('button', 'link', saved.title || t('chatUntitled')); open.type = 'button';
+    const open = el('button', 'chat-list-title', saved.title || t('chatUntitled')); open.type = 'button';
     open.addEventListener('click', () => reopen(saved.id));
-    const when = el('small', '', (saved.updated ? new Date(saved.updated).toLocaleString(language, { dateStyle: 'short', timeStyle: 'short' }) + ' · ' : '') + saved.messages + ' ' + t('chatMessages'));
-    const remove = el('button', 'secondary small', t('chatDelete')); remove.type = 'button';
+    const remove = el('button', 'chat-delete', t('chatDelete')); remove.type = 'button';
     remove.addEventListener('click', () => confirmed(remove, t('chatSure'), async () => {
       try { await chatApi('DELETE', 'chats/' + saved.id); } catch (cause) { error(cause.message); }
       const chat = chats.get(saved.id);
       if (chat) { chat.saved = false; chat.view.mark(); }
       listSaved();
     }));
-    row.append(open, when, remove);
+    row.append(open, remove);
     return row;
   }));
-  byId('chat-where').textContent = t('chatWhere') + ' ' + value.directory;
-  byId('chat-empty').hidden = value.chats.length > 0;
-  byId('chat-open-hint').hidden = !value.chats.length;
+  byId('chat-saved').hidden = !savedChats.length;
 }
 async function reopen(id) {
   if (chats.has(id)) { front(chats.get(id)); return; }
-  try { openChat({ ...(await chatApi('GET', 'chats/' + id)), id, saved: true }); } catch (cause) { error(cause.message); }
+  try { openChat({ ...(await chatApi('GET', 'chats/' + id)), id, saved: true }); listSaved(); } catch (cause) { error(cause.message); }
 }
-byId('chat-new').addEventListener('click', () => openChat());
+byId('chat-new').addEventListener('click', () => {
+  if (activeChat && !activeChat.title && !hasUnsavedWork(activeChat)) activeChat.view.input.focus();
+  else openChat();
+});
+const historyToggle = byId('history-toggle');
+const chatHistoryList = byId('chat-history');
+function showHistory(show) {
+  chatHistoryList.hidden = !show;
+  historyToggle.setAttribute('aria-expanded', String(show));
+}
+historyToggle.addEventListener('click', () => showHistory(chatHistoryList.hidden));
+if (matchMedia('(max-width: 700px)').matches) showHistory(false);
+
+function startChat() {
+  if (!initialChatOpened && !chats.size) openChat({}, false);
+  initialChatOpened = true;
+}
+
+function renderOpenChats() {
+  const items = [...chats.values()].map((chat) => {
+    const row = el('li');
+    const item = el('button', 'chat-list-title', chat.title || t('chatUntitled'));
+    item.type = 'button';
+    item.setAttribute('aria-current', String(chat === activeChat));
+    item.addEventListener('click', () => front(chat));
+    row.append(item);
+    return row;
+  });
+  byId('chat-open-list').replaceChildren(...items);
+  byId('chat-idle').hidden = items.length > 0;
+}
 
 /* ---- one window ---- */
-function openChat(data = {}) {
+// A window is a text conversation. Images and videos have their own tabs (studio.js).
+function openChat(data = {}, focus = true) {
   const chat = {
     id: data.id || chatId(), title: data.title || '', created: data.created || Date.now(), updated: data.updated || 0,
     saved: !!data.saved, model: data.model || '', effort: data.effort || '',
-    messages: Array.isArray(data.messages) ? data.messages : [], busy: null
+    messages: Array.isArray(data.messages) ? data.messages.filter((message) =>
+      ['user', 'assistant', 'error'].includes(message?.role) && typeof message.content === 'string') : [],
+    busy: null
   };
   chats.set(chat.id, chat);
-  const box = el('div', 'chat'); box.setAttribute('role', 'dialog');
+  const box = el('article', 'chat');
   const bar = el('div', 'chat-bar');
   const title = el('span', 'chat-title');
-  const rename = el('button', 'chat-rename', '✎'); rename.type = 'button';
   const save = el('button', 'chat-save'); save.type = 'button';
-  const close = el('button', 'chat-close', '×'); close.type = 'button';
-  bar.append(title, rename, save, close);
+  // Dictation and read-aloud settings live in one place per window, not on every answer.
+  const speech = el('details', 'chat-menu');
+  const speechLabel = el('summary');
+  const speechMenu = el('div', 'chat-popover chat-speech-menu');
+  speech.append(speechLabel, speechMenu);
+  const conversation = el('details', 'chat-menu');
+  const conversationLabel = el('summary');
+  const conversationMenu = el('div', 'chat-popover chat-tool-menu');
+  const rename = el('button', 'chat-tool'); rename.type = 'button';
+  const close = el('button', 'chat-close'); close.type = 'button';
+  conversationMenu.append(rename, close);
+  conversation.append(conversationLabel, conversationMenu);
+  bar.append(title, save, speech, conversation);
   const log = el('div', 'chat-log'); log.setAttribute('role', 'log');
-  const note = el('p', 'chat-note');
+  const thread = el('div', 'chat-thread'); log.append(thread);
   const form = el('form', 'chat-form');
-  const options = el('div', 'chat-options');
-  const modelName = el('span'), modelLabel = el('label'); modelLabel.append(modelName);
-  const model = el('select'); modelLabel.append(model);
+  const modelName = el('span'), modelField = el('label'); modelField.append(modelName);
+  const model = el('select'); modelField.append(model);
   const effortName = el('span'), effortLabel = el('label'); effortLabel.append(effortName);
   const effort = el('select'); effortLabel.append(effort);
   effort.replaceChildren(...efforts.map((level) => new Option('', level)));
   effort.value = chat.effort;
-  options.append(modelLabel, effortLabel);
+  const card = cardButton(model);
+  modelField.append(card.button);
+  const options = el('div', 'chat-options');
+  options.append(modelField, effortLabel);
   const input = el('textarea'); input.rows = 2;
   const send = el('button', 'chat-send'); send.type = 'submit';
   const audio = chatAudio(input);
-  form.append(options, input, send, audio.element);
-  box.append(bar, log, note, form);
+  const voice = chatVoice();
+  speechMenu.append(audio.preference, voice.element);
+  const sendRow = el('div', 'chat-send-row');
+  sendRow.append(options, audio.element, send);
+  const composer = el('div', 'chat-composer');
+  composer.append(input, sendRow, audio.status);
+  form.append(composer);
+  box.append(bar, log, form);
+  const menus = [speech, conversation];
+  for (const menu of menus) {
+    menu.addEventListener('toggle', () => {
+      if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
+    });
+    menu.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && menu.open) { menu.open = false; menu.querySelector('summary').focus(); }
+    });
+    menu.addEventListener('focusout', (event) => {
+      if (menu.open && event.relatedTarget && !menu.contains(event.relatedTarget)) menu.open = false;
+    });
+  }
   chat.view = {
-    box, log, input, model, effort, send, cancelAudio: audio.cancel,
+    box, log: thread, scroller: log, input, model, effort, send, voice,
+    cancelAudio: audio.cancel,
+    mode() {
+      audio.element.hidden = !audio.select.options.length;
+      speech.hidden = audio.preference.hidden && voice.element.hidden;
+      send.textContent = t(chat.busy ? 'chatStop' : 'chatSend');
+    },
+    catalog() {
+      audio.relabel(); voice.relabel(); fillModels(chat); card.update();
+    },
     // The texts that change only with the language.
     relabel() {
       close.title = t('chatClose'); close.setAttribute('aria-label', t('chatClose'));
+      if (!close.dataset.sure) close.textContent = t('chatClose');
       rename.title = t('chatRenameHint'); rename.setAttribute('aria-label', t('chatRename'));
+      rename.textContent = t('chatRename');
+      conversationLabel.textContent = t('chatActions');
+      speechLabel.textContent = t('chatSpeech');
       modelName.textContent = t('chatModel'); effortName.textContent = t('chatEffort');
+      input.setAttribute('aria-label', t('chatMessage'));
+      input.placeholder = t('chatPlaceholder');
       for (const option of effort.options) option.textContent = t(option.value ? 'effort_' + option.value : 'effortAuto');
-      input.placeholder = t('chatPlaceholder'); send.textContent = t(chat.busy ? 'chatStop' : 'chatSend');
-      audio.relabel();
+      this.catalog(); this.mode();
     },
     mark() {
       title.textContent = chat.title || t('chatUntitled'); box.setAttribute('aria-label', title.textContent);
       save.textContent = chat.saved ? '✓ ' + t('chatIsSaved') : t('chatSave'); save.setAttribute('aria-pressed', String(chat.saved));
       save.title = chat.saved ? t('chatUnsaveHint') : t('chatSaveHint');
-      note.textContent = t(chat.saved ? 'chatKept' : 'chatLoose');
+      save.hidden = !chat.saved && !chat.messages.some((message) => message.role === 'user');
     }
   };
-  fillModels(chat);
-  model.addEventListener('focus', () => { fillModels(chat); freshModels(); });
+  for (const control of [model, audio.select, voice.select]) control.addEventListener('focus', freshModels);
   chat.view.relabel();
   chat.view.mark();
   draw(chat);
 
-  const narrow = () => matchMedia('(max-width: 640px)').matches;
   chatLayer.append(box);
-  const step = (chatCount++ % 6) * 28;
-  place(box, innerWidth - box.offsetWidth - 24 - step, 24 + step);
-  front(chat);
-  input.focus();
-
-  box.addEventListener('pointerdown', () => front(chat));
-  bar.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('button, input') || narrow()) return;
-    const start = box.getBoundingClientRect(), dx = event.clientX - start.left, dy = event.clientY - start.top;
-    bar.setPointerCapture(event.pointerId);
-    const move = (next) => place(box, next.clientX - dx, next.clientY - dy);
-    const end = () => { bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', end); bar.removeEventListener('pointercancel', end); };
-    bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
-  });
+  front(chat, focus);
   // The title becomes a text field; Enter or leaving it keeps the new title, Escape the old one.
   const renaming = () => {
     if (bar.querySelector('.chat-title-input')) return;
@@ -166,7 +229,7 @@ function openChat(data = {}) {
       const next = field.value.replace(/\s+/g, ' ').trim().slice(0, TITLE_CHARS);
       field.replaceWith(title);
       if (!keep || !next || next === chat.title) return;
-      chat.title = next; chat.view.mark();
+      chat.title = next; chat.view.mark(); renderOpenChats();
       if (chat.saved) { chat.updated = Date.now(); store(chat); }
     };
     field.addEventListener('keydown', (event) => {
@@ -177,23 +240,33 @@ function openChat(data = {}) {
     title.replaceWith(field);
     field.focus(); field.select();
   };
-  rename.addEventListener('click', renaming);
+  rename.addEventListener('click', () => { conversation.open = false; renaming(); });
   title.addEventListener('dblclick', renaming);
-  close.addEventListener('click', () => {
+  function closeChat() {
     audio.cancel();
     if (reading && box.contains(reading.button)) stopReading();
     if (chat.busy) chat.busy.abort();
     chats.delete(chat.id); box.remove();
+    front([...chats.values()].at(-1) || null);
+    if (chat.saved) listSaved();
+    if (!activeChat) byId('chat-new').focus();
+  }
+  close.addEventListener('click', () => {
+    if (hasUnsavedWork(chat)) confirmed(close, t('chatConfirmClose'), closeChat);
+    else closeChat();
   });
   save.addEventListener('click', () => {
     if (!chat.saved) { chat.saved = true; chat.view.mark(); store(chat); return; }
     confirmed(save, t('chatUnsave'), async () => {
-      try { await chatApi('DELETE', 'chats/' + chat.id); chat.saved = false; } catch (cause) { note.textContent = cause.message; }
+      try { await chatApi('DELETE', 'chats/' + chat.id); chat.saved = false; } catch (cause) { error(cause.message); }
       chat.view.mark(); listSaved();
     });
   });
   input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      if (!chat.busy) form.requestSubmit();
+    }
   });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight + 4, 180) + 'px'; });
   form.addEventListener('submit', (event) => {
@@ -205,44 +278,76 @@ function openChat(data = {}) {
     tidy(chat);
     chat.messages.push({ role: 'user', content: text });
     // Only an untitled chat is named after its first message; a title set by hand stays.
-    if (!chat.title) { chat.title = text.replace(/\s+/g, ' ').slice(0, 48); chat.view.mark(); }
+    nameChat(chat, text);
     input.value = ''; input.style.height = '';
     answer(chat);
   });
   return chat;
 }
+// A click outside an open window menu closes it.
+document.addEventListener('click', (event) => {
+  for (const menu of document.querySelectorAll('.chat-menu[open]')) if (!menu.contains(event.target)) menu.open = false;
+});
 
-function chatAudio(input) {
+function nameChat(chat, text) {
+  if (!chat.title) {
+    chat.title = text.replace(/\s+/g, ' ').slice(0, 48);
+    renderOpenChats();
+  }
+  chat.view.mark();
+}
+
+// Dictation into `input`. `long` (the audio tab) records up to fifteen minutes and keeps
+// browser recognition running until it is stopped.
+function chatAudio(input, long = false) {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const element = el('div', 'chat-audio');
-  const dictate = el('button', 'link'); dictate.type = 'button';
+  const dictate = el('button', 'secondary'); dictate.type = 'button';
+  const preference = el('label');
+  const name = el('span');
   const mode = el('select', 'chat-audio-mode');
-  const local = new Option('', 'local'), online = new Option('', 'online');
-  mode.replaceChildren(local, online);
   const status = el('span', 'chat-audio-status'); status.setAttribute('role', 'status');
   const supportsLocal = Recognition && 'processLocally' in Recognition.prototype
     && typeof Recognition.available === 'function';
-  element.hidden = !Recognition || !window.isSecureContext;
-  element.append(mode, dictate, status);
-  let current = null, pending = false, statusKey = '', attempt = 0;
+  const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder && window.AudioContext && window.OfflineAudioContext);
+  preference.append(name, mode);
+  element.append(dictate);
+  let current = null, recording = null, stopRecording = null, pending = false, statusKey = '', attempt = 0;
 
-  function report(key) {
+  function report(key, text) {
     statusKey = key;
-    status.textContent = key ? t(key) : '';
+    status.textContent = text || (key ? t(key) : '');
+    status.hidden = !key;
+    status.removeAttribute('title');
   }
   function relabel() {
-    local.textContent = t('chatDictateLocal');
-    online.textContent = t('chatDictateOnline');
+    const choices = Recognition ? [
+      { value: 'local', label: t('chatDictateLocal') }, { value: 'online', label: t('chatDictateOnline') }
+    ] : [];
+    if (canRecord) for (const model of modelsFor('transcription')) {
+      choices.push({ value: 'link:' + model.id, label: t(model.local ? 'chatLocalAudio' : 'chatDictateLink').replace('{model}', short(model.id)) });
+    }
+    const linked = choices.find((item) => item.value.startsWith('link:'))?.value;
+    // The audio tab also reads files, which only a Link model does.
+    const preferred = (long && linked) || (supportsLocal ? 'local' : linked || 'online');
+    fillChoices(mode, window.isSecureContext ? choices : [], preferred);
+    // Models arrive after the first fill: until the user picks, the preferred choice wins.
+    if (!mode.dataset.chosen && [...mode.options].some((option) => option.value === preferred)) mode.value = preferred;
+    preference.hidden = !mode.options.length;
+    name.textContent = t('chatDictateMode');
     mode.setAttribute('aria-label', t('chatDictateMode'));
-    dictate.textContent = t(current ? 'chatDictateStop' : 'chatDictate');
-    dictate.disabled = pending || mode.value === 'local' && !supportsLocal;
-    mode.disabled = pending || !!current;
+    dictate.textContent = t(current || stopRecording ? 'chatDictateStop' : 'chatDictate');
+    dictate.disabled = pending && !stopRecording || mode.value === 'local' && !supportsLocal;
+    mode.disabled = pending || !!current || !!recording;
     if (Recognition && mode.value === 'local' && !supportsLocal) report('chatDictateUnavailable');
-    else if (mode.value === 'online' && !statusKey) report('chatDictateDisclosure');
-    else report(statusKey);
+    else report(statusKey === 'chatDictateUnavailable' && mode.value !== 'local' ? '' : statusKey);
   }
   function cancel() {
     attempt++;
+    if (recording) {
+      recording.abort(); recording = null; stopRecording = null; pending = false;
+      report(''); relabel();
+    }
     if (current) {
       const recognition = current;
       current = null;
@@ -251,13 +356,60 @@ function chatAudio(input) {
       relabel();
     }
   }
+  function appendTranscript(text) {
+    if (!text) return;
+    input.value += (input.value && !/\s$/.test(input.value) ? ' ' : '') + text;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }
+  function stopOtherAudio() {
+    for (const chat of chats.values()) {
+      if (!chat.view.box.contains(element)) chat.view.cancelAudio();
+    }
+    stopReading();
+  }
+  async function linkDictation(model) {
+    stopOtherAudio();
+    const controller = new AbortController();
+    recording = controller; pending = true; relabel();
+    const lang = document.documentElement.lang === 'de' ? 'de' : 'en';
+    try {
+      const blob = await recordMicrophone(controller.signal, (stop) => {
+        stopRecording = stop; report('chatDictateListening'); relabel();
+      }, long ? { seconds: MAX_AUDIO_SECONDS, bytes: 60 * MiB } : undefined);
+      controller.signal.throwIfAborted();
+      stopRecording = null; report('chatDictateTranscribing'); relabel();
+      if (blob.size) {
+        const text = await transcribeAudio(blob, model, lang, controller.signal, (piece, pieces) => {
+          if (pieces > 1) report('chatDictateTranscribing', t('listenPart').replace('{i}', piece).replace('{n}', pieces));
+        });
+        controller.signal.throwIfAborted();
+        if (!text) { report('chatDictateNoText'); return; }
+        appendTranscript(text);
+      } else { report('chatDictateNoText'); return; }
+      if (recording === controller) report('');
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        report('chatDictateFailed');
+        if (cause.name !== 'NotAllowedError' && cause.name !== 'NotFoundError') status.title = cause.message;
+      }
+    } finally {
+      if (recording === controller) { recording = null; stopRecording = null; pending = false; relabel(); }
+    }
+  }
   mode.addEventListener('change', () => {
-    report(mode.value === 'online' ? 'chatDictateDisclosure' : '');
+    mode.dataset.chosen = '1';
+    report('');
     relabel();
   });
   dictate.addEventListener('click', async () => {
+    if (stopRecording) { stopRecording(); return; }
     if (current) {
       try { current.stop(); } catch { cancel(); }
+      return;
+    }
+    if (mode.value.startsWith('link:')) {
+      await linkDictation(mode.value.slice(5));
       return;
     }
     const run = ++attempt;
@@ -282,21 +434,16 @@ function chatAudio(input) {
         return;
       }
       if (!element.isConnected || run !== attempt) return;
-      for (const chat of chats.values()) {
-        if (!chat.view.box.contains(element)) chat.view.cancelAudio();
-      }
-      stopReading();
+      stopOtherAudio();
       const recognition = new Recognition();
       if ('processLocally' in recognition) recognition.processLocally = onDevice;
       recognition.lang = language;
+      recognition.continuous = long;
       recognition.onresult = (event) => {
         if (current !== recognition) return;
         const text = Array.from(event.results).slice(event.resultIndex).filter((result) => result.isFinal)
           .map((result) => result[0].transcript.trim()).filter(Boolean).join(' ');
-        if (!text) return;
-        input.value += (input.value && !/\s$/.test(input.value) ? ' ' : '') + text;
-        input.dispatchEvent(new Event('input'));
-        input.focus();
+        appendTranscript(text);
       };
       recognition.onerror = (event) => {
         if (current === recognition && event.error !== 'aborted') report('chatDictateFailed');
@@ -318,34 +465,112 @@ function chatAudio(input) {
       relabel();
     }
   });
-  return { element, relabel, cancel };
+  return { element, relabel, cancel, select: mode, preference, status, busy: () => !!(current || recording) };
 }
 
-window.addEventListener('pagehide', () => {
-  for (const chat of chats.values()) chat.view.cancelAudio();
+window.addEventListener('pagehide', (event) => {
+  for (const chat of chats.values()) {
+    chat.view.cancelAudio();
+    if (chat.busy) chat.busy.abort();
+  }
   stopReading();
 });
 
+function chatVoice() {
+  const element = el('div', 'chat-voice');
+  const modelLabel = el('label'), modelName = el('span'), select = el('select');
+  modelLabel.append(modelName, select);
+  const voiceLabel = el('label'), voiceName = el('span'), voice = el('input');
+  voice.type = 'text'; voice.maxLength = 128; voice.autocomplete = 'off';
+  const names = el('datalist'); names.id = 'voices-' + chatId();
+  voice.setAttribute('list', names.id);
+  voiceLabel.append(voiceName, voice, names);
+  element.append(modelLabel, voiceLabel);
+  const browserVoice = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  function selectVoice() {
+    const model = modelsFor('speech').find((item) => 'link:' + item.id === select.value);
+    const choices = model?.voices || [];
+    names.replaceChildren(...choices.map((value) => new Option(value, value)));
+    voice.value = choices[0] || 'alloy';
+    voiceLabel.hidden = !model;
+  }
+  function relabel() {
+    const previous = select.value;
+    const choices = browserVoice ? [{ value: 'browser', label: t('chatBrowserVoice') }] : [];
+    for (const model of modelsFor('speech')) {
+      const label = short(model.id);
+      choices.push({ value: 'link:' + model.id, label: model.local ? t('chatLocalAudio').replace('{model}', label) : label });
+    }
+    fillChoices(select, choices);
+    element.hidden = !choices.length;
+    modelName.textContent = t('chatVoice'); voiceName.textContent = t('chatVoiceName');
+    if (previous !== select.value || !voice.value) selectVoice();
+  }
+  select.addEventListener('change', () => { stopReading(); selectVoice(); });
+  return { element, select, voice, relabel };
+}
+
 function stopReading() {
   if (!reading) return;
-  const { button } = reading;
+  const previous = reading;
   reading = null;
-  window.speechSynthesis.cancel();
-  button.textContent = t('chatReadAloud');
+  previous.stop();
+  previous.button.textContent = t('chatReadAloud');
 }
-function readAloud(message, button) {
+
+async function readAloud(message, button, voiceSelection) {
   const wasReading = reading?.button === button;
   stopReading();
   if (wasReading) return;
+  const input = split(message).content;
+  const status = button.parentElement?.querySelector('.msg-audio-status');
+  const report = (text) => { if (status) status.textContent = text; };
+  report('');
+  for (const chat of chats.values()) chat.view.cancelAudio();
+  if (voiceSelection?.select.value.startsWith('link:')) {
+    const controller = new AbortController(), audio = new Audio();
+    let url;
+    const playback = {
+      button,
+      stop() {
+        controller.abort(); audio.pause(); audio.removeAttribute('src');
+        if (url) URL.revokeObjectURL(url);
+        report('');
+      }
+    };
+    reading = playback;
+    button.textContent = t('chatReadStop');
+    try {
+      const response = await requestSpeech({
+        model: voiceSelection.select.value.slice(5), input, voice: voiceSelection.voice.value.trim(), response_format: 'wav'
+      }, controller.signal, () => report(t('chatSpeechWaiting')));
+      const blob = await mediaBlob(response, 32 * MiB);
+      controller.signal.throwIfAborted();
+      if (!/^audio\/(wav|wave|x-wav|mpeg|ogg|mp4|flac)(?:;|$)/.test(blob.type) || !blob.size) {
+        throw new Error(t('chatAudioFailed'));
+      }
+      url = URL.createObjectURL(blob);
+      report('');
+      audio.onended = () => { if (reading === playback) stopReading(); };
+      audio.onerror = () => {
+        if (reading === playback) { stopReading(); report(t('chatAudioFailed')); }
+      };
+      audio.src = url;
+      await audio.play();
+    } catch (cause) {
+      if (reading === playback) { stopReading(); report(cause.message || t('chatAudioFailed')); }
+    }
+    return;
+  }
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
   const language = document.documentElement.lang.split(/[-_]/)[0].toLowerCase();
   const voice = window.speechSynthesis.getVoices().find((voice) =>
     voice.localService && voice.lang.split(/[-_]/)[0].toLowerCase() === language);
   if (!voice) { button.textContent = t('chatNoLocalVoice'); return; }
-  for (const chat of chats.values()) chat.view.cancelAudio();
-  const utterance = new SpeechSynthesisUtterance(split(message).content);
+  const utterance = new SpeechSynthesisUtterance(input);
   utterance.voice = voice;
   utterance.lang = voice.lang;
-  reading = { utterance, button };
+  reading = { utterance, button, stop: () => window.speechSynthesis.cancel() };
   button.textContent = t('chatReadStop');
   utterance.onend = utterance.onerror = () => {
     if (reading?.utterance !== utterance) return;
@@ -358,40 +583,63 @@ function readAloud(message, button) {
     stopReading();
   }
 }
-function place(box, x, y) {
-  box.style.left = Math.min(Math.max(x, 60 - box.offsetWidth), innerWidth - 60) + 'px';
-  box.style.top = Math.min(Math.max(y, 0), innerHeight - 40) + 'px';
-}
-function front(chat) {
-  for (const other of chats.values()) other.view.box.classList.toggle('front', other === chat);
-  chat.view.box.style.zIndex = String(++chatFront);
+function front(chat, focus = true) {
+  if (activeChat && chat !== activeChat) {
+    activeChat.view.cancelAudio();
+    if (reading && activeChat.view.box.contains(reading.button)) stopReading();
+  }
+  activeChat = chat;
+  for (const other of chats.values()) other.view.box.hidden = other !== chat;
+  renderOpenChats();
+  if (matchMedia('(max-width: 700px)').matches) showHistory(false);
+  if (chat && focus) chat.view.input.focus();
 }
 // The connection's models, plus the one this chat last used if it is not among them.
 function fillModels(chat) {
-  const select = chat.view.model, chosen = select.value || chat.model;
-  const list = [...(models || [])];
-  if (chosen && !list.includes(chosen)) list.push(chosen);
-  select.replaceChildren(...(list.length ? list.map((id) => new Option(short(id), id)) : [new Option(t('chatDefaultModel'), '')]));
-  select.value = chosen && list.includes(chosen) ? chosen : list[0] || '';
+  const v = chat.view;
+  const capability = new Map(modelCatalog.map((model) => [model.id, model.capability]));
+  const chatModel = (id) => !capability.get(id) || capability.get(id) === 'chat';
+  const list = (models || []).filter(chatModel);
+  if (chat.model && chatModel(chat.model) && !list.includes(chat.model)) list.push(chat.model);
+  fillChoices(v.model, list.length ? list.map((id) => ({ value: id, label: modelLabel(id) })) : [{ value: '', label: t('chatDefaultModel') }], chat.model);
+  v.mode(); v.mark();
 }
 // A model loaded on the model computer later shows up when a model list is opened again.
 let modelsAsked = 0;
 async function freshModels() {
   if (Date.now() - modelsAsked < 15000) return;
   modelsAsked = Date.now();
-  try { const list = (await api('test', {})).models; if (list.length) { models = list; chatModels(); } } catch { /* the ready step shows the problem */ }
+  try {
+    const result = await api('test', {});
+    models = result.models; modelCatalog = result.catalog || [];
+    chatModels();
+  } catch { /* the ready step shows the problem */ }
 }
 // The model list arrives with the connection test, after a window may have opened.
 // Open windows whose conversation would be lost by a restart.
-function unsavedChats() { return [...chats.values()].filter((chat) => !chat.saved && chat.messages.length).length; }
-function chatModels() { for (const chat of chats.values()) fillModels(chat); }
+function hasUnsavedWork(chat) {
+  return (!chat.saved && chat.messages.length > 0) || !!chat.view.input.value.trim();
+}
+// Open windows and studio results that a restart would lose.
+function unsavedChats() {
+  return [...chats.values()].filter(hasUnsavedWork).length + (typeof studioUnsaved === 'function' ? studioUnsaved() : 0);
+}
+function chatModels() {
+  for (const chat of chats.values()) {
+    chat.view.catalog();
+    if (!chat.busy && !(reading && chat.view.log.contains(reading.button))) draw(chat);
+  }
+  if (typeof studioModels === 'function') studioModels();
+}
 // After a language switch. A window that is still answering is redrawn once its answer ends.
 function relabelChats() {
+  renderOpenChats();
   for (const chat of chats.values()) {
     chat.view.relabel(); chat.view.mark();
     if (!chat.busy) draw(chat);
   }
   if (savedLoaded) listSaved();
+  if (typeof studioRelabel === 'function') studioRelabel();
 }
 // Errors and empty answers are not part of the conversation the model sees.
 function tidy(chat) {
@@ -431,23 +679,35 @@ function view(chat, message, last) {
     box.append(think);
   }
   box.append(el('div', 'msg-text'));
-  if (message.role !== 'user') box.append(el('div', 'msg-meta'));
+  if (message.role === 'assistant') {
+    box.append(el('div', 'msg-progress'));
+    if (!message.stats?.live && !message.stats?.waiting && describe(message)) {
+      const details = el('details', 'msg-details');
+      details.append(el('summary', '', t('chatDetails')), el('div', 'msg-meta', describe(message)));
+      box.append(details);
+    }
+  }
   paint(box, message);
+  const actions = el('div', 'msg-actions');
   if (message.role === 'assistant' && !message.stats?.live && !message.stats?.waiting && split(message).content
-    && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+    && chat.view.voice.select.value) {
     const read = el('button', 'link', t('chatReadAloud')); read.type = 'button';
-    read.addEventListener('click', () => readAloud(message, read));
-    box.querySelector('.msg-meta').append(read);
+    const status = el('span', 'msg-audio-status'); status.setAttribute('role', 'status');
+    read.addEventListener('click', () => readAloud(message, read, chat.view.voice));
+    actions.append(read, status);
   }
   if (last && !chat.busy && message.role !== 'user') {
-    const retry = el('button', 'link', '↻ ' + t('chatRetry')); retry.type = 'button';
+    const retry = el('button', 'link', t('chatRetry')); retry.type = 'button';
     retry.addEventListener('click', () => {
       if (chat.busy) return;
-      while (chat.messages.length && chat.messages[chat.messages.length - 1].role !== 'user') chat.messages.pop();
-      if (chat.messages.length) answer(chat);
+      const lastUser = chat.messages.findLastIndex((entry) => entry.role === 'user');
+      if (lastUser < 0) return;
+      chat.messages = chat.messages.filter((entry, index) => index <= lastUser);
+      answer(chat, message.model || chat.model, message.effort ?? chat.effort);
     });
-    box.querySelector('.msg-meta').append(retry);
+    actions.append(retry);
   }
+  if (actions.childElementCount) box.append(actions);
   return box;
 }
 function paint(box, message) {
@@ -455,12 +715,8 @@ function paint(box, message) {
   writeText(box.querySelector('.msg-text'), shown.content);
   const think = box.querySelector('.msg-think');
   if (think) { think.hidden = !shown.reasoning; think.querySelector('.msg-think-text').textContent = shown.reasoning; }
-  const meta = box.querySelector('.msg-meta');
-  if (meta) {
-    const actions = [...meta.querySelectorAll('button')];
-    meta.textContent = describe(message);
-    meta.append(...actions);
-  }
+  const progress = box.querySelector('.msg-progress');
+  if (progress) progress.textContent = message.stats?.waiting ? t('chatWaiting') : message.stats?.live ? t('chatWriting') : '';
 }
 // Some servers send the thinking inside the answer, between <think> tags.
 function split(message) {
@@ -470,25 +726,27 @@ function split(message) {
   return end < 0 ? { content: '', reasoning: reasoning + rest } : { content: rest.slice(end + 8).trimStart(), reasoning: reasoning + rest.slice(0, end) };
 }
 function draw(chat) {
-  const log = chat.view.log, follow = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  const { log, scroller } = chat.view;
+  const follow = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
+  if (reading && log.contains(reading.button)) stopReading();
   log.replaceChildren(...chat.messages.map((message, index) => view(chat, message, index === chat.messages.length - 1)));
-  if (follow || !chat.busy) log.scrollTop = log.scrollHeight;
+  if (follow || !chat.busy) scroller.scrollTop = scroller.scrollHeight;
 }
 async function store(chat) {
   chat.updated = chat.updated || Date.now();
   try {
     await chatApi('PUT', 'chats/' + chat.id, {
       title: chat.title, created: chat.created, updated: chat.updated,
-      model: chat.model, effort: chat.effort, messages: chat.messages.filter((m) => m.role !== 'error')
+      model: chat.model, effort: chat.effort, messages: chat.messages.filter((m) => m.role === 'user' || m.role === 'assistant')
     });
-  } catch (cause) { chat.view.mark(); chat.view.box.querySelector('.chat-note').textContent = cause.message; return; }
+  } catch (cause) { chat.view.mark(); error(cause.message); return; }
   listSaved();
 }
 
 /* ---- one answer ---- */
-async function answer(chat) {
+async function answer(chat, model = chat.view.model.value, effort = chat.view.effort.value) {
   const v = chat.view;
-  const message = { role: 'assistant', content: '', reasoning: '', model: v.model.value, effort: v.effort.value, stats: { live: true } };
+  const message = { role: 'assistant', content: '', reasoning: '', model, effort, stats: { live: true } };
   chat.model = message.model; chat.effort = message.effort;
   const history = chat.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content).map((m) => ({ role: m.role, content: split(m).content || m.content }));
   const request = { messages: history };
@@ -499,7 +757,7 @@ async function answer(chat) {
   }
   chat.messages.push(message);
   const controller = new AbortController();
-  chat.busy = controller; v.send.textContent = t('chatStop'); v.send.classList.add('stop');
+  chat.busy = controller; v.mode(); v.send.classList.add('stop');
   draw(chat);
   const box = v.log.lastElementChild;
   let started = performance.now();
@@ -508,9 +766,9 @@ async function answer(chat) {
     queued = false;
     if (first && pieces > 1) { message.stats.rate = (pieces - 1) / ((performance.now() - first) / 1000); message.stats.estimated = true; }
     message.stats.tokens = pieces;
-    const follow = v.log.scrollHeight - v.log.scrollTop - v.log.clientHeight < 40;
+    const follow = v.scroller.scrollHeight - v.scroller.scrollTop - v.scroller.clientHeight < 40;
     paint(box, message);
-    if (follow) v.log.scrollTop = v.log.scrollHeight;
+    if (follow) v.scroller.scrollTop = v.scroller.scrollHeight;
   };
   try {
     let response;
@@ -574,7 +832,7 @@ async function answer(chat) {
   message.stats = s;
   if (!message.content && !message.reasoning) chat.messages.pop();
   if (failed) chat.messages.push({ role: 'error', content: failed });
-  chat.busy = null; v.send.textContent = t('chatSend'); v.send.classList.remove('stop');
+  chat.busy = null; v.mode(); v.send.classList.remove('stop');
   chat.updated = Date.now();
   draw(chat);
   if (chat.saved) store(chat);

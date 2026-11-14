@@ -7,6 +7,33 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The control-panel chat can dictate through a linked transcription model or the
+  browser and read answers with a linked voice or a local device voice; both are
+  set in the chat's "Dictation & voice" menu. Models that advertise image or video
+  generation get their own Image and Video tabs, each with a form and a result
+  list. A generated image can be used as the start frame for a video.
+- The control panel's Audio tab reads any text aloud with a Link voice (as a
+  downloadable file, long texts in parts) or the device voice, and turns speech
+  from the microphone or an audio file of up to 15 minutes into editable text,
+  cut at quiet moments into pieces of at most a minute.
+- `POST /v1/images/edits` passes through the tunnel as multipart. An image model that
+  advertises `max_input_images` gets input images in the panel's Image tab, to edit
+  one or combine several; `image_edits = true` assigns the backend. The bundled
+  ComfyUI workflow still only creates images from text. Host and client both need
+  this version; an older end answers 404 for image edits and model cards.
+- `[[model_cards]]` in `host.toml` gives a model a page link, a benchmark link and a
+  README. The panel shows them behind a **Model card** button; the host serves the
+  README itself under `GET /v1/link/model-cards/{key}`. A missing or oversized README
+  stops the host at its start and is reported by `check`. With model cards, a host
+  without further backends also answers `GET /v1/models` from its 30-second catalog.
+- `k-lani-link ui --client-config` opens the control panel for a running native
+  client on its existing OpenAI URL.
+- The connected panel opens into a chat workspace with a conversation sidebar;
+  model, thinking and dictation sit in the message box. Connection details have
+  their own tab.
+- The ComfyUI adapter can serve HyperFlow H3 Flash alongside MiniMax H3 Turbo
+  when the operator configures the HyperFlow checkpoint and nodes.
+
 ## 1.2611.13
 
 - The Basalt image uses v0.3.3 with rebased privacy and numeric-metrics patches.

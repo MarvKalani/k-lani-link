@@ -115,12 +115,17 @@ support the same endpoint and requested features, including streaming and tool c
 | Gateway to cloud providers | Planned, with explicit cloud-use settings |
 
 The inference routes include `/v1/models`, `/v1/chat/completions`, `/v1/responses`,
-`/v1/embeddings`, `/v1/images/generations`, video jobs under `/v1/videos` and speech
+`/v1/embeddings`, `/v1/images/generations` and `/v1/images/edits`, video jobs under `/v1/videos` and speech
 endpoints under `/v1/audio` (OpenAI)
 as well as `/v1/messages` (Anthropic, for Claude Code with your own model).
 See [supported APIs](REFERENCE.md#supported-apis).
 Model loading, KV-cache storage and other administration are separate capabilities.
 [API conventions and Open Responses](deploy/BACKENDS.md#api-conventions-and-open-responses).
+
+Choose any chat, image, video or speech model whose service implements the
+corresponding endpoint and data format. PDF and DOCX require a chat or responses
+backend that can read inline attachments. Basalt, MiniMax H3, Audio8, Ming and
+Nemotron are tested examples.
 
 **Other local servers:** by default the host requires the backend's privacy
 profile. To use another local OpenAI-compatible server, explicitly set `allow_unverified_backend = true` in
@@ -223,9 +228,9 @@ Prefer a native program? The portable variants use one executable, with no
 installer: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64/ARM64.
 Starting the program without arguments opens a local connection panel;
 PowerShell/terminal commands remain available. It asks for the relay address and
-pairing code, connects by itself and then shows the three values for your AI app.
-Small chat windows in the panel try the model directly; a chat is kept only while its
-window is open, unless you save it on this computer.
+pairing code and opens the chat when connected. The **Connection** tab provides
+the OpenAI URL, key and model IDs for your AI app. Save a chat to keep its text
+on this computer.
 The portable downloads are unsigned; security software or company policy
 may block them. Native operation does not provide Docker's application isolation.
 [Downloads](https://github.com/MarvKalani/k-lani-link/releases)

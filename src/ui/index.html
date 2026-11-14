@@ -44,31 +44,128 @@
     </section>
 
     <section id="step-ready" hidden>
-      <p class="step" data-t="step3">Step 3 of 3</p>
-      <h2 class="ok" data-t="readyTitle">Connected</h2>
-      <p data-t="readyIntro">In your AI app, add an “OpenAI-compatible” provider and copy in these three values:</p>
-      <div class="row"><span data-t="base">Base URL</span><input id="base" readonly value="http://127.0.0.1:8787/v1"><button class="secondary copy" data-copy="base" data-t="copy">Copy</button></div>
-      <div class="row"><span data-t="key">API key</span><input id="key" type="password" readonly value="••••••••••••"><button class="secondary copy" data-copy="key" data-t="copy">Copy</button></div>
-      <div class="row"><span data-t="model">Model</span><select id="model" hidden></select><input id="model-one" readonly><button class="secondary copy" data-copy="model" data-t="copy">Copy</button></div>
-      <p id="model-problem" class="warn" hidden></p>
-      <p id="ready-note" class="muted" data-t="readyNote">These values only work on this computer. You can close this page; the connection stays on.</p>
-      <div id="computers">
-        <h3 data-t="computersTitle">Model computers</h3>
-        <ul id="computer-list" class="computer-list"></ul>
-        <button id="add-computer" class="secondary" type="button" data-t="addComputer">+ Add another model computer</button>
-        <p class="muted" data-t="computersNote">The models of all computers appear under the same base URL and key. Each request goes only to the computer that offers its model.</p>
-        <p id="trial-note" class="warn" hidden><span id="trial-text"></span> <a id="trial-link" target="_blank" rel="noreferrer"></a></p>
+      <nav class="workspace-nav" aria-label="Workspace" data-t-label="workspaceNav">
+        <button id="open-chat" class="workspace-tab" type="button" aria-controls="chat-workspace" aria-pressed="true" data-t="chatText">Chat</button>
+        <button id="open-image" class="workspace-tab" type="button" aria-controls="image-workspace" aria-pressed="false" data-t="chatImage" hidden>Image</button>
+        <button id="open-video" class="workspace-tab" type="button" aria-controls="video-workspace" aria-pressed="false" data-t="chatVideo" hidden>Video</button>
+        <button id="open-audio" class="workspace-tab" type="button" aria-controls="audio-workspace" aria-pressed="false" data-t="tabAudio" hidden>Audio</button>
+        <button id="open-connection" class="workspace-tab" type="button" aria-controls="connection-workspace" aria-pressed="false" data-t="connectionTab">Connection</button>
+      </nav>
+      <div id="chat-workspace">
+        <aside id="chat-sidebar">
+          <div class="sidebar-heading">
+            <button id="history-toggle" class="secondary small" type="button" aria-expanded="true" aria-controls="chat-history" data-t="chatHistory">Conversations</button>
+            <button id="chat-new" type="button" data-t="chatNew">New chat</button>
+          </div>
+          <div id="chat-history">
+            <ul id="chat-open-list" class="chat-list"></ul>
+            <div id="chat-saved" hidden>
+              <h3 data-t="chatSavedTitle">Saved chats</h3>
+              <ul id="chat-list" class="chat-list"></ul>
+            </div>
+          </div>
+        </aside>
+        <div id="chats"><p id="chat-idle" class="muted" data-t="chatOpenTitle">Start a chat</p></div>
       </div>
-      <div id="chat-start">
-        <h3 data-t="chatTitle">Chat with the model</h3>
-        <p class="muted" data-t="chatIntro">Try the model right here. Every window is its own conversation.</p>
-        <button id="chat-new" type="button" data-t="chatNew">New chat</button>
-        <div id="chat-saved">
-          <h3 data-t="chatSavedTitle">Saved chats</h3>
-          <p id="chat-empty" class="muted" data-t="chatEmpty" hidden>No saved chats yet. Click Save in a chat window, and the chat appears here.</p>
-          <p id="chat-open-hint" class="muted" data-t="chatOpenHint" hidden>Click a title to open the chat again.</p>
-          <ul id="chat-list" class="chat-list"></ul>
-          <p id="chat-where" class="muted"></p>
+      <div id="image-workspace" class="studio" hidden>
+        <form id="image-form" class="studio-form">
+          <h2 data-t="studioImageTitle">Create an image</h2>
+          <label><span data-t="studioPrompt">Description</span><textarea id="image-prompt" rows="5"></textarea></label>
+          <label><span data-t="chatModel">Model</span><span class="model-pick"><select id="image-model"></select></span></label>
+          <div id="image-inputs" class="studio-start" hidden>
+            <span id="image-inputs-label" class="studio-label"></span>
+            <ul id="image-input-list" class="image-inputs"></ul>
+            <div class="studio-start-row">
+              <button id="image-input-add" class="secondary small" type="button" data-t="imageAdd">Add image</button>
+              <input id="image-input-file" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+            </div>
+            <p id="image-inputs-hint" class="studio-hint"></p>
+          </div>
+          <p id="image-problem" class="studio-problem" role="status" hidden></p>
+          <button id="image-go" class="studio-go" type="submit" data-t="chatGenerate">Generate</button>
+          <p class="studio-note" data-t="studioKept">Results stay only while this page is open. Download what you want to keep.</p>
+        </form>
+        <div class="studio-results">
+          <p id="image-empty" class="studio-empty" data-t="studioImageEmpty">Your images appear here.</p>
+          <ul id="image-results" class="studio-list" aria-live="polite"></ul>
+        </div>
+      </div>
+      <div id="video-workspace" class="studio" hidden>
+        <form id="video-form" class="studio-form">
+          <h2 data-t="studioVideoTitle">Create a video</h2>
+          <label><span data-t="studioPrompt">Description</span><textarea id="video-prompt" rows="5"></textarea></label>
+          <label><span data-t="chatModel">Model</span><span class="model-pick"><select id="video-model"></select></span></label>
+          <div id="video-start" class="studio-start">
+            <span class="studio-label" data-t="chatVideoReference">Start image (PNG or JPEG)</span>
+            <div class="studio-start-row">
+              <img id="video-start-preview" class="studio-start-preview" alt="" hidden>
+              <span id="video-start-name" class="studio-start-name"></span>
+              <button id="video-start-choose" class="secondary small" type="button" data-t="chatAttach">Choose start image</button>
+              <button id="video-start-remove" class="link" type="button" data-t="chatRemoveReference" hidden>Remove start image</button>
+              <input id="video-start-file" type="file" accept="image/png,image/jpeg" hidden>
+            </div>
+            <p id="video-start-hint" class="studio-hint"></p>
+          </div>
+          <p id="video-problem" class="studio-problem" role="status" hidden></p>
+          <button id="video-go" class="studio-go" type="submit" data-t="chatGenerate">Generate</button>
+          <p class="studio-note" data-t="studioKept">Results stay only while this page is open. Download what you want to keep.</p>
+        </form>
+        <div class="studio-results">
+          <p id="video-empty" class="studio-empty" data-t="studioVideoEmpty">Your videos appear here.</p>
+          <ul id="video-results" class="studio-list" aria-live="polite"></ul>
+        </div>
+      </div>
+      <div id="audio-workspace" class="audio-studio" hidden>
+        <form id="speak-form" class="audio-panel">
+          <h2 data-t="speakTitle">Read text aloud</h2>
+          <label><span data-t="speakText">Text</span><textarea id="speak-text" rows="7"></textarea></label>
+          <div class="audio-row">
+            <label><span data-t="chatVoice">Read-aloud voice</span><span class="model-pick"><select id="speak-model"></select></span></label>
+            <label id="speak-voice-row"><span data-t="chatVoiceName">Voice</span><select id="speak-voice"></select></label>
+          </div>
+          <p id="speak-problem" class="studio-problem" role="status" hidden></p>
+          <button id="speak-go" class="studio-go" type="submit" data-t="speakGo">Create audio</button>
+          <p class="studio-note" data-t="speakNote">With a Link voice you get an audio file to download. The device voice only plays, without a file.</p>
+          <ul id="speak-results" class="audio-list" aria-live="polite"></ul>
+        </form>
+        <div id="listen-panel" class="audio-panel">
+          <h2 data-t="listenTitle">Turn speech into text</h2>
+          <div id="listen-mic" class="audio-block">
+            <span class="studio-label" data-t="listenMic">Microphone</span>
+          </div>
+          <div id="listen-drop" class="studio-start audio-block">
+            <span class="studio-label" data-t="listenFile">Audio file</span>
+            <div class="studio-start-row">
+              <button id="listen-choose" class="secondary small" type="button" data-t="listenChoose">Choose audio file</button>
+              <input id="listen-file" type="file" accept="audio/*,.mp3,.wav,.ogg,.oga,.opus,.m4a,.flac,.webm" hidden>
+            </div>
+            <p id="listen-file-hint" class="studio-hint"></p>
+          </div>
+          <p id="listen-problem" class="studio-problem" role="status" hidden></p>
+          <label><span data-t="listenText">Text</span><textarea id="listen-text" rows="8"></textarea></label>
+          <div class="studio-actions">
+            <button id="listen-copy" class="link" type="button" data-t="copy">Copy</button>
+            <button id="listen-save" class="link" type="button" data-t="listenSave">Save as text file</button>
+            <button id="listen-chat" class="link" type="button" data-t="listenToChat">Use in chat</button>
+            <button id="listen-speak" class="link" type="button" data-t="listenToSpeak">Have it read aloud</button>
+            <button id="listen-clear" class="link" type="button" data-t="listenClear">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div id="connection-workspace" hidden>
+        <h2 data-t="connectionTab">Connection</h2>
+        <p data-t="readyIntro">In your AI app, add an “OpenAI-compatible” provider and copy in these three values:</p>
+        <div class="row"><span data-t="base">Base URL</span><input id="base" readonly value="http://127.0.0.1:8787/v1"><button class="secondary copy" data-copy="base" data-t="copy">Copy</button></div>
+        <div class="row"><span data-t="key">API key</span><input id="key" type="password" readonly value="••••••••••••"><button class="secondary copy" data-copy="key" data-t="copy">Copy</button></div>
+        <div class="row"><span data-t="model">Model</span><select id="model" hidden></select><input id="model-one" readonly><button class="secondary copy" data-copy="model" data-t="copy">Copy</button></div>
+        <p id="model-problem" class="warn" hidden></p>
+        <p id="ready-note" class="muted" data-t="readyNote">These values only work on this computer. You can close this page; the connection stays on.</p>
+        <div id="computers">
+          <h3 data-t="computersTitle">Model computers</h3>
+          <ul id="computer-list" class="computer-list"></ul>
+          <button id="add-computer" class="secondary" type="button" data-t="addComputer">+ Add another model computer</button>
+          <p class="muted" data-t="computersNote">The models of all computers appear under the same base URL and key. Each request goes only to the computer that offers its model.</p>
+          <p id="trial-note" class="warn" hidden><span id="trial-text"></span> <a id="trial-link" target="_blank" rel="noreferrer"></a></p>
         </div>
       </div>
     </section>
@@ -78,6 +175,13 @@
       <p id="problem-detail"></p>
       <button id="fix" class="big"></button>
     </section>
+
+    <dialog id="model-card" class="model-card" aria-labelledby="model-card-title">
+      <div class="model-card-head"><h2 id="model-card-title"></h2><button id="model-card-close" class="link" type="button" data-t="chatClose">Close</button></div>
+      <p class="model-card-links"><a id="model-card-page" target="_blank" rel="noreferrer noopener" data-t="cardPage">Model page</a> <a id="model-card-benchmarks" target="_blank" rel="noreferrer noopener" data-t="cardBenchmarks">Benchmarks</a></p>
+      <p id="model-card-status" class="model-card-status" role="status"></p>
+      <pre id="model-card-readme" class="model-card-readme" hidden></pre>
+    </dialog>
 
     <p id="error" role="alert" hidden></p>
 
@@ -107,5 +211,5 @@
       <p class="muted"><span data-t="docker">Using OpenCode in Docker? It has its own launcher and does not use this page.</span> <a href="https://github.com/MarvKalani/k-lani-link/blob/main/deploy/desktop/README.md" target="_blank" rel="noreferrer" data-t="dockerLink">Docker setup</a></p>
       <p class="muted"><span data-t="privacy">This page controls the connection. A chat is kept only while its window is open, unless you save it.</span> <span id="version"></span></p>
     </details>
-  </main><script src="/app.js"></script><script src="/chat.js"></script><script src="/scan.js"></script>
+  </main><script src="/app.js"></script><script src="/media.js"></script><script src="/chat.js"></script><script src="/studio.js"></script><script src="/scan.js"></script>
 </body></html>

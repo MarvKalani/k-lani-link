@@ -33,6 +33,8 @@ use tokio_util::sync::CancellationToken;
 const HTML: &str = include_str!("ui/index.html");
 const JS: &str = include_str!("ui/app.js");
 const CHAT_JS: &str = include_str!("ui/chat.js");
+const MEDIA_JS: &str = include_str!("ui/media.js");
+const STUDIO_JS: &str = include_str!("ui/studio.js");
 const SCAN_JS: &str = include_str!("ui/scan.js");
 const CSS: &str = include_str!("ui/style.css");
 
@@ -104,6 +106,8 @@ struct Panel {
     http: reqwest::Client,
     /// For chat answers, which stream for as long as the model writes.
     stream: reqwest::Client,
+    /// API coordinates of an existing loopback client.
+    attached: Option<Arc<LocalClient>>,
     /// A private CA for the relay; only tests set one, a real relay needs a public certificate.
     relay_ca: Option<PathBuf>,
     updates: Arc<std::sync::Mutex<Updates>>,
@@ -118,9 +122,25 @@ struct Panel {
     // twice against one semaphore while it is waiting for the inner request to finish.
     chat_uploads: upload::Budget,
 }
+struct LocalClient {
+    listen: SocketAddr,
+    api_key: String,
+    transport: crate::config::Transport,
+}
 impl Panel {
     fn key(&self) -> Option<String> {
+        if let Some(client) = &self.attached {
+            return Some(client.api_key.clone());
+        }
         self.key.read().unwrap().clone()
+    }
+    async fn gateway_address(&self) -> Option<SocketAddr> {
+        if let Some(client) = &self.attached {
+            return Some(client.listen);
+        }
+        let control = self.control.lock().await;
+        control.front.as_ref()?;
+        control.connections.first().map(|first| first.config.listen)
     }
     /// Loads the front's key, or takes the first connection's when there is none yet.
     fn ensure_key(&self, control: &Control) {
@@ -214,6 +234,17 @@ async fn protect(State(panel): State<Panel>, request: Request, next: Next) -> Re
             "Open the control panel from the application.",
         );
     }
+    if panel.attached.is_some()
+        && matches!(
+            request.uri().path(),
+            "/api/config" | "/api/join" | "/api/connect" | "/api/disconnect" | "/api/remove"
+        )
+    {
+        return failure(
+            StatusCode::CONFLICT,
+            "This panel uses a separate Link client.",
+        );
+    }
     let mut response = next.run(request).await;
     for (name, value) in [
         ("cache-control", "no-store"),
@@ -221,7 +252,7 @@ async fn protect(State(panel): State<Panel>, request: Request, next: Next) -> Re
         ("x-content-type-options", "nosniff"),
         (
             "content-security-policy",
-            "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         ),
     ] {
         response
@@ -259,6 +290,24 @@ fn router(panel: Panel) -> Router {
         .route(
             "/style.css",
             get(|| async { ([("content-type", "text/css; charset=utf-8")], CSS) }),
+        )
+        .route(
+            "/media.js",
+            get(|| async {
+                (
+                    [("content-type", "text/javascript; charset=utf-8")],
+                    MEDIA_JS,
+                )
+            }),
+        )
+        .route(
+            "/studio.js",
+            get(|| async {
+                (
+                    [("content-type", "text/javascript; charset=utf-8")],
+                    STUDIO_JS,
+                )
+            }),
         )
         .route("/icon/{light}", get(icon))
         .route("/api/status", get(status))
@@ -665,10 +714,9 @@ async fn phase_of(panel: &Panel, connection: &Connection) -> &'static str {
 /// computers, `phase` is `connected` while at least one is; each has its own entry in
 /// `computers`.
 async fn snapshot(panel: &Panel) -> Value {
-    let control = panel.control.lock().await;
     let mut result = json!({"version": env!("CARGO_PKG_VERSION"),
-        "configured": !control.connections.is_empty(), "running": control.front.is_some(),
-        "phase": "not_configured", "relay": "disabled", "joining": control.joining,
+        "configured": false, "running": false,
+        "phase": "not_configured", "relay": "disabled", "joining": false,
         "default_relay": crate::mailbox::couple::DEFAULT_RELAY,
         "tray": cfg!(any(windows, target_os = "macos"))});
     {
@@ -684,6 +732,37 @@ async fn snapshot(panel: &Panel) -> Value {
     {
         result["language"] = json!(chosen.trim());
     }
+    if let Some(client) = &panel.attached {
+        let health = panel
+            .http
+            .get(format!("http://{}/health", client.listen))
+            .bearer_auth(&client.api_key)
+            .send()
+            .await
+            .ok()
+            .filter(|response| response.status().is_success());
+        let health = match health {
+            Some(response) => limited_body(response, 8192)
+                .await
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()),
+            None => None,
+        };
+        result["attached"] = json!(true);
+        result["configured"] = json!(true);
+        result["running"] = json!(health.is_some());
+        result["api_base"] = json!(format!("http://{}/v1", client.listen));
+        result["transport"] = json!(client.transport);
+        result["phase"] = json!(match health {
+            Some(health) if health["connected"] == true => "connected",
+            Some(_) => "recovering",
+            None => "stopped",
+        });
+        return result;
+    }
+    let control = panel.control.lock().await;
+    result["configured"] = json!(!control.connections.is_empty());
+    result["running"] = json!(control.front.is_some());
+    result["joining"] = json!(control.joining);
     if let Some(first) = control.connections.first() {
         result["api_base"] = json!(format!("http://{}/v1", first.config.listen));
         let https = control
@@ -863,12 +942,16 @@ async fn remove(
 }
 
 async fn credentials(State(panel): State<Panel>) -> Response {
-    let control = panel.control.lock().await;
-    panel.ensure_key(&control);
-    match (control.connections.first(), panel.key()) {
-        (Some(first), Some(key)) => {
-            Json(json!({"api_base": format!("http://{}/v1", first.config.listen), "api_key": key}))
-                .into_response()
+    let address = if let Some(client) = &panel.attached {
+        Some(client.listen)
+    } else {
+        let control = panel.control.lock().await;
+        panel.ensure_key(&control);
+        control.connections.first().map(|first| first.config.listen)
+    };
+    match (address, panel.key()) {
+        (Some(listen), Some(key)) => {
+            Json(json!({"api_base": format!("http://{listen}/v1"), "api_key": key})).into_response()
         }
         _ => failure(
             StatusCode::BAD_REQUEST,
@@ -878,16 +961,8 @@ async fn credentials(State(panel): State<Panel>) -> Response {
 }
 
 async fn test_backend(State(panel): State<Panel>) -> Response {
-    let listen = {
-        let control = panel.control.lock().await;
-        let Some(first) = control
-            .connections
-            .first()
-            .filter(|_| control.front.is_some())
-        else {
-            return failure(StatusCode::CONFLICT, "Start the connection first.");
-        };
-        first.config.listen
+    let Some(listen) = panel.gateway_address().await else {
+        return failure(StatusCode::CONFLICT, "Start the connection first.");
     };
     let Some(key) = panel.key() else {
         return failure(StatusCode::CONFLICT, "Start the connection first.");
@@ -899,7 +974,7 @@ async fn test_backend(State(panel): State<Panel>) -> Response {
             .await
             .is_some_and(|health| health["connected"] == true);
     }
-    if !connected {
+    if panel.attached.is_none() && !connected {
         return failure(
             StatusCode::CONFLICT,
             "The encrypted tunnel is not connected yet. Check the remote host, pairing code and network permissions.",
@@ -939,17 +1014,83 @@ async fn test_backend(State(panel): State<Panel>) -> Response {
             "The backend did not return a valid model list.",
         );
     };
-    let ids: Vec<_> = models
+    // The front selects a model computer from JSON requests. Multipart video
+    // and transcription requests use the first connection's configured routes.
+    let first_models = routes
+        .first()
+        .filter(|_| routes.len() > 1)
+        .map(|first| front::listed_by(&panel.catalog, &first.id));
+    let catalog: Vec<_> = models
         .iter()
         .take(64)
-        .filter_map(|model| model["id"].as_str())
-        .map(|id| id.chars().take(256).collect::<String>())
+        .filter_map(|model| {
+            let id: String = model["id"].as_str()?.chars().take(256).collect();
+            let capability = model["capability"].as_str().filter(|kind| {
+                matches!(
+                    *kind,
+                    "chat" | "image" | "video" | "speech" | "transcription" | "embedding"
+                )
+            });
+            let voices: Vec<_> = model["voices"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .take(32)
+                .map(|voice| voice.chars().take(128).collect::<String>())
+                .collect();
+            let on_first = first_models
+                .as_ref()
+                .is_none_or(|models| models.contains(&id));
+            let selectable = !matches!(capability, Some("video" | "transcription")) || on_first;
+            // Image edits are multipart too, so only the first computer's models take images.
+            let max_input_images = if on_first {
+                model["max_input_images"].as_u64().unwrap_or(0).min(16)
+            } else {
+                0
+            };
+            Some(json!({"id": id, "capability": capability, "voices": voices,
+                "local": model["local"] == true,
+                "selectable": selectable,
+                "requires_input_reference": model["requires_input_reference"] == true,
+                "max_input_images": max_input_images,
+                "requires_input_image": max_input_images > 0 && model["requires_input_image"] == true,
+                "card": shown_card(&model["card"])}))
+        })
         .collect();
+    let ids: Vec<_> = catalog.iter().map(|model| &model["id"]).collect();
     Json(
-        json!({"models": ids, "round_trip_ms": start.elapsed().as_secs_f64() * 1000.0,
+        json!({"models": ids, "catalog": catalog, "round_trip_ms": start.elapsed().as_secs_f64() * 1000.0,
         "scope": "GET /v1/models through the tunnel; not token latency or pure network RTT"}),
     )
     .into_response()
+}
+
+/// The parts of a model card the page shows: https links, and the key of a README the
+/// model's computer serves. Anything else is left out.
+fn shown_card(card: &Value) -> Value {
+    let mut shown = serde_json::Map::new();
+    for name in ["page", "benchmarks"] {
+        if let Some(link) = card[name]
+            .as_str()
+            .filter(|link| crate::config::card_link(link))
+        {
+            shown.insert(name.into(), json!(link));
+        }
+    }
+    if let Some(key) = card["readme"].as_str().filter(|key| {
+        k_lani_link_protocol::model_card_route(
+            "GET",
+            &format!("{}{key}", k_lani_link_protocol::MODEL_CARD_PATH),
+        )
+    }) {
+        shown.insert("readme".into(), json!(key));
+    }
+    if shown.is_empty() {
+        Value::Null
+    } else {
+        Value::Object(shown)
+    }
 }
 
 async fn quit(State(panel): State<Panel>) -> Json<Value> {
@@ -1030,7 +1171,15 @@ pub async fn run(
     directory: PathBuf,
     stop: CancellationToken,
     launch_browser: bool,
+    attached: Option<Config>,
 ) -> anyhow::Result<bool> {
+    if let Some(client) = &attached
+        && (!client.listen.ip().is_loopback() || client.listen.port() == 0)
+    {
+        return Err(Diagnostic::err(
+            "The running client needs a fixed loopback API address.",
+        ));
+    }
     std::fs::create_dir_all(
         directory
             .parent()
@@ -1068,8 +1217,13 @@ pub async fn run(
     let origin = format!("http://{address}");
     let token = random_secret()?;
     let saved = directory.join("client.toml");
-    let mut connections = paired(&directory);
-    if connections.is_empty()
+    let mut connections = if attached.is_some() {
+        Vec::new()
+    } else {
+        paired(&directory)
+    };
+    if attached.is_none()
+        && connections.is_empty()
         && saved.is_file()
         && let Some(config) = Config::load(&saved)
             .ok()
@@ -1094,6 +1248,13 @@ pub async fn run(
             .timeout(std::time::Duration::from_secs(5))
             .build()?,
         stream: streaming_client()?,
+        attached: attached.map(|config| {
+            Arc::new(LocalClient {
+                listen: config.listen,
+                api_key: config.api_key,
+                transport: config.transport,
+            })
+        }),
         relay_ca: None,
         updates: Arc::new(std::sync::Mutex::new(Updates {
             enabled: !updates_off,
@@ -1313,6 +1474,28 @@ pub fn with_menu_bar(work: impl FnOnce() -> bool + Send + 'static) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_model_card_reaches_the_page_only_with_https_links_and_a_valid_readme_key() {
+        assert_eq!(
+            shown_card(&json!({
+                "page": "https://huggingface.co/org/model",
+                "benchmarks": "http://example.org/plain",
+                "readme": "0123456789abcdef",
+                "script": "<script>",
+            })),
+            json!({"page": "https://huggingface.co/org/model", "readme": "0123456789abcdef"})
+        );
+        for card in [
+            json!({"page": "javascript:alert(1)"}),
+            json!({"readme": "../../etc/passwd"}),
+            json!({"readme": "0123456789ABCDEF"}),
+            json!("https://huggingface.co/org/model"),
+            Value::Null,
+        ] {
+            assert_eq!(shown_card(&card), Value::Null, "{card}");
+        }
+    }
     use crate::config::tests::config;
 
     async fn fixture() -> (Panel, JoinHandle<()>, PathBuf) {
@@ -1333,6 +1516,7 @@ mod tests {
                 .build()
                 .unwrap(),
             stream: streaming_client().unwrap(),
+            attached: None,
             relay_ca: None,
             updates: Default::default(),
             routes: Default::default(),
@@ -1488,6 +1672,91 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn attached_panel_forwards_only_media_routes_to_the_running_client() {
+        use axum::body::{Body, to_bytes};
+        use tower::ServiceExt;
+
+        let (mut panel, server, directory) = fixture().await;
+        let client_key = random_secret().unwrap();
+        let expected_key = client_key.clone();
+        let client = Router::new().route(
+            "/v1/audio/transcriptions",
+            post(
+                move |headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                    assert!(token_matches(
+                        headers
+                            .get("authorization")
+                            .and_then(|value| value.to_str().ok()),
+                        &expected_key,
+                    ));
+                    assert!(!headers.contains_key("origin"));
+                    assert_eq!(
+                        headers["content-type"],
+                        "multipart/form-data; boundary=local"
+                    );
+                    assert_eq!(&body[..], b"synthetic recording");
+                    Json(json!({"text": "local transcript"}))
+                },
+            ),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        panel.attached = Some(Arc::new(LocalClient {
+            listen: listener.local_addr().unwrap(),
+            api_key: client_key,
+            transport: crate::config::Transport::Https,
+        }));
+        let client = tokio::spawn(async move { axum::serve(listener, client).await.unwrap() });
+        let app = router(panel.clone());
+        let send = |path: &str, authorized: bool, content_type: &str| {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("host", panel.origin.strip_prefix("http://").unwrap())
+                .header("origin", &panel.origin)
+                .header("content-type", content_type);
+            if authorized {
+                request = request.header("authorization", format!("Bearer {}", panel.token));
+            }
+            app.clone()
+                .oneshot(request.body(Body::from("synthetic recording")).unwrap())
+        };
+        let path = "/api/media/audio/transcriptions";
+        let multipart = "multipart/form-data; boundary=local";
+        assert_eq!(
+            send(path, false, multipart).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            send(path, true, "application/json").await.unwrap().status(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE
+        );
+        assert_eq!(
+            send("/api/media/chat/completions", true, multipart)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            send("/api/disconnect", true, "application/json")
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT
+        );
+        let result = send(path, true, multipart).await.unwrap();
+        assert_eq!(result.status(), StatusCode::OK);
+        let data = to_bytes(result.into_body(), 1024).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&data).unwrap()["text"],
+            "local transcript"
+        );
+        client.abort();
+        let _ = client.await;
+        cleanup(panel, server, directory).await;
+    }
+
+    #[tokio::test]
     async fn panel_requires_token_and_origin_and_never_embeds_keys_in_static_content() {
         let (panel, task, directory) = fixture().await;
         let page = panel.http.get(&panel.origin).send().await.unwrap();
@@ -1499,7 +1768,31 @@ mod tests {
                 .unwrap()
                 .contains("frame-ancestors 'none'")
         );
-        assert!(!page.text().await.unwrap().contains(&panel.token));
+        let html = page.text().await.unwrap();
+        assert!(!html.contains(&panel.token));
+        // Every script the page loads is served, so a new file cannot miss its route.
+        let scripts: Vec<_> = html
+            .split("<script src=\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .collect();
+        assert!(scripts.contains(&"/studio.js"), "{scripts:?}");
+        for script in scripts {
+            let served = panel
+                .http
+                .get(format!("{}{script}", panel.origin))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(served.status(), StatusCode::OK, "{script}");
+            assert!(
+                served.headers()["content-type"]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("text/javascript"),
+                "{script}"
+            );
+        }
         for path in [
             "status",
             "config",

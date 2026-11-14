@@ -132,6 +132,30 @@ async fn models_of(route: &Route) -> Option<Vec<Value>> {
     value["data"].as_array().cloned()
 }
 
+/// A model card's README from the first computer that serves it: `{"id", "readme"}`.
+pub(super) async fn model_card(routes: &Routes, key: &str) -> Option<Value> {
+    let routes = routes.read().unwrap().clone();
+    let path = format!("{}{key}", k_lani_link_protocol::MODEL_CARD_PATH);
+    for route in &routes {
+        let response = call(route, Method::GET, &path, &HeaderMap::new(), Body::empty()).await;
+        if response.status() != StatusCode::OK {
+            continue;
+        }
+        // 32 KiB of text, escaped as JSON.
+        let Ok(bytes) = axum::body::to_bytes(response.into_body(), 256 * 1024).await else {
+            continue;
+        };
+        if let Ok(card) = serde_json::from_slice::<Value>(&bytes)
+            && card["readme"]
+                .as_str()
+                .is_some_and(|text| text.len() as u64 <= crate::config::MODEL_CARD_README_BYTES)
+        {
+            return Some(card);
+        }
+    }
+    None
+}
+
 /// Asks every computer for its models. A model two computers list stays with the first;
 /// the second one's is offered as `<id>@<n>`, n being that computer's place in the list.
 pub(super) async fn refresh(routes: &Routes, catalogs: &Catalogs) {

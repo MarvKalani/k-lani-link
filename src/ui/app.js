@@ -51,19 +51,18 @@ const texts = {
     fileChoose: 'Choose client.toml', fileTooLarge: 'This file is too large.',
     docker: 'Using OpenCode in Docker? It has its own launcher and does not use this page.', dockerLink: 'Docker setup',
     privacy: 'This page controls the connection. A chat is kept only while its window is open, unless you save it.',
-    chatTitle: 'Chat with the model', chatIntro: 'Try the model right here. Every window is its own conversation.',
-    chatNew: 'New chat', chatSavedTitle: 'Saved chats', chatWhere: 'Saved on this computer only, in:',
-    chatEmpty: 'No saved chats yet. Click Save in a chat window, and the chat appears here.',
-    chatOpenHint: 'Click a title to open the chat again.',
+    chatNew: 'New chat', chatSavedTitle: 'Saved chats',
+    chatHistory: 'Conversations', workspaceNav: 'Workspace', connectionTab: 'Connection',
+    chatActions: 'Chat menu', chatSpeech: 'Dictation & voice', chatOpenTitle: 'Start a chat',
+    chatConfirmClose: 'Close without saving?', chatAttach: 'Choose start image', chatRemoveReference: 'Remove start image', chatDetails: 'Details',
     chatRename: 'Rename', chatRenameHint: 'Rename this chat (or double-click its title)', languages: 'Language',
-    chatMessages: 'messages', chatDelete: 'Delete', chatSure: 'Really delete?', chatUntitled: 'New chat',
+    chatDelete: 'Delete', chatSure: 'Really delete?', chatUntitled: 'New chat',
     chatSave: 'Save', chatIsSaved: 'Saved', chatUnsave: 'Delete saved copy?',
     chatSaveHint: 'Keep this chat on this computer', chatUnsaveHint: 'Click twice to delete the saved copy',
-    chatClose: 'Close', chatLoose: 'Not saved: closing this window ends the conversation.',
-    chatKept: 'Saved on this computer. Every answer is saved as well.',
+    chatClose: 'Close',
     chatModel: 'Model', chatEffort: 'Thinking', chatDefaultModel: 'Default model',
     effortAuto: 'Default', effort_none: 'Off', effort_low: 'Low', effort_medium: 'Medium', effort_high: 'High',
-    chatPlaceholder: 'Message … (Enter sends, Shift+Enter for a new line)', chatSend: 'Send', chatStop: 'Stop',
+    chatMessage: 'Message', chatPlaceholder: 'Write a message …', chatSend: 'Send', chatStop: 'Stop',
     chatDictate: 'Dictate', chatDictateStop: 'Stop dictation', chatDictateMode: 'Speech recognition',
     chatDictateLocal: 'On this device', chatDictateOnline: 'Browser online',
     chatDictateDisclosure: 'Online recognition may send microphone audio to the browser provider, for example Google in Chrome. Start dictation?',
@@ -71,7 +70,52 @@ const texts = {
     chatDictateInstall: 'Download the language pack for on-device recognition?',
     chatDictateInstalling: 'Downloading language pack …', chatDictateListening: 'Listening …',
     chatDictateFailed: 'Speech recognition failed. Check your microphone and language settings.',
+    chatDictateNoText: 'No speech recognized.',
     chatReadAloud: 'Read aloud', chatReadStop: 'Stop reading', chatNoLocalVoice: 'No local voice for this language',
+    chatBrowserVoice: 'Device voice', chatVoice: 'Read-aloud voice', chatVoiceName: 'Voice',
+    chatDictateLink: 'Link · {model}', chatLocalAudio: 'Local Link · {model}', chatDictateTranscribing: 'Transcribing …',
+    chatRecordingLimit: 'Recording reached the maximum length.', chatAudioFailed: 'Could not play the audio.',
+    chatSpeechWaiting: 'Waiting for GPU memory …',
+    chatText: 'Chat', chatImage: 'Image', chatVideo: 'Video',
+    chatGenerate: 'Generate',
+    studioImageTitle: 'Create an image', studioVideoTitle: 'Create a video', studioPrompt: 'Description',
+    studioImagePlaceholder: 'What should the image show? For example: a lighthouse at dusk, watercolor',
+    studioVideoPlaceholder: 'What should happen in the video? For example: waves roll in, the camera slowly rises',
+    studioKept: 'Results stay only while this page is open. Download what you want to keep.',
+    studioImageEmpty: 'Your images appear here.', studioVideoEmpty: 'Your videos appear here.',
+    studioStartRequired: 'This model needs a start image. Choose one or drop it here.',
+    studioStartOptional: 'Optional: the video starts from this image. Choose one or drop it here.',
+    studioReuse: 'Use description again', studioRemove: 'Remove',
+    tabAudio: 'Audio', speakTitle: 'Read text aloud', speakText: 'Text', speakGo: 'Create audio',
+    speakPlaceholder: 'Type or paste the text to be read aloud …',
+    speakNote: 'With a Link voice you get an audio file to download. The device voice only plays, without a file.',
+    speakPart: 'Reading part {i} of {n} …', speakTooLong: 'The text is too long: at most 20,000 characters.',
+    speakDevice: 'Device voice, played directly', speakPlay: 'Play', speakNoVoice: 'No voice available. Connect a computer with a speech model.',
+    listenTitle: 'Turn speech into text', listenMic: 'Microphone', listenFile: 'Audio file', listenChoose: 'Choose audio file',
+    listenFileHint: 'MP3, WAV, OGG or M4A, up to 15 minutes. You can also drop the file here.',
+    listenNeedsLink: 'Audio files need a Link recognition model. Choose one under Speech recognition.',
+    listenText: 'Text', listenPlaceholder: 'The recognized text appears here. You can edit it.',
+    listenSave: 'Save as text file', listenToChat: 'Use in chat', listenToSpeak: 'Have it read aloud', listenClear: 'Clear',
+    listenPart: 'Transcribing part {i} of {n} …', listenWorking: 'Transcribing the file …',
+    audioTooLong: 'The audio is longer than 15 minutes. Split it first.', audioTooLarge: 'The file is larger than 60 MB.',
+    audioUnreadable: 'This file cannot be read as audio.',
+    cardOpen: 'Model card', cardHint: 'Page, description and benchmarks of this model', cardPage: 'Model page',
+    cardBenchmarks: 'Benchmarks', cardLoading: 'Loading the description …', cardEmpty: 'No details for this model.',
+    cardFailed: 'The description could not be loaded.',
+    imageAdd: 'Add image', imageEditTitle: 'Edit an image', imageCombineTitle: 'Combine images',
+    imageInputsOne: 'Image to edit', imageInputsMany: 'Input images (up to {n})',
+    imageInputsEdit: 'Optional: add an image and describe the change. Without one, a new image is created.',
+    imageInputsCombine: 'Optional: add up to {n} images and describe what to make of them. Without one, a new image is created.',
+    imageInputsRequired: 'This model needs at least one input image. Add one or drop it here.',
+    imageInputType: 'Use PNG, JPEG or WebP images.', imageInputsFull: 'This model takes no more images.',
+    imageInputsTooLarge: 'The images are larger than 7.5 MB together.', imageUseInput: 'Edit further',
+    chatVideoReference: 'Start image (PNG or JPEG)', chatUseImage: 'Use as start image',
+    chatImageRequired: 'Choose a start image for this model.', chatImageTooLarge: 'Choose an image smaller than 7 MiB.',
+    chatMediaWaiting: 'Generating …', chatVideoQueued: 'Video queued …', chatVideoWorking: 'Generating video …',
+    chatMediaFailed: 'Media generation failed.', chatMediaTimeout: 'The video is taking too long.',
+    chatDownload: 'Download',
+    attachedTitle: 'Link client unavailable', attachedDetail: 'Start the configured local Link client. This panel will reconnect automatically.',
+    attachedRetry: 'Check again', attachedReady: 'This panel uses the running local Link client.',
     chatRetry: 'Retry', chatThinking: 'Thinking', chatFirst: 'first token', chatRead: 'reading', chatCache: 'cache', chatContext: 'context',
     chatStopped: 'stopped', chatLength: 'length limit reached', chatWriting: 'writing …', chatWaiting: 'waiting for the model computer …', chatCut: 'The connection was interrupted. Try again.',
     sUnpaired: 'Not paired', sPairing: 'Pairing…', sConnecting: 'Connecting…', sConnected: 'Connected',
@@ -141,19 +185,18 @@ const texts = {
     fileChoose: 'client.toml auswählen', fileTooLarge: 'Diese Datei ist zu groß.',
     docker: 'OpenCode in Docker? Das hat einen eigenen Starter und nutzt diese Seite nicht.', dockerLink: 'Docker-Anleitung',
     privacy: 'Diese Seite steuert die Verbindung. Ein Chat bleibt nur, solange sein Fenster offen ist, außer du speicherst ihn.',
-    chatTitle: 'Chat mit dem Modell', chatIntro: 'Probiere das Modell direkt hier aus. Jedes Fenster ist ein eigenes Gespräch.',
-    chatNew: 'Neuer Chat', chatSavedTitle: 'Gespeicherte Chats', chatWhere: 'Nur auf diesem Computer gespeichert, in:',
-    chatEmpty: 'Noch keine gespeicherten Chats. Klicke in einem Chatfenster auf „Speichern“, dann erscheint der Chat hier.',
-    chatOpenHint: 'Klicke auf einen Titel, um den Chat wieder zu öffnen.',
+    chatNew: 'Neuer Chat', chatSavedTitle: 'Gespeicherte Chats',
+    chatHistory: 'Verläufe', workspaceNav: 'Arbeitsbereich', connectionTab: 'Verbindung',
+    chatActions: 'Chat-Menü', chatSpeech: 'Diktat & Vorlesen', chatOpenTitle: 'Starte einen Chat',
+    chatConfirmClose: 'Ohne Speichern schließen?', chatAttach: 'Startbild wählen', chatRemoveReference: 'Startbild entfernen', chatDetails: 'Details',
     chatRename: 'Umbenennen', chatRenameHint: 'Chat umbenennen (oder doppelt auf den Titel klicken)', languages: 'Sprache',
-    chatMessages: 'Nachrichten', chatDelete: 'Löschen', chatSure: 'Wirklich löschen?', chatUntitled: 'Neuer Chat',
+    chatDelete: 'Löschen', chatSure: 'Wirklich löschen?', chatUntitled: 'Neuer Chat',
     chatSave: 'Speichern', chatIsSaved: 'Gespeichert', chatUnsave: 'Gespeicherte Kopie löschen?',
     chatSaveHint: 'Diesen Chat auf diesem Computer behalten', chatUnsaveHint: 'Zweimal klicken löscht die gespeicherte Kopie',
-    chatClose: 'Schließen', chatLoose: 'Nicht gespeichert: Mit dem X ist dieses Gespräch weg.',
-    chatKept: 'Auf diesem Computer gespeichert. Jede Antwort wird mitgespeichert.',
+    chatClose: 'Schließen',
     chatModel: 'Modell', chatEffort: 'Denken', chatDefaultModel: 'Standardmodell',
     effortAuto: 'Standard', effort_none: 'Aus', effort_low: 'Wenig', effort_medium: 'Mittel', effort_high: 'Viel',
-    chatPlaceholder: 'Nachricht … (Enter sendet, Umschalt+Enter für neue Zeile)', chatSend: 'Senden', chatStop: 'Stopp',
+    chatMessage: 'Nachricht', chatPlaceholder: 'Schreib eine Nachricht …', chatSend: 'Senden', chatStop: 'Stopp',
     chatDictate: 'Diktieren', chatDictateStop: 'Diktat stoppen', chatDictateMode: 'Spracherkennung',
     chatDictateLocal: 'Auf diesem Gerät', chatDictateOnline: 'Browser online',
     chatDictateDisclosure: 'Bei der Online-Erkennung kann Mikrofon-Audio an den Browseranbieter gesendet werden, etwa an Google bei Chrome. Diktat starten?',
@@ -161,7 +204,52 @@ const texts = {
     chatDictateInstall: 'Sprachpaket für die Erkennung auf diesem Gerät herunterladen?',
     chatDictateInstalling: 'Sprachpaket wird heruntergeladen …', chatDictateListening: 'Mikrofon aktiv …',
     chatDictateFailed: 'Spracherkennung fehlgeschlagen. Prüfe Mikrofon und Spracheinstellungen.',
+    chatDictateNoText: 'Keine Sprache erkannt.',
     chatReadAloud: 'Vorlesen', chatReadStop: 'Vorlesen stoppen', chatNoLocalVoice: 'Keine lokale Stimme für diese Sprache',
+    chatBrowserVoice: 'Gerätestimme', chatVoice: 'Stimme zum Vorlesen', chatVoiceName: 'Stimme',
+    chatDictateLink: 'Link · {model}', chatLocalAudio: 'Link lokal · {model}', chatDictateTranscribing: 'Wird transkribiert …',
+    chatRecordingLimit: 'Maximale Aufnahmedauer erreicht.', chatAudioFailed: 'Das Audio konnte nicht abgespielt werden.',
+    chatSpeechWaiting: 'Warte auf freien GPU-Speicher …',
+    chatText: 'Chat', chatImage: 'Bild', chatVideo: 'Video',
+    chatGenerate: 'Erstellen',
+    studioImageTitle: 'Bild erstellen', studioVideoTitle: 'Video erstellen', studioPrompt: 'Beschreibung',
+    studioImagePlaceholder: 'Was soll das Bild zeigen? Zum Beispiel: ein Leuchtturm in der Dämmerung, Aquarell',
+    studioVideoPlaceholder: 'Was soll im Video passieren? Zum Beispiel: Wellen rollen heran, die Kamera steigt langsam auf',
+    studioKept: 'Ergebnisse bleiben nur, solange diese Seite offen ist. Lade herunter, was du behalten willst.',
+    studioImageEmpty: 'Hier erscheinen deine Bilder.', studioVideoEmpty: 'Hier erscheinen deine Videos.',
+    studioStartRequired: 'Dieses Modell braucht ein Startbild. Wähle eins oder zieh es hierher.',
+    studioStartOptional: 'Optional: Das Video beginnt mit diesem Bild. Wähle eins oder zieh es hierher.',
+    studioReuse: 'Beschreibung übernehmen', studioRemove: 'Entfernen',
+    tabAudio: 'Audio', speakTitle: 'Text vorlesen lassen', speakText: 'Text', speakGo: 'Audio erstellen',
+    speakPlaceholder: 'Schreib oder füge den Text ein, der vorgelesen werden soll …',
+    speakNote: 'Mit einer Link-Stimme bekommst du eine Audiodatei zum Herunterladen. Die Gerätestimme spielt nur ab, ohne Datei.',
+    speakPart: 'Teil {i} von {n} wird vorgelesen …', speakTooLong: 'Der Text ist zu lang: höchstens 20.000 Zeichen.',
+    speakDevice: 'Gerätestimme, direkt abgespielt', speakPlay: 'Abspielen', speakNoVoice: 'Keine Stimme verfügbar. Verbinde einen Rechner mit Sprachmodell.',
+    listenTitle: 'Sprache in Text umwandeln', listenMic: 'Mikrofon', listenFile: 'Audiodatei', listenChoose: 'Audiodatei wählen',
+    listenFileHint: 'MP3, WAV, OGG oder M4A, bis 15 Minuten. Du kannst die Datei auch hierher ziehen.',
+    listenNeedsLink: 'Für Audiodateien brauchst du ein Link-Erkennungsmodell. Wähle es unter Spracherkennung.',
+    listenText: 'Text', listenPlaceholder: 'Hier erscheint der erkannte Text. Du kannst ihn bearbeiten.',
+    listenSave: 'Als Textdatei speichern', listenToChat: 'Im Chat verwenden', listenToSpeak: 'Vorlesen lassen', listenClear: 'Leeren',
+    listenPart: 'Abschnitt {i} von {n} wird umgewandelt …', listenWorking: 'Die Datei wird umgewandelt …',
+    audioTooLong: 'Die Aufnahme ist länger als 15 Minuten. Teile sie vorher auf.', audioTooLarge: 'Die Datei ist größer als 60 MB.',
+    audioUnreadable: 'Diese Datei lässt sich nicht als Audio lesen.',
+    cardOpen: 'Modellkarte', cardHint: 'Seite, Beschreibung und Benchmarks dieses Modells', cardPage: 'Modellseite',
+    cardBenchmarks: 'Benchmarks', cardLoading: 'Beschreibung wird geladen …', cardEmpty: 'Zu diesem Modell gibt es keine Angaben.',
+    cardFailed: 'Die Beschreibung konnte nicht geladen werden.',
+    imageAdd: 'Bild hinzufügen', imageEditTitle: 'Bild bearbeiten', imageCombineTitle: 'Bilder kombinieren',
+    imageInputsOne: 'Bild zum Bearbeiten', imageInputsMany: 'Eingabebilder (bis zu {n})',
+    imageInputsEdit: 'Optional: Füge ein Bild hinzu und beschreibe die Änderung. Ohne Bild entsteht ein neues.',
+    imageInputsCombine: 'Optional: Füge bis zu {n} Bilder hinzu und beschreibe, was daraus werden soll. Ohne Bild entsteht ein neues.',
+    imageInputsRequired: 'Dieses Modell braucht mindestens ein Eingabebild. Füge eins hinzu oder zieh es hierher.',
+    imageInputType: 'Verwende PNG-, JPEG- oder WebP-Bilder.', imageInputsFull: 'Dieses Modell nimmt keine weiteren Bilder.',
+    imageInputsTooLarge: 'Die Bilder sind zusammen größer als 7,5 MB.', imageUseInput: 'Weiter bearbeiten',
+    chatVideoReference: 'Startbild (PNG oder JPEG)', chatUseImage: 'Als Startbild verwenden',
+    chatImageRequired: 'Wähle ein Startbild für dieses Modell.', chatImageTooLarge: 'Wähle ein Bild unter 7 MiB.',
+    chatMediaWaiting: 'Wird erstellt …', chatVideoQueued: 'Video in der Warteschlange …', chatVideoWorking: 'Video wird erstellt …',
+    chatMediaFailed: 'Die Generierung ist fehlgeschlagen.', chatMediaTimeout: 'Die Videogenerierung dauert zu lange.',
+    chatDownload: 'Herunterladen',
+    attachedTitle: 'Link-Client nicht erreichbar', attachedDetail: 'Starte den konfigurierten lokalen Link-Client. Das Kontrollpanel verbindet sich dann automatisch.',
+    attachedRetry: 'Erneut prüfen', attachedReady: 'Dieses Kontrollpanel nutzt den laufenden lokalen Link-Client.',
     chatRetry: 'Nochmal', chatThinking: 'Denkprozess', chatFirst: 'erstes Token', chatRead: 'Lesen', chatCache: 'Cache', chatContext: 'Kontext',
     chatStopped: 'abgebrochen', chatLength: 'Längengrenze erreicht', chatWriting: 'schreibt …', chatWaiting: 'wartet auf den Modellrechner …', chatCut: 'Die Verbindung wurde unterbrochen. Versuche es erneut.',
     sUnpaired: 'Nicht gekoppelt', sPairing: 'Koppeln…', sConnecting: 'Verbinde…', sConnected: 'Verbunden',
@@ -243,6 +331,7 @@ const t = (key) => texts[language][key] || texts.en[key] || key;
 function applyTexts() {
   document.documentElement.lang = language;
   for (const element of document.querySelectorAll('[data-t]')) element.textContent = t(element.dataset.t);
+  for (const element of document.querySelectorAll('[data-t-label]')) element.setAttribute('aria-label', t(element.dataset.tLabel));
   byId('languages').setAttribute('aria-label', t('languages'));
   for (const button of document.querySelectorAll('[data-language]')) button.setAttribute('aria-pressed', String(button.dataset.language === language));
 }
@@ -272,6 +361,7 @@ let wantPair = false;
 let fix = null;
 let apiKey = '';
 let models = null;
+let modelCatalog = [];
 let lastTest = 0;
 let checking = false;
 async function api(path, data) {
@@ -285,7 +375,20 @@ async function api(path, data) {
   return value;
 }
 function error(message) { byId('error').textContent = message; byId('error').hidden = !message; }
-function show(step) { for (const id of ['pair', 'wait', 'ready', 'problem']) byId('step-' + id).hidden = id !== step; }
+function show(step) {
+  for (const id of ['pair', 'wait', 'ready', 'problem']) byId('step-' + id).hidden = id !== step;
+  document.body.classList.toggle('workspace', step === 'ready');
+}
+// Chat, image, video, audio and connection each have a tab of their own.
+const views = ['chat', 'image', 'video', 'audio', 'connection'];
+function workspace(view) {
+  for (const name of views) {
+    byId('open-' + name).setAttribute('aria-pressed', String(name === view));
+    byId(name + '-workspace').hidden = name !== view;
+  }
+  if (view !== 'connection') byId('key').type = 'password';
+}
+for (const name of views) byId('open-' + name).addEventListener('click', () => workspace(name));
 const icons = { connected: 'connected', joining: 'waiting', connecting: 'waiting', recovering: 'waiting', rejected: 'problem', offline: 'problem' };
 function light(phase, label) {
   byId('light').className = 'light ' + phase; byId('status').textContent = label; document.title = label + ' · k-lani-link';
@@ -299,7 +402,7 @@ function problem(name, button, work) {
   byId('problem-title').textContent = t(name + 'Title'); byId('problem-detail').textContent = t(name + 'Detail');
   byId('fix').textContent = t(button); fix = work; show('problem');
 }
-function forget() { apiKey = ''; models = null; lastTest = 0; byId('key').value = '••••••••••••'; byId('key').type = 'password'; }
+function forget() { apiKey = ''; models = null; modelCatalog = []; lastTest = 0; byId('key').value = '••••••••••••'; byId('key').type = 'password'; }
 function render(state) {
   current = state;
   // A choice still on its way to the panel wins over the status that was sent before it.
@@ -309,13 +412,17 @@ function render(state) {
     byId('relay-name').textContent = state.default_relay; byId('relay-preset').hidden = false; byId('relay-row').hidden = true;
   }
   if (state.api_base) byId('base').value = state.api_base;
-  byId('ready-note').textContent = t(state.tray ? 'readyNoteTray' : 'readyNote');
+  byId('ready-note').textContent = t(state.attached ? 'attachedReady' : state.tray ? 'readyNoteTray' : 'readyNote');
   showUpdate(state.update);
-  byId('disconnect').hidden = !state.running;
-  byId('repair').hidden = !state.configured || state.joining;
-  byId('config').disabled = busy || state.running || state.joining;
+  byId('disconnect').hidden = state.attached || !state.running;
+  byId('repair').hidden = state.attached || !state.configured || state.joining;
+  byId('config').disabled = state.attached || busy || state.running || state.joining;
+  byId('computers').hidden = !!state.attached;
   for (const id of ['pair', 'fix', 'cancel', 'repair', 'disconnect', 'quit']) byId(id).disabled = busy;
   if (state.phase !== 'connected') forget();
+  if (state.attached && state.phase !== 'connected') {
+    light('rejected', t('sProblem')); problem('attached', 'attachedRetry', refresh); return;
+  }
   if (state.joining) { light('joining', t('sPairing')); wait('waitPairTitle', 'waitPairDetail', false); return; }
   showComputers(state.computers || []);
   byId('pair-back').hidden = !state.configured;
@@ -419,10 +526,12 @@ async function check() {
   if (Date.now() - lastTest < 10000) return;
   lastTest = Date.now();
   try {
-    models = (await api('test', {})).models;
+    const result = await api('test', {});
+    models = result.models;
+    modelCatalog = result.catalog || [];
     byId('model-problem').textContent = models.length ? '' : t('noModel');
   } catch (cause) {
-    models = null; byId('model-problem').textContent = t('modelFail') + ' ' + cause.message;
+    models = null; modelCatalog = []; byId('model-problem').textContent = t('modelFail') + ' ' + cause.message;
   }
   byId('model-problem').hidden = !byId('model-problem').textContent;
   const list = models || [];
@@ -431,6 +540,7 @@ async function check() {
   select.hidden = list.length < 2; byId('model-one').hidden = list.length > 1;
   byId('model-one').value = list[0] || '';
   chatModels();
+  if (list.length) startChat();
 }
 async function refresh() {
   if (closed) return;

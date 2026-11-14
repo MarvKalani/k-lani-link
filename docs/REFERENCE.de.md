@@ -303,20 +303,44 @@ Prompts gehen. Über einfaches `http` laufen Prompts **unverschlüsselt** durch 
 Backends gemeinsam, und Modellverwaltung samt Drain betrifft nur `upstream`; ein
 Modellwechsel wartet also auch auf Anfragen an anderen Backends.
 
+Multipart-Anfragen enthalten kein lesbares `model`. Jede Art geht deshalb an ein fest
+zugeordnetes Backend: `video = true`, `speech = true`, `transcriptions = true` oder
+`image_edits = true` in höchstens je einem `[[backends]]`-Eintrag; ohne Zuordnung
+übernimmt `upstream`.
+
+### Modellkarten
+
+Das Kontrollfeld zeigt neben einem Modell den Knopf **Modellkarte**, wenn die
+`host.toml` es beschreibt. Die Links öffnen sich im Browser der Nutzerin oder des
+Nutzers. Die README liest der Host einmal beim Start (UTF-8-Text, höchstens 32 KiB,
+absoluter Pfad); das Kontrollfeld zeigt sie als reinen Text.
+
+```toml
+[[model_cards]]
+id = "Qwen3.8-FN-GSQ-RCO-Coder"                  # wie GET /v1/models es listet
+page = "https://huggingface.co/example/model"    # optional, nur https
+benchmarks = "https://example.org/benchmarks"    # optional, nur https
+readme = "/models/Qwen3.8-Coder/README.md"       # optional
+```
+
+Der Host ergänzt den Eintrag des Modells in `GET /v1/models` um `card` und beantwortet
+`GET /v1/link/model-cards/{key}` selbst mit der README; kein Backend wird gefragt.
+
 ## Unterstützte APIs
 
 Beide Peers prüfen die Routen anhand der Freigabeliste im Protokoll-Crate.
 Request- und Response-Bodies laufen unverändert durch. Beim Videostart und bei
-der Dateitranskription wird der geprüfte Multipart-`Content-Type` mit Boundary weitergegeben.
+der Dateitranskription sowie bei Bildbearbeitungen wird der geprüfte Multipart-`Content-Type` mit Boundary weitergegeben.
 Status und Download verwenden eine begrenzte Job-ID.
 
 | API | Routen | Typische Clients |
 | --- | --- | --- |
 | OpenAI | `GET /v1/models`, `POST /v1/chat/completions`, `/v1/responses`, `/v1/embeddings` | OpenCode, Cline, Continue, Codex mit eigenem Provider |
-| OpenAI Images | `POST /v1/images/generations` | OpenAI-kompatible Bildclients und Skripte mit einem [passenden Backend](../integrations/comfyui/README.md) |
+| OpenAI Images | `POST /v1/images/generations`, `POST /v1/images/edits` | OpenAI-kompatible Bildclients und Skripte mit einem [passenden Backend](../integrations/comfyui/README.md); Bearbeitungen laden ein oder mehrere Eingabebilder als Multipart hoch |
 | OpenAI Videos | `POST /v1/videos`, `GET /v1/videos/{id}`, `GET /v1/videos/{id}/content` | Multipart-Upload des Startbilds, Jobstatus und MP4-Download über den [ComfyUI-Adapter](../integrations/comfyui/README.md#animate-an-image-through-the-link) |
 | OpenAI Audio | `POST /v1/audio/speech`, `POST /v1/audio/transcriptions` | Sprachausgabe und Dateitranskription mit [NeMo-Speech.cpp](../integrations/nemo-speech/README.md) |
 | Anthropic Messages | `POST /v1/messages`, `/v1/messages/count_tokens` | Claude Code über `ANTHROPIC_BASE_URL` |
+| Modellkarten | `GET /v1/link/model-cards/{key}` | Das Kontrollfeld, für eine README aus der Host-Konfiguration |
 
 Das [Compose-Profil für Sprache](../deploy/speech/README.md) startet Audio8,
 Ming und Nemotron. Der native Client kann Audio über `[local_audio.speech]`

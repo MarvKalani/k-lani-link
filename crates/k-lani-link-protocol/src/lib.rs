@@ -143,6 +143,8 @@ pub enum Api {
 pub const VIDEO_CREATE_PATH: &str = "/v1/videos";
 pub const SPEECH_PATH: &str = "/v1/audio/speech";
 pub const TRANSCRIPTIONS_PATH: &str = "/v1/audio/transcriptions";
+/// Multipart: one or more input images and a prompt (edit an image, or combine several).
+pub const IMAGE_EDITS_PATH: &str = "/v1/images/edits";
 
 /// Fixed routes. Video status and content use the separate, validated job-ID pattern.
 pub const ROUTES: &[(Api, &str, &str)] = &[
@@ -151,6 +153,7 @@ pub const ROUTES: &[(Api, &str, &str)] = &[
     (Api::OpenAi, "POST", "/v1/responses"),
     (Api::OpenAi, "POST", "/v1/embeddings"),
     (Api::OpenAi, "POST", "/v1/images/generations"),
+    (Api::OpenAi, "POST", IMAGE_EDITS_PATH),
     (Api::OpenAi, "POST", VIDEO_CREATE_PATH),
     (Api::OpenAi, "POST", SPEECH_PATH),
     (Api::OpenAi, "POST", TRANSCRIPTIONS_PATH),
@@ -163,7 +166,23 @@ pub fn route_api(method: &str, path: &str) -> Option<Api> {
         .iter()
         .find(|(_, m, p)| *m == method && *p == path)
         .map(|(api, ..)| *api)
-        .or_else(|| video_job_route(method, path).then_some(Api::OpenAi))
+        .or_else(|| {
+            (video_job_route(method, path) || model_card_route(method, path)).then_some(Api::OpenAi)
+        })
+}
+
+/// A model card's README, which the host answers itself: the key is the first 16 hex digits
+/// of the SHA-256 of the model ID, as the card in `GET /v1/models` names it.
+pub const MODEL_CARD_PATH: &str = "/v1/link/model-cards/";
+
+pub fn model_card_route(method: &str, path: &str) -> bool {
+    method == "GET"
+        && path.strip_prefix(MODEL_CARD_PATH).is_some_and(|key| {
+            key.len() == 16
+                && key
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        })
 }
 
 pub fn video_route(method: &str, path: &str) -> bool {
@@ -186,7 +205,11 @@ fn video_job_route(method: &str, path: &str) -> bool {
 }
 
 pub fn multipart_route(method: &str, path: &str) -> bool {
-    method == "POST" && matches!(path, VIDEO_CREATE_PATH | TRANSCRIPTIONS_PATH)
+    method == "POST"
+        && matches!(
+            path,
+            VIDEO_CREATE_PATH | TRANSCRIPTIONS_PATH | IMAGE_EDITS_PATH
+        )
 }
 
 /// Validate the only caller-supplied header carried for multipart uploads.
@@ -592,6 +615,7 @@ mod tests {
             ("POST", "/v1/responses", Api::OpenAi),
             ("POST", "/v1/embeddings", Api::OpenAi),
             ("POST", "/v1/images/generations", Api::OpenAi),
+            ("POST", IMAGE_EDITS_PATH, Api::OpenAi),
             ("POST", VIDEO_CREATE_PATH, Api::OpenAi),
             ("POST", SPEECH_PATH, Api::OpenAi),
             ("POST", TRANSCRIPTIONS_PATH, Api::OpenAi),
@@ -602,7 +626,26 @@ mod tests {
         ] {
             assert_eq!(route_api(method, path), Some(api), "{method} {path}");
         }
-        assert_eq!(ROUTES.len(), 10);
+        assert_eq!(ROUTES.len(), 11);
+        assert!(!allowed_route("GET", IMAGE_EDITS_PATH));
+        assert!(allowed_route(
+            "GET",
+            "/v1/link/model-cards/0123456789abcdef"
+        ));
+        for path in [
+            "/v1/link/model-cards/",
+            "/v1/link/model-cards/0123456789ABCDEF",
+            "/v1/link/model-cards/0123456789abcdef0",
+            "/v1/link/model-cards/0123456789abcde",
+            "/v1/link/model-cards/0123456789abcdef/x",
+            "/v1/link/model-cards/../../models",
+        ] {
+            assert!(!allowed_route("GET", path), "{path}");
+        }
+        assert!(!allowed_route(
+            "POST",
+            "/v1/link/model-cards/0123456789abcdef"
+        ));
         assert!(!allowed_route("GET", "/v1/images/generations"));
         assert!(!allowed_route("GET", SPEECH_PATH));
         assert!(!allowed_route("GET", TRANSCRIPTIONS_PATH));
@@ -623,7 +666,8 @@ mod tests {
             "/history",
             "/view",
             "/ws",
-            "/v1/images/edits",
+            "/v1/images/edits/extra",
+            "/v1/images/variations",
             "/v1/audio/transcriptions/realtime",
             "/v1/audio/translations",
             "/v1/realtime",
@@ -644,6 +688,8 @@ mod tests {
     fn upload_preserves_only_a_valid_multipart_content_type() {
         assert!(multipart_route("POST", VIDEO_CREATE_PATH));
         assert!(multipart_route("POST", TRANSCRIPTIONS_PATH));
+        assert!(multipart_route("POST", IMAGE_EDITS_PATH));
+        assert!(!multipart_route("POST", "/v1/images/generations"));
         assert!(!multipart_route("POST", SPEECH_PATH));
         assert!(!multipart_route("GET", TRANSCRIPTIONS_PATH));
         assert!(multipart_content_type(

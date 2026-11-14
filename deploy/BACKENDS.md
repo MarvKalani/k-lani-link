@@ -76,14 +76,33 @@ profile and cannot be combined with this opt-out. Set `upstream_api_key` private
 if that local server requires authentication. Do not publish the host config.
 
 The [inference allowlist](../REFERENCE.md#supported-apis) includes image generation,
-video jobs and the audio endpoints for TTS and file transcription. Use the
-[ComfyUI adapter](../integrations/comfyui/README.md) for MiniMax H3 or
+video jobs and the audio endpoints for TTS and file transcription. You can choose
+the models and engines for each task. The service or adapter implements
+the corresponding OpenAI-compatible endpoint and accepts its model ID in `model`.
+For documents, the chat or responses backend also needs to read inline attachments.
+Use the [ComfyUI adapter](../integrations/comfyui/README.md) for MiniMax H3 or
 [NeMo-Speech.cpp](../integrations/nemo-speech/README.md) for speech. The backend must
 implement the route the client uses; k-lani-link does not convert Chat Completions
 to Responses or normalize reasoning/tool-call formats. SSE and request JSON,
 including the `model` field, are passed through. If an engine itself selects
 models from that field, it can do so without replacing the tunnel; this does
 not provide a universal load/unload API.
+
+To show dedicated controls in the Link chat, include `capability` in the model's
+`GET /v1/models` entry. Use `image`, `video`, `speech` or `transcription`.
+Image generation returns `data[].b64_json`. Video uses multipart creation, job
+status and MP4 download. A video model can set `requires_input_reference` to
+`true` to require a start image. An image model that edits or combines images sets
+`max_input_images` (1 to 16) and, if it cannot work from text alone,
+`requires_input_image: true`; the panel then sends `POST /v1/images/edits` with the
+images as multipart `image` (one) or `image[]` (several), `prompt`, `model` and
+`response_format: b64_json`. Assign that backend with `image_edits = true`.
+A speech model can advertise its supported voice
+IDs in `voices`. Entries with `capability: "chat"` or without a capability are
+available for chat. The same OpenAI URL serves the supported routes.
+In a panel with several model computers, video, transcription and image edits use
+the first connection's media routes. You can open a panel on a separate native client for
+a different pairing with `ui --client-config`.
 
 The generic setting skips only the privacy-profile admission check. Peer
 authentication, content encryption, route restrictions and explicit TURN opt-in

@@ -117,8 +117,33 @@ Audio an seinen Anbieter schicken darf. Das Diktat landet als bearbeitbarer
 Text im Eingabefeld. Beim Vorlesen wählt der Chat eine Stimme derselben
 Sprache, die der Browser mit `localService` als lokal meldet.
 
-Die Browserfunktionen gelten für den geöffneten Chat. Für IDEs und andere
-Programme stehen die Audio-Routen des nativen Client-Gateways zur Verfügung.
+Im Menü **Diktat & Vorlesen** oben im Chat stehen unter **Spracherkennung** auch die
+Transkriptionsmodelle der Link-URL. Beende das Diktat mit **Diktat stoppen**. Der
+Browser übergibt die Aufnahme als WAV an den gewählten Dienst und schreibt das
+Ergebnis ins Eingabefeld. Im selben Menü bietet **Stimme zum Vorlesen** die
+Gerätestimme und angebundene TTS-Modelle. Wähle dort eine Stimme und klicke unter
+einer Antwort auf **Vorlesen**. Audio8 und
+Ming verwenden mit `local-reference` die auf dem Modellrechner eingerichtete
+Stimmreferenz. Bei Client-Audio gelten die lokalen Routen aus `client.toml`.
+
+## Im Tab Audio
+
+Der Tab **Audio** des Kontrollfelds nutzt dieselben Modelle ohne Chat. Unter
+**Text vorlesen lassen** wird ein eingefügter Text mit einer Link-Stimme zu einer
+Audiodatei zum Herunterladen. Lange Texte gehen satzweise in Teilen an den Dienst
+und werden zu einer Datei zusammengefügt. Die Gerätestimme spielt den Text nur ab.
+Unter **Sprache in Text umwandeln** schreibt das Mikrofon oder eine Audiodatei
+(bis 15 Minuten) in ein bearbeitbares Textfeld. Dateien brauchen ein
+Link-Erkennungsmodell. Die Seite teilt die Aufnahme an leisen Stellen in
+Abschnitte von höchstens einer Minute, damit jede Anfrage unter 8 MiB bleibt.
+Den Text kannst du kopieren, als Datei speichern, in den Chat übernehmen oder
+vorlesen lassen.
+
+Audio8, Ming und Nemotron sind Beispiele. Du kannst andere Modelle über die
+gleichen Endpunkte nutzen, wenn der Dienst das OpenAI-Format und die gewählten
+Modell- und Stimm-IDs unterstützt. Für die Auswahl im Chat meldet der Dienst
+die jeweilige Fähigkeit als `capability: "speech"` oder `"transcription"`
+unter `/v1/models`. Für IDEs und andere Programme gelten die gleichen Routen.
 Ein späteres ONNX-Modell im Browser kann die Spracherkennung oder Vorlesestimme
 im Chat ersetzen. Für die Auswahl zählen deutsche Sprachqualität, Modellgröße
 und gemessene Latenz auf dem Zielgerät.

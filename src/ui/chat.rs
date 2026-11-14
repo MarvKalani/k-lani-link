@@ -9,9 +9,13 @@ use axum::{
     Json, Router,
     body::{Body, Bytes},
     extract::{DefaultBodyLimit, Path, Request, State},
-    http::StatusCode,
+    http::{Method, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
+};
+use k_lani_link_protocol::{
+    IMAGE_EDITS_PATH, MODEL_CARD_PATH, SPEECH_PATH, TRANSCRIPTIONS_PATH, model_card_route,
+    multipart_content_type, multipart_route, video_route,
 };
 use serde_json::{Value, json};
 
@@ -25,8 +29,10 @@ const DIRECTORY: &str = "chats";
 pub fn routes() -> Router<Panel> {
     Router::new()
         .route("/api/chat", post(chat))
+        .route("/api/media/{*path}", get(media).post(media))
         .route("/api/chats", get(list))
         .route("/api/chats/{id}", get(load).put(save).delete(remove))
+        .route("/api/model-card/{key}", get(model_card))
         .layer(DefaultBodyLimit::max(MAX_CHAT_BYTES))
 }
 
@@ -45,15 +51,7 @@ async fn chat(State(panel): State<Panel>, request: Request) -> Response {
     // bounds the request, so a request waiting for its answer does not hold it.
     drop(upload);
     // Through the front, like any AI app: the model picks the computer.
-    let target = {
-        let control = panel.control.lock().await;
-        control
-            .connections
-            .first()
-            .filter(|_| control.front.is_some())
-            .map(|first| first.config.listen)
-            .zip(panel.key())
-    };
+    let target = panel.gateway_address().await.zip(panel.key());
     let Some((listen, key)) = target else {
         return failure(StatusCode::CONFLICT, "Start the connection first.");
     };
@@ -66,13 +64,85 @@ async fn chat(State(panel): State<Panel>, request: Request) -> Response {
     };
     fields.insert("stream".into(), json!(true));
     fields.insert("stream_options".into(), json!({"include_usage": true}));
-    let response = panel
+    gateway_response(
+        panel
+            .stream
+            .post(format!("http://{listen}/v1/chat/completions"))
+            .bearer_auth(key)
+            .json(&request),
+    )
+    .await
+}
+
+/// A model card's README, from whichever connected computer serves it.
+async fn model_card(State(panel): State<Panel>, Path(key): Path<String>) -> Response {
+    if !model_card_route("GET", &format!("{MODEL_CARD_PATH}{key}")) {
+        return failure(StatusCode::NOT_FOUND, "No description for this model.");
+    }
+    match super::front::model_card(&panel.routes, &key).await {
+        Some(card) => Json(json!({
+            "id": card["id"].as_str().unwrap_or_default(),
+            "readme": card["readme"].as_str().unwrap_or_default(),
+        }))
+        .into_response(),
+        None => failure(StatusCode::NOT_FOUND, "No description for this model."),
+    }
+}
+
+/// Allow only the media operations used by the browser, on the configured loopback API.
+async fn media(State(panel): State<Panel>, request: Request) -> Response {
+    let (parts, body) = request.into_parts();
+    let path = parts.uri.path().replacen("/api/media/", "/v1/", 1);
+    let video = video_route(parts.method.as_str(), &path);
+    if parts.uri.query().is_some()
+        || !(video
+            || parts.method == Method::POST
+                && matches!(
+                    path.as_str(),
+                    "/v1/images/generations" | IMAGE_EDITS_PATH | SPEECH_PATH | TRANSCRIPTIONS_PATH
+                ))
+    {
+        return failure(StatusCode::NOT_FOUND, "Media route not available.");
+    }
+    let Some((listen, key)) = panel.gateway_address().await.zip(panel.key()) else {
+        return failure(StatusCode::CONFLICT, "Start the connection first.");
+    };
+    let mut upstream = panel
         .stream
-        .post(format!("http://{listen}/v1/chat/completions"))
-        .bearer_auth(key)
-        .json(&request)
-        .send()
-        .await;
+        .request(parts.method.clone(), format!("http://{listen}{path}"))
+        .bearer_auth(key);
+    if parts.method == Method::POST {
+        let content_type = parts
+            .headers
+            .get("content-type")
+            .and_then(|value| value.to_str().ok());
+        let content_type = if multipart_route(parts.method.as_str(), &path) {
+            content_type.filter(|value| multipart_content_type(value))
+        } else {
+            content_type.filter(|value| value.split(';').next() == Some("application/json"))
+        };
+        let Some(content_type) = content_type else {
+            return failure(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "Unsupported media request format.",
+            );
+        };
+        let upload = match panel.chat_uploads.reserve() {
+            Ok(permit) => permit,
+            Err(error) => return error.into_response(),
+        };
+        let body = match panel.chat_uploads.read(body).await {
+            Ok(body) => body,
+            Err(error) => return error.into_response(),
+        };
+        drop(upload);
+        upstream = upstream.header("content-type", content_type).body(body);
+    }
+    gateway_response(upstream).await
+}
+
+async fn gateway_response(request: reqwest::RequestBuilder) -> Response {
+    let response = request.send().await;
     let Ok(response) = response else {
         return failure(
             StatusCode::BAD_GATEWAY,

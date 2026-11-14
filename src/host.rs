@@ -3,8 +3,9 @@ use anyhow::{Result, ensure};
 use futures_util::StreamExt;
 use k_lani_link_protocol::{
     ANTHROPIC_VERSION, Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES,
-    RESPONSE_WINDOW, UPLOAD_SECONDS, allowed_route, control_body_valid, decode_data,
-    management_route, multipart_content_type, multipart_route, route_api,
+    MODEL_CARD_PATH, RESPONSE_WINDOW, UPLOAD_SECONDS, allowed_route, control_body_valid,
+    decode_data, management_route, model_card_route, multipart_content_type, multipart_route,
+    route_api,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -731,6 +732,18 @@ async fn forward(
         let body = routes.model_list().await?;
         return respond(tx, credits, id, 200, &body).await;
     }
+    // A model card's README comes from the host's configuration, never from a backend.
+    if model_card_route(&upload.method, &upload.path) {
+        let key = &upload.path[MODEL_CARD_PATH.len()..];
+        let (status, body) = match routes.readme(key) {
+            Some((model, readme)) => (200, serde_json::json!({"id": model, "readme": readme})),
+            None => (
+                404,
+                serde_json::json!({"error": {"message": "no README for this model", "code": 404}}),
+            ),
+        };
+        return respond(tx, credits, id, status, &serde_json::to_vec(&body)?).await;
+    }
     let media = routes.media_backend(&upload.method, &upload.path);
     let index = match media {
         Some(index) => index,
@@ -994,6 +1007,7 @@ mod tests {
             video: false,
             speech: false,
             transcriptions: false,
+            image_edits: false,
         }
     }
     /// Runs one request through `forward` and returns the response body.
@@ -1050,6 +1064,68 @@ mod tests {
             .map(|m| (m["id"].as_str().unwrap(), m["owned_by"].as_str().unwrap()))
             .collect();
         assert_eq!(ids, [("alpha", "a"), ("shared", "a"), ("beta", "b")]);
+    }
+
+    #[tokio::test]
+    async fn model_cards_join_the_list_and_their_readme_comes_from_the_host() {
+        use k_lani_link_protocol::IMAGE_EDITS_PATH;
+        let primary = named("a", Arc::new(vec!["alpha", "beta"].into()), true).await;
+        let folder = std::env::temp_dir().join(format!("kl-card-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let readme = folder.join("README.md");
+        std::fs::write(&readme, "# Alpha\nA *small* model.").unwrap();
+        let mut config = routed_config(primary, vec![]);
+        config.model_cards = vec![crate::config::ModelCard {
+            id: "alpha".into(),
+            page: "https://huggingface.co/example/alpha".into(),
+            benchmarks: String::new(),
+            readme: Some(readme.clone()),
+        }];
+        let routes = Routes::new(&config).unwrap();
+        assert!(routes.lists_models());
+        let list: serde_json::Value =
+            serde_json::from_str(&ask(&routes, "GET", "/v1/models", "").await.unwrap()).unwrap();
+        let key = crate::config::model_card_key("alpha");
+        assert_eq!(
+            list["data"][0]["card"],
+            serde_json::json!({"page": "https://huggingface.co/example/alpha", "readme": key})
+        );
+        assert!(list["data"][1].get("card").is_none());
+        let card: serde_json::Value = serde_json::from_str(
+            &ask(&routes, "GET", &format!("{MODEL_CARD_PATH}{key}"), "")
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            card,
+            serde_json::json!({"id": "alpha", "readme": "# Alpha\nA *small* model."})
+        );
+        let unknown = ask(
+            &routes,
+            "GET",
+            &format!("{MODEL_CARD_PATH}0000000000000000"),
+            "",
+        )
+        .await
+        .unwrap();
+        assert!(unknown.contains("no README"), "{unknown}");
+        // A README that is too large, or not text, stops the host at its start.
+        std::fs::write(&readme, vec![b'x'; 33 * 1024]).unwrap();
+        assert!(Routes::new(&config).is_err());
+        std::fs::write(&readme, [0xff, 0xfe, 0x00]).unwrap();
+        assert!(Routes::new(&config).is_err());
+        std::fs::remove_dir_all(&folder).unwrap();
+        // Image edits are multipart, so they go to the backend configured for them.
+        let mut edits = backend("http://127.0.0.1:1".into(), true);
+        edits.image_edits = true;
+        let routes = Routes::new(&routed_config(
+            "http://127.0.0.1:2".into(),
+            vec![backend("http://127.0.0.1:3".into(), true), edits],
+        ))
+        .unwrap();
+        assert_eq!(routes.media_backend("POST", IMAGE_EDITS_PATH), Some(2));
+        assert_eq!(routes.media_backend("POST", "/v1/images/generations"), None);
     }
 
     #[cfg(unix)]

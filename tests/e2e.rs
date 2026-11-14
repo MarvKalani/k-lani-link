@@ -16,7 +16,9 @@ use k_lani_link::{
     gateway::Gateway,
     host, peer, signal,
 };
-use k_lani_link_protocol::{CHUNK_BYTES, SPEECH_PATH, TRANSCRIPTIONS_PATH};
+use k_lani_link_protocol::{
+    CHUNK_BYTES, IMAGE_EDITS_PATH, MODEL_CARD_PATH, SPEECH_PATH, TRANSCRIPTIONS_PATH,
+};
 use std::{
     convert::Infallible,
     sync::{
@@ -32,6 +34,8 @@ const VIDEO_JOB: &str = "/v1/videos/video_test";
 const AUDIO_FORM: &[u8] = b"--audio-test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"sample.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFF\0\xff\r\n--audio-test--\r\n";
 const AUDIO_CONTENT_TYPE: &str = "multipart/form-data; boundary=audio-test";
 const SPEECH_UPSTREAM_KEY: &str = "local-test-credential";
+const EDIT_FORM: &[u8] = b"--edit-test\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"a.png\"\r\nContent-Type: image/png\r\n\r\n\x89PNG\r\n--edit-test\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"b.png\"\r\nContent-Type: image/png\r\n\r\n\x89PNG\r\n--edit-test--\r\n";
+const EDIT_CONTENT_TYPE: &str = "multipart/form-data; boundary=edit-test";
 
 #[derive(Clone, Default)]
 struct Mock {
@@ -113,6 +117,7 @@ fn config(signaling_url: String, upstream: String) -> Config {
         resume_seconds: 0,
         backends: vec![],
         local_audio: Default::default(),
+        model_cards: Vec::new(),
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -159,6 +164,14 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
             .route(
                 VIDEO_JOB,
                 get(|| async { Json(serde_json::json!({"status": "completed"})) }),
+            )
+            .route(
+                IMAGE_EDITS_PATH,
+                post(|headers: HeaderMap, body: Bytes| async move {
+                    assert_eq!(headers["content-type"], EDIT_CONTENT_TYPE);
+                    assert_eq!(body.as_ref(), EDIT_FORM);
+                    Json(serde_json::json!({"data": [{"b64_json": STANDARD.encode(b"edited")}]}))
+                }),
             )
             .route(
                 "/v1/videos/video_test/content",
@@ -212,6 +225,20 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         video: true,
         speech: false,
         transcriptions: false,
+        image_edits: true,
+    });
+    let card_folder = std::env::temp_dir().join(format!("kl-e2e-card-{}", std::process::id()));
+    std::fs::create_dir_all(&card_folder).unwrap();
+    std::fs::write(
+        card_folder.join("README.md"),
+        "# Basalt test\nA model card.",
+    )
+    .unwrap();
+    cfg.model_cards.push(k_lani_link::config::ModelCard {
+        id: "basalt-test".into(),
+        page: "https://huggingface.co/example/basalt-test".into(),
+        benchmarks: String::new(),
+        readme: Some(card_folder.join("README.md")),
     });
     cfg.backends.push(Backend {
         upstream: audio_upstream,
@@ -222,6 +249,7 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         video: false,
         speech: true,
         transcriptions: true,
+        image_edits: false,
     });
     cfg.validate().unwrap();
     let cfg_host = cfg.clone();
@@ -273,6 +301,43 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         .await
         .unwrap();
     assert_eq!(models["data"][0]["id"], "basalt-test");
+    // The model card comes from the host's configuration, its README by its own route.
+    let key = models["data"][0]["card"]["readme"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        models["data"][0]["card"]["page"],
+        "https://huggingface.co/example/basalt-test"
+    );
+    let card: serde_json::Value = http
+        .get(format!("{base}{MODEL_CARD_PATH}{key}"))
+        .bearer_auth(&cfg.api_key)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(card["readme"], "# Basalt test\nA model card.");
+    std::fs::remove_dir_all(&card_folder).unwrap();
+    // Several input images reach the image-edit backend with their boundary intact.
+    let edited: serde_json::Value = http
+        .post(format!("{base}{IMAGE_EDITS_PATH}"))
+        .bearer_auth(&cfg.api_key)
+        .header("content-type", EDIT_CONTENT_TYPE)
+        .body(EDIT_FORM)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(edited["data"][0]["b64_json"], STANDARD.encode(b"edited"));
     let image: serde_json::Value = http
         .post(format!("{base}/v1/images/generations"))
         .bearer_auth(&cfg.api_key)

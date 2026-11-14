@@ -97,27 +97,40 @@ server runs in parallel, e.g. Basalt's `--parallel`; the panel's side lets eight
 
 ### Chat with the model
 
-Below the three values, **New chat** opens a small window inside the panel page.
-Each window is its own conversation: drag it by its title bar, resize it at the
-bottom-right corner and close it with **×**. Answers stream as they are written,
-with the model's thinking in a collapsible block and, under each answer, the model,
-thinking level, tokens per second, token count, time to the first token and the
-context size so far. **Model** and **Thinking** (default, off, low, medium, high) can
-change between messages of the same chat; **Retry** asks again for the last answer
-and **Stop** ends one early. When the model computer is busy with another request, a
-window waits its turn. The panel sends the requests through the same local API as
-your AI app, so the API key never reaches the page. A chat is named after its first
-message; **✎** in the title bar, or a double-click on the title, renames it (Enter
-keeps the new title, Escape the old one), and a saved chat keeps the new title.
+**Chat** opens the conversation workspace when the panel connects. The sidebar
+lets you start a new conversation and switch between open or saved chats.
+On narrow screens, **Conversations** opens the list. **Connection** contains
+the OpenAI URL, API key and model computers.
 
-A chat is kept only while its window is open. **Save** writes it, and every later
-answer, to a private file in the `chats` folder of the panel's data directory
+The composer shows the current model, the input, and **Dictate** and **Send**.
+**Options** contains the thinking level and speech recognition setting. Answers
+stream as they are written. Open **Details** on an answer for model and timing
+information. **Retry** asks again and **Stop** ends an active request. The
+**Chat menu** lets you rename or close the conversation. Chat requests use the
+same local API as your AI app.
+
+Use **Dictate** to fill the input from browser speech recognition or a linked
+transcription model. Browser online recognition asks before using the microphone
+because the browser provider may receive the audio. Click **Read aloud** under
+a reply. The adjacent **Voice** menu selects a local device voice or a speech
+model advertised by the gateway.
+
+When the gateway advertises image or video generation, choose **Image** or
+**Video** under **Create media**. A video can use an uploaded start image or an
+image already generated in the conversation. The preview stays in that chat and the
+download button saves a copy. For model discovery and formats, see the
+[backend setup](../BACKENDS.md#api-conventions-and-open-responses).
+
+If a native `k-lani-link client` already serves the OpenAI URL, open the panel
+with `k-lani-link ui --client-config /absolute/private/path/to/client.toml`.
+The panel uses the running client and its configured listen address.
+
+A chat stays in the open panel until you close it. **Save** writes the text
+messages and later answers to a private file in the `chats` folder of the panel's data directory
 (`%LOCALAPPDATA%\k-lani-link\control-panel\chats` on Windows,
 `~/.config/k-lani-link/control-panel/chats` on macOS and Linux, or below
-`$XDG_CONFIG_HOME` when set). **Saved chats**, below **New chat** once the panel is
-connected, lists them; click a title to open that chat again and continue it. The
-folder is shown below the list; **Delete** there, or clicking **Saved** twice in the
-window, removes the file. Nothing is saved without that click.
+`$XDG_CONFIG_HOME` when set). Use **Saved chats** to reopen a conversation.
+**Delete** there or a second click on **Saved** removes the file.
 
 Everything else sits under **More options and help**: pair again with a new code,
 disconnect, quit, troubleshooting, and importing a `client.toml` file from the
