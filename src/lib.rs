@@ -6,6 +6,8 @@ pub mod diagnostic;
 pub mod exchange;
 pub mod gateway;
 pub mod host;
+pub mod host_settings;
+pub mod host_ui;
 pub mod local_api;
 pub mod on_demand;
 pub mod pairing;

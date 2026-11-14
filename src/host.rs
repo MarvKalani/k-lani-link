@@ -1075,17 +1075,24 @@ mod tests {
         let readme = folder.join("README.md");
         std::fs::write(&readme, "# Alpha\nA *small* model.").unwrap();
         let mut config = routed_config(primary, vec![]);
-        config.model_cards = vec![crate::config::ModelCard {
-            id: "alpha".into(),
-            page: "https://huggingface.co/example/alpha".into(),
-            benchmarks: String::new(),
-            readme: Some(readme.clone()),
-        }];
+        let settings = folder.join("host-settings.json");
+        crate::host_settings::Settings {
+            model_cards: vec![crate::host_settings::ModelCard {
+                id: "alpha".into(),
+                page: "https://huggingface.co/example/alpha".into(),
+                benchmarks: String::new(),
+                readme: readme.display().to_string(),
+            }],
+            ..Default::default()
+        }
+        .save(&settings)
+        .unwrap();
+        config.settings_file = Some(settings);
         let routes = Routes::new(&config).unwrap();
         assert!(routes.lists_models());
         let list: serde_json::Value =
             serde_json::from_str(&ask(&routes, "GET", "/v1/models", "").await.unwrap()).unwrap();
-        let key = crate::config::model_card_key("alpha");
+        let key = crate::host_settings::model_card_key("alpha");
         assert_eq!(
             list["data"][0]["card"],
             serde_json::json!({"page": "https://huggingface.co/example/alpha", "readme": key})

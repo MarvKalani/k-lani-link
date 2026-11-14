@@ -146,9 +146,9 @@ pub(super) async fn model_card(routes: &Routes, key: &str) -> Option<Value> {
             continue;
         };
         if let Ok(card) = serde_json::from_slice::<Value>(&bytes)
-            && card["readme"]
-                .as_str()
-                .is_some_and(|text| text.len() as u64 <= crate::config::MODEL_CARD_README_BYTES)
+            && card["readme"].as_str().is_some_and(|text| {
+                text.len() as u64 <= crate::host_settings::MODEL_CARD_README_BYTES
+            })
         {
             return Some(card);
         }

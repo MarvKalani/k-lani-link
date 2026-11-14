@@ -117,7 +117,7 @@ fn config(signaling_url: String, upstream: String) -> Config {
         resume_seconds: 0,
         backends: vec![],
         local_audio: Default::default(),
-        model_cards: Vec::new(),
+        settings_file: None,
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -234,12 +234,19 @@ async fn real_webrtc_streams_tools_after_signaling_shutdown_and_cancels_upstream
         "# Basalt test\nA model card.",
     )
     .unwrap();
-    cfg.model_cards.push(k_lani_link::config::ModelCard {
-        id: "basalt-test".into(),
-        page: "https://huggingface.co/example/basalt-test".into(),
-        benchmarks: String::new(),
-        readme: Some(card_folder.join("README.md")),
-    });
+    let settings = card_folder.join("host-settings.json");
+    k_lani_link::host_settings::Settings {
+        model_cards: vec![k_lani_link::host_settings::ModelCard {
+            id: "basalt-test".into(),
+            page: "https://huggingface.co/example/basalt-test".into(),
+            benchmarks: String::new(),
+            readme: card_folder.join("README.md").display().to_string(),
+        }],
+        ..Default::default()
+    }
+    .save(&settings)
+    .unwrap();
+    cfg.settings_file = Some(settings);
     cfg.backends.push(Backend {
         upstream: audio_upstream,
         upstream_socket: None,

@@ -29,8 +29,12 @@ tagged versions and downloads are listed on
   one or combine several; `image_edits = true` assigns the backend. The bundled
   ComfyUI workflow still only creates images from text. Host and client both need
   this version; an older end answers 404 for image edits and model cards.
-- `[[model_cards]]` in `host.toml` gives a model a page link, a benchmark link and a
-  README. The panel shows them behind a **Model card** button; the host serves the
+- `k-lani-link host-ui --config host.toml` opens a setup page on the model computer:
+  backends and models at a glance, model cards, and a project with rule sets and roles
+  (also loaded from the panel's roles playground). It writes only its own settings
+  file, named by `settings_file` in `host.toml`, and never shows the host's keys.
+- Model cards give a model a page link, a benchmark link and a README (`.md` or `.txt`
+  only). The panel shows them behind a **Model card** button; the host serves the
   README itself under `GET /v1/link/model-cards/{key}`. A missing or oversized README
   stops the host at its start and is reported by `check`. With model cards, a host
   without further backends also answers `GET /v1/models` from its 30-second catalog.

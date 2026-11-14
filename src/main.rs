@@ -139,6 +139,15 @@ enum Command {
         #[arg(long)]
         client_config: Option<PathBuf>,
     },
+    /// Open the host setup page in your browser: models, model cards, project, rule sets and
+    /// roles. It edits only the settings file named by `settings_file`, never host.toml.
+    HostUi {
+        #[arg(long)]
+        config: PathBuf,
+        /// Print the page's address instead of opening a browser.
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Look for a newer signed release on GitHub and replace this program with it. Running
     /// hosts and clients keep the old version until they are restarted.
     Update {
@@ -851,7 +860,7 @@ async fn run(cli: Cli) -> Result<()> {
                         resume_seconds: 0,
                         backends: vec![],
                         local_audio: Default::default(),
-                        model_cards: Vec::new(),
+                        settings_file: None,
                         max_concurrent_requests: 1,
                         max_queued_requests: 0,
                         management_token_file: None,
@@ -881,6 +890,9 @@ async fn run(cli: Cli) -> Result<()> {
                 k_lani_link::management::request(&cfg, api_socket.as_deref(), Some(command))
                     .await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::HostUi { config, no_open } => {
+            k_lani_link::host_ui::run(&config, stop, !no_open).await?;
         }
         Command::Check { config } => {
             let loaded = Config::load(&config)?;

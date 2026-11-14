@@ -308,23 +308,27 @@ zugeordnetes Backend: `video = true`, `speech = true`, `transcriptions = true` o
 `image_edits = true` in höchstens je einem `[[backends]]`-Eintrag; ohne Zuordnung
 übernimmt `upstream`.
 
-### Modellkarten
+### Einrichtungsseite des Hosts und Modellkarten
 
-Das Kontrollfeld zeigt neben einem Modell den Knopf **Modellkarte**, wenn die
-`host.toml` es beschreibt. Die Links öffnen sich im Browser der Nutzerin oder des
-Nutzers. Die README liest der Host einmal beim Start (UTF-8-Text, höchstens 32 KiB,
-absoluter Pfad); das Kontrollfeld zeigt sie als reinen Text.
+`k-lani-link host-ui --config host.toml` öffnet auf dem Modellrechner eine
+Einrichtungsseite (nur lokal, mit eigenem Token, wie das Kontrollfeld). Sie zeigt die
+Backends und die Modelle, die der Host anbietet, und bearbeitet eine eigene
+Einstellungsdatei: Modellkarten sowie ein Projekt mit Regelwerken und Rollen. Die
+`host.toml` schreibt sie nie, und ihre Schlüssel zeigt sie nie. Der Host liest die
+Einstellungsdatei, die in der `host.toml` steht; fehlt die Zeile, zeigt die Seite sie an:
 
 ```toml
-[[model_cards]]
-id = "Qwen3.8-FN-GSQ-RCO-Coder"                  # wie GET /v1/models es listet
-page = "https://huggingface.co/example/model"    # optional, nur https
-benchmarks = "https://example.org/benchmarks"    # optional, nur https
-readme = "/models/Qwen3.8-Coder/README.md"       # optional
+settings_file = "/absoluter/pfad/host-settings.json"
 ```
 
-Der Host ergänzt den Eintrag des Modells in `GET /v1/models` um `card` und beantwortet
-`GET /v1/link/model-cards/{key}` selbst mit der README; kein Backend wird gefragt.
+Bei Docker binde die Einstellungsdatei unter diesem Pfad in den Container ein. Eine
+Modellkarte enthält einen https-Link zur Modellseite, einen https-Link zu Benchmarks
+und eine README (`.md`- oder `.txt`-Datei, höchstens 32 KiB, absoluter Pfad), die der
+Host beim Start liest. Er ergänzt den Eintrag des Modells in `GET /v1/models` um `card`
+und beantwortet `GET /v1/link/model-cards/{key}` selbst mit der README; kein Backend
+wird gefragt. Nach Änderungen an Modellkarten den Host neu starten. Rollen werden für
+den Rollen-Adapter gespeichert; Auftrag und Regelwerke einer Rolle bleiben auf dem
+Modellrechner.
 
 ## Unterstützte APIs
 

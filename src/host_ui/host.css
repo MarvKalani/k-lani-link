@@ -1,0 +1,34 @@
+/* The host setup page: one column of cards on the panel's colors. */
+.host-page main { max-width: 900px; }
+.host-page header h1 span { font-style: normal; }
+.host-page section.host-card { margin: 0 0 18px; padding: 20px 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: none; display: grid; gap: 12px; }
+.host-card h2 { margin: 0; font: 750 19px/1.3 Inter, system-ui, sans-serif; text-transform: none; letter-spacing: -.02em; }
+.host-card h3 { margin: 6px 0 0; color: var(--muted); font: 650 13px/1.4 Inter, system-ui, sans-serif; text-transform: none; letter-spacing: 0; }
+.host-card h4 { margin: 0; font: 700 14px/1.4 Inter, system-ui, sans-serif; overflow-wrap: anywhere; }
+.host-card .muted { margin: 0; }
+.host-card label { display: grid; gap: 5px; margin: 0; }
+.host-card label > span, .host-checks legend { display: block; text-transform: none; letter-spacing: 0; font: 600 12px/1.4 Inter, system-ui, sans-serif; color: var(--muted); }
+.host-card input:not([type=checkbox]), .host-card select, .host-card textarea { width: 100%; margin: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); color: var(--paper); font: 14px/1.45 Inter, system-ui, sans-serif; }
+.host-card textarea { resize: vertical; }
+.host-card button, .host-save button, .host-page header button { box-shadow: none; text-transform: none; letter-spacing: 0; }
+.host-card button.secondary, .host-page header button.secondary { padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; font: 650 12px/1.4 Inter, system-ui, sans-serif; }
+.host-card button.link { justify-self: start; color: var(--accent); font: 650 12px/1.5 Inter, system-ui, sans-serif; text-decoration: none; }
+.host-page button:hover:not(:disabled), .host-page button:active:not(:disabled) { transform: none; box-shadow: none; }
+.host-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; }
+.host-facts dt { color: var(--muted); font-size: 13px; }
+.host-facts dd { margin: 0; overflow-wrap: anywhere; font: 13px/1.5 var(--mono); }
+.host-hint { padding: 12px 14px; border-left: 4px solid var(--yellow); background: var(--raised); border-radius: 0 8px 8px 0; display: grid; gap: 8px; }
+.host-hint p { margin: 0; }
+.host-hint .row { margin: 0; grid-template-columns: minmax(0, 1fr) auto; }
+.host-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font: 13px/1.5 var(--mono); overflow-wrap: anywhere; }
+.host-list li { margin: 0; }
+.host-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.host-items, .host-cards { display: grid; gap: 10px; }
+.host-item { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--canvas); }
+.host-checks { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.host-checks label.check { display: flex; gap: 7px; align-items: center; margin: 0; }
+.host-checks label.check > span { color: var(--paper); font: 13px/1.4 Inter, system-ui, sans-serif; }
+.host-save { position: sticky; bottom: 0; display: flex; align-items: center; gap: 14px; padding: 12px 0; background: var(--night); }
+.host-save button { padding: 9px 18px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--ink); font: 750 14px/1.4 Inter, system-ui, sans-serif; }
+.host-save p { margin: 0; }
+@media (max-width: 700px) { .host-page section.host-card { padding: 14px 12px; } .host-facts { grid-template-columns: minmax(0, 1fr); } }

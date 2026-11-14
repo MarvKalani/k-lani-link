@@ -309,22 +309,25 @@ Multipart requests carry no readable `model`, so each kind goes to one assigned
 backend: `video = true`, `speech = true`, `transcriptions = true` or `image_edits = true`
 in at most one `[[backends]]` entry each; without one, `upstream` takes them.
 
-### Model cards
+### Host setup page and model cards
 
-The control panel shows a **Model card** button next to a model when `host.toml`
-describes it. The links open in the user's browser; the README is read once when the
-host starts (UTF-8 text, at most 32 KiB, absolute path) and shown as plain text.
+`k-lani-link host-ui --config host.toml` opens a setup page on the model computer
+(loopback only, with its own token, like the control panel). It shows the backends and
+the models the host offers and edits a separate settings file: model cards, and a
+project with rule sets and roles. It never writes `host.toml` and never shows its keys.
+The host reads the settings file named in `host.toml`; the page shows this line when
+it is missing:
 
 ```toml
-[[model_cards]]
-id = "Qwen3.8-FN-GSQ-RCO-Coder"                  # as GET /v1/models lists it
-page = "https://huggingface.co/example/model"    # optional, https only
-benchmarks = "https://example.org/benchmarks"    # optional, https only
-readme = "/models/Qwen3.8-Coder/README.md"       # optional
+settings_file = "/absolute/path/host-settings.json"
 ```
 
-The host adds `card` to that model's entry in `GET /v1/models` and answers
-`GET /v1/link/model-cards/{key}` with the README itself; no backend is asked.
+In Docker, mount the settings file into the container at that path. A model card holds
+an https page link, an https benchmark link and a README (a `.md` or `.txt` file of at
+most 32 KiB, absolute path), read when the host starts. The host adds `card` to that
+model's entry in `GET /v1/models` and answers `GET /v1/link/model-cards/{key}` with the
+README itself; no backend is asked. Restart the host after changing model cards. Roles
+are stored for the role adapter; a role's task and rule sets stay on the model computer.
 
 ## Supported APIs
 

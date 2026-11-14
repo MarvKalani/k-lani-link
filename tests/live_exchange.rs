@@ -32,7 +32,7 @@ async fn encrypted_pairing_with_selected_live_exchange() {
         resume_seconds: 0,
         backends: vec![],
         local_audio: Default::default(),
-        model_cards: Vec::new(),
+        settings_file: None,
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,

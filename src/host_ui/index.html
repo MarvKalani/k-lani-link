@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>k-lani-link · Host</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/host.css">
+</head>
+<body class="workspace host-page">
+  <main>
+    <header><h1>k-lani-link · <span data-t="title">Model computer</span></h1><div class="header-side"><div id="languages" class="languages" role="group" aria-label="Language"><button type="button" data-language="de" lang="de">DE</button><button type="button" data-language="en" lang="en">EN</button></div><button id="close" class="secondary small" type="button" data-t="close">Close page</button></div></header>
+    <p id="error" role="alert" hidden></p>
+
+    <section class="host-card">
+      <h2 data-t="overview">Overview</h2>
+      <dl class="host-facts">
+        <dt data-t="configFile">Configuration</dt><dd id="config-file"></dd>
+        <dt data-t="settingsFile">Settings file</dt><dd id="settings-file"></dd>
+        <dt data-t="upstream">Main backend</dt><dd id="upstream"></dd>
+      </dl>
+      <div id="link-hint" class="host-hint" hidden>
+        <p data-t="linkHint">The host does not read this settings file yet. Add this line at the top of the configuration, then restart the host:</p>
+        <div class="row"><input id="link-line" readonly><button id="link-copy" class="secondary copy" type="button" data-t="copy">Copy</button></div>
+        <p class="muted" data-t="dockerHint">In Docker, also mount the settings file into the container at the same path.</p>
+      </div>
+      <h3 data-t="backends">Further backends</h3>
+      <ul id="backends" class="host-list"></ul>
+      <h3 data-t="models">Models the host offers</h3>
+      <ul id="models" class="host-list"></ul>
+      <p id="models-error" class="warn" hidden></p>
+    </section>
+
+    <section class="host-card">
+      <h2 data-t="cardsTitle">Model cards</h2>
+      <p class="muted" data-t="cardsIntro">Shown in the control panel next to the model. Links must start with https://. The README is a .md or .txt file on this computer (absolute path, at most 32 KB).</p>
+      <div id="cards" class="host-cards"></div>
+    </section>
+
+    <section class="host-card">
+      <h2 data-t="projectTitle">Project, rule sets and roles</h2>
+      <p class="muted" data-t="projectIntro">Roles take effect once the role adapter runs (next step). Clients will then see the role and its description, never its task, rule sets or the model behind it.</p>
+      <div class="buttons">
+        <button id="import" class="secondary small" type="button" data-t="import">Load file from the roles playground</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <label><span data-t="project">Project</span><input id="project" type="text" maxlength="60" autocomplete="off"></label>
+      <div class="host-head"><h3 data-t="ruleSets">Rule sets</h3><button id="ruleset-add" class="secondary small" type="button" data-t="add">Add</button></div>
+      <div id="rule-sets" class="host-items"></div>
+      <div class="host-head"><h3 data-t="roles">Roles</h3><button id="role-add" class="secondary small" type="button" data-t="add">Add</button></div>
+      <div id="roles" class="host-items"></div>
+    </section>
+
+    <div class="host-save">
+      <button id="save" type="button" data-t="save">Save</button>
+      <p id="saved" class="muted" role="status"></p>
+    </div>
+  </main>
+  <script src="/host.js"></script>
+</body>
+</html>

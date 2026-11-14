@@ -105,73 +105,10 @@ pub struct Config {
     /// Client only: serve the configured audio routes before entering the tunnel.
     #[serde(default, skip_serializing_if = "LocalAudio::is_empty")]
     pub local_audio: LocalAudio,
-    /// Host only: what the control panel shows about a model, added to `GET /v1/models`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub model_cards: Vec<ModelCard>,
-}
-
-/// Host only: a model's card for the control panel. The links open in the user's browser;
-/// the README is read once from this computer when the host starts.
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ModelCard {
-    /// The model ID as `GET /v1/models` lists it.
-    pub id: String,
-    /// The model's page, e.g. on Hugging Face.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub page: String,
-    /// Where its benchmark results are published.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub benchmarks: String,
-    /// A text or Markdown file with the model's description, absolute path, at most 32 KiB.
+    /// Host only: the file the host setup page writes (model cards, project, rule sets and
+    /// roles), as an absolute path. It may not exist yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub readme: Option<PathBuf>,
-}
-
-pub const MODEL_CARD_README_BYTES: u64 = 32 * 1024;
-
-/// The key a model card's README is fetched by: the first 16 hex digits of the ID's SHA-256.
-pub fn model_card_key(id: &str) -> String {
-    use sha2::Digest;
-    sha2::Sha256::digest(id.as_bytes())[..8]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
-/// A link a model card may carry: an https address without credentials.
-pub fn card_link(value: &str) -> bool {
-    value.len() <= 512
-        && Url::parse(value).is_ok_and(|url| {
-            url.scheme() == "https"
-                && url.host_str().is_some()
-                && url.username().is_empty()
-                && url.password().is_none()
-        })
-}
-
-impl ModelCard {
-    fn check(&self) -> Result<()> {
-        ensure!(
-            !self.id.is_empty() && self.id.chars().count() <= 256,
-            "model card id must be 1 to 256 characters"
-        );
-        for (name, link) in [("page", &self.page), ("benchmarks", &self.benchmarks)] {
-            ensure!(
-                link.is_empty() || card_link(link),
-                "model card {name} for {} must be an https address",
-                self.id
-            );
-        }
-        if let Some(readme) = &self.readme {
-            ensure!(
-                readme.is_absolute(),
-                "model card readme for {} must be an absolute path",
-                self.id
-            );
-        }
-        Ok(())
-    }
+    pub settings_file: Option<PathBuf>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -509,16 +446,8 @@ impl Config {
         for backend in &self.backends {
             backend.check()?;
         }
-        ensure!(self.model_cards.len() <= 64, "at most 64 model cards");
-        for (index, card) in self.model_cards.iter().enumerate() {
-            card.check()?;
-            ensure!(
-                !self.model_cards[..index]
-                    .iter()
-                    .any(|other| other.id == card.id),
-                "two model cards for {}",
-                card.id
-            );
+        if let Some(path) = &self.settings_file {
+            ensure!(path.is_absolute(), "settings_file must be an absolute path");
         }
         for audio in [
             self.local_audio.speech.as_ref(),
@@ -672,7 +601,7 @@ pub fn generate_pair(
         resume_seconds: 0,
         backends: vec![],
         local_audio: Default::default(),
-        model_cards: Vec::new(),
+        settings_file: None,
         max_concurrent_requests: 1,
         max_queued_requests: 0,
         management_token_file: None,
@@ -762,35 +691,6 @@ pub(crate) mod tests {
         config.validate().unwrap();
     }
 
-    #[test]
-    fn model_cards_carry_only_https_links_and_an_absolute_readme() {
-        let card = |page: &str, readme: Option<&str>| ModelCard {
-            id: "model".into(),
-            page: page.into(),
-            benchmarks: String::new(),
-            readme: readme.map(PathBuf::from),
-        };
-        let mut config = config();
-        for (page, readme, valid) in [
-            (
-                "https://huggingface.co/org/model",
-                Some("/models/README.md"),
-                true,
-            ),
-            ("", None, true),
-            ("http://huggingface.co/org/model", None, false),
-            ("https://user:pw@example.org/model", None, false),
-            ("javascript:alert(1)", None, false),
-            ("https://huggingface.co/org/model", Some("README.md"), false),
-        ] {
-            config.model_cards = vec![card(page, readme)];
-            assert_eq!(config.validate().is_ok(), valid, "{page} {readme:?}");
-        }
-        config.model_cards = vec![card("", None), card("", None)];
-        assert!(config.validate().is_err());
-        assert_eq!(model_card_key("model").len(), 16);
-    }
-
     use super::*;
     pub fn config() -> Config {
         Config {
@@ -815,7 +715,7 @@ pub(crate) mod tests {
             resume_seconds: 0,
             backends: vec![],
             local_audio: Default::default(),
-            model_cards: Vec::new(),
+            settings_file: None,
             max_concurrent_requests: 1,
             max_queued_requests: 0,
             management_token_file: None,

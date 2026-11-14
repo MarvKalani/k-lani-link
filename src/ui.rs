@@ -1083,7 +1083,7 @@ fn shown_card(card: &Value) -> Value {
     for name in ["page", "benchmarks"] {
         if let Some(link) = card[name]
             .as_str()
-            .filter(|link| crate::config::card_link(link))
+            .filter(|link| crate::host_settings::card_link(link))
         {
             shown.insert(name.into(), json!(link));
         }
@@ -1121,7 +1121,7 @@ pub fn default_directory() -> anyhow::Result<PathBuf> {
         .join("k-lani-link/control-panel"))
 }
 
-fn open_browser(address: &str) -> std::io::Result<std::process::Child> {
+pub(crate) fn open_browser(address: &str) -> std::io::Result<std::process::Child> {
     #[cfg(target_os = "windows")]
     let mut command = {
         let windows = std::env::var_os("SystemRoot").ok_or_else(|| {

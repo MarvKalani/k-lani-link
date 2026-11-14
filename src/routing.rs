@@ -1,5 +1,6 @@
 //! Host only: choose a backend by model or by a configured media route.
-use crate::config::{Backend, Config, MODEL_CARD_README_BYTES, model_card_key};
+use crate::config::{Backend, Config};
+use crate::host_settings::{MODEL_CARD_README_BYTES, Settings, model_card_key};
 use anyhow::{Result, ensure};
 use k_lani_link_protocol::{IMAGE_EDITS_PATH, SPEECH_PATH, TRANSCRIPTIONS_PATH, video_route};
 use serde::Deserialize;
@@ -64,15 +65,19 @@ impl Routes {
         };
         let mut cards = HashMap::new();
         let mut readmes = HashMap::new();
-        for card in &config.model_cards {
+        let settings = match &config.settings_file {
+            Some(path) => Settings::load(path)?,
+            None => Settings::default(),
+        };
+        for card in &settings.model_cards {
             let mut shown = serde_json::Map::new();
             for (name, link) in [("page", &card.page), ("benchmarks", &card.benchmarks)] {
                 if !link.is_empty() {
                     shown.insert(name.into(), Value::from(link.as_str()));
                 }
             }
-            if let Some(path) = &card.readme {
-                let text = read_readme(path).map_err(|error| {
+            if !card.readme.is_empty() {
+                let text = read_readme(Path::new(&card.readme)).map_err(|error| {
                     anyhow::anyhow!("model card readme for {}: {error}", card.id)
                 })?;
                 let key = model_card_key(&card.id);
