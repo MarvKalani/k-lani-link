@@ -45,6 +45,8 @@ pub struct Routes {
     cards: HashMap<String, Value>,
     /// Their READMEs, read at start: key → (model ID, text).
     readmes: HashMap<String, (String, String)>,
+    /// With `roles_only` in the settings: the only model IDs clients may list and use.
+    roles_only: Option<std::collections::HashSet<String>>,
 }
 
 impl Routes {
@@ -86,9 +88,13 @@ impl Routes {
             }
             cards.insert(card.id.clone(), Value::Object(shown));
         }
+        let roles_only = settings
+            .roles_only
+            .then(|| settings.roles.iter().map(|role| role.id()).collect());
         Ok(Self {
             cards,
             readmes,
+            roles_only,
             config: config.clone(),
             primary: client(config.upstream_socket.as_deref())?,
             backends: config
@@ -173,7 +179,29 @@ impl Routes {
 
     /// Whether `GET /v1/models` comes from the routes instead of a backend.
     pub fn lists_models(&self) -> bool {
-        self.is_routed() || self.config.load_on_demand || !self.cards.is_empty()
+        self.is_routed()
+            || self.config.load_on_demand
+            || !self.cards.is_empty()
+            || self.roles_only.is_some()
+    }
+
+    /// With `roles_only`: why a request must not reach any backend. Only requests naming a
+    /// role pass; a model behind a role, a request without a model and every multipart or
+    /// audio route are refused, so leaving models out of the list is not the only guard.
+    pub fn roles_refusal(&self, method: &str, path: &str, body: &[u8]) -> Option<&'static str> {
+        #[derive(Deserialize)]
+        struct Request {
+            model: Option<String>,
+        }
+        let roles = self.roles_only.as_ref()?;
+        if method == "GET" && path == "/v1/models" {
+            return None;
+        }
+        let model = serde_json::from_slice::<Request>(body)
+            .ok()
+            .and_then(|request| request.model);
+        (self.media_backend(method, path).is_some() || !model.is_some_and(|id| roles.contains(&id)))
+            .then_some("only the roles this model computer offers are available")
     }
 
     /// A model entry with its configured card, which replaces one the backend sent.
@@ -186,7 +214,12 @@ impl Routes {
 
     /// The README of the model card with this key, and the model it belongs to.
     pub fn readme(&self, key: &str) -> Option<&(String, String)> {
-        self.readmes.get(key)
+        // With `roles_only`, a hidden model's card stays hidden too.
+        self.readmes.get(key).filter(|(id, _)| {
+            self.roles_only
+                .as_ref()
+                .is_none_or(|roles| roles.contains(id))
+        })
     }
 
     /// The privacy check before a request reaches backend `index`, if it needs one.
@@ -260,6 +293,9 @@ impl Routes {
                     data.push(model.clone());
                 }
             }
+        }
+        if let Some(roles) = &self.roles_only {
+            data.retain(|entry| entry["id"].as_str().is_some_and(|id| roles.contains(id)));
         }
         Ok(serde_json::to_vec(
             &serde_json::json!({"object": "list", "data": data}),

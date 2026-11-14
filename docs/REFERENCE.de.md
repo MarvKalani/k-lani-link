@@ -326,9 +326,33 @@ Modellkarte enthält einen https-Link zur Modellseite, einen https-Link zu Bench
 und eine README (`.md`- oder `.txt`-Datei, höchstens 32 KiB, absoluter Pfad), die der
 Host beim Start liest. Er ergänzt den Eintrag des Modells in `GET /v1/models` um `card`
 und beantwortet `GET /v1/link/model-cards/{key}` selbst mit der README; kein Backend
-wird gefragt. Nach Änderungen an Modellkarten den Host neu starten. Rollen werden für
-den Rollen-Adapter gespeichert; Auftrag und Regelwerke einer Rolle bleiben auf dem
-Modellrechner.
+wird gefragt. Nach Änderungen an Modellkarten den Host neu starten.
+
+### Rollen
+
+`k-lani-link role-adapter --settings /absoluter/pfad/host-settings.json --upstream
+http://127.0.0.1:8080` bietet die Rollen der Einstellungsdatei als Modelle an,
+standardmäßig unter `127.0.0.1:8195`. Einen anderen Port wählst du auf der
+Einrichtungsseite (gespeichert als `role_adapter_listen`) oder mit `--listen`, das
+Vorrang hat. Trage ihn in der `host.toml` wie jedes Backend mit demselben Port ein:
+
+```toml
+[[backends]]
+upstream = "http://127.0.0.1:8195"
+```
+
+Die Modell-ID einer Rolle ist ihr Name in Kleinbuchstaben („Büro Assistent“ →
+`buero-assistent`). Eine Chat-Anfrage an eine Rolle bekommt Projekt, die Regelwerke der
+Rolle und ihren Auftrag als Systemnachricht und geht an das Modell der Rolle beim
+Upstream des Adapters; die Antwort nennt die Rolle. `GET /v1/models` zeigt nur ID und
+Beschreibung der Rolle. Gespeicherte Rollen gelten sofort. Der Adapter beantwortet nur
+Chat Completions, reicht die Werkzeuge des Clients durch und führt die Werkzeuge der
+Rolle noch nicht aus. Sein `/health` meldet das Datenschutzprofil des Upstreams.
+
+Mit **Clients sehen und nutzen nur die Rollen** (`roles_only`) listet der Host nur die
+Rollen und lehnt jedes andere Modell ab, ebenso Anfragen ohne Modell, alle Bild-,
+Video- und Audio-Routen und die Karte eines versteckten Modells. Nach einer Änderung
+den Host neu starten.
 
 ## Unterstützte APIs
 

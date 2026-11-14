@@ -31,4 +31,9 @@
 .host-save { position: sticky; bottom: 0; display: flex; align-items: center; gap: 14px; padding: 12px 0; background: var(--night); }
 .host-save button { padding: 9px 18px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--ink); font: 750 14px/1.4 Inter, system-ui, sans-serif; }
 .host-save p { margin: 0; }
+.host-code { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--canvas); font: 12px/1.5 var(--mono); white-space: pre-wrap; }
+.host-switch { display: flex !important; align-items: center; gap: 8px; }
+.host-switch > span { color: var(--paper) !important; font: 600 14px/1.4 Inter, system-ui, sans-serif !important; }
+.host-port { max-width: 260px; }
+.host-id { font-size: 12px; margin: -4px 0 0; }
 @media (max-width: 700px) { .host-page section.host-card { padding: 14px 12px; } .host-facts { grid-template-columns: minmax(0, 1fr); } }

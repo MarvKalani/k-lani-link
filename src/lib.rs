@@ -13,6 +13,7 @@ pub mod on_demand;
 pub mod pairing;
 pub mod peer;
 pub mod qr;
+pub mod role_adapter;
 pub mod routing;
 pub mod shutdown;
 pub mod signal;

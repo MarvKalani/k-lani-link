@@ -27,7 +27,16 @@ pub struct Settings {
     pub rule_sets: Vec<RuleSet>,
     #[serde(default)]
     pub roles: Vec<Role>,
+    /// True: clients see and use only the roles; the host refuses every other model.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub roles_only: bool,
+    /// Where the role adapter listens unless `--listen` says otherwise; loopback only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role_adapter_listen: Option<std::net::SocketAddr>,
 }
+
+/// The role adapter's address without a setting.
+pub const ROLE_ADAPTER_LISTEN: &str = "127.0.0.1:8195";
 
 /// A model's card for the control panel. The links open in the user's browser; the README
 /// is read once from this computer when the host starts.
@@ -69,6 +78,52 @@ pub struct Role {
     pub rule_sets: Vec<String>,
     #[serde(default)]
     pub tools: Vec<String>,
+}
+
+impl Role {
+    /// The model ID clients use for this role: its name in lower case, letters and digits
+    /// kept, umlauts spelled out, everything else a hyphen ("Büro Assistent" → "buero-assistent").
+    pub fn id(&self) -> String {
+        let mut id = String::new();
+        for c in self.name.trim().to_lowercase().chars() {
+            match c {
+                'ä' => id.push_str("ae"),
+                'ö' => id.push_str("oe"),
+                'ü' => id.push_str("ue"),
+                'ß' => id.push_str("ss"),
+                c if c.is_ascii_alphanumeric() || c == '.' || c == '_' => id.push(c),
+                _ if !id.ends_with('-') && !id.is_empty() => id.push('-'),
+                _ => {}
+            }
+        }
+        id.trim_end_matches('-').to_owned()
+    }
+
+    /// What the role's model hears before the conversation: project, rule sets, task.
+    pub fn system_prompt(&self, settings: &Settings) -> String {
+        let mut parts = Vec::new();
+        if !self.name.is_empty() {
+            parts.push(format!("You are the role \"{}\".", self.name));
+        }
+        if !settings.project.trim().is_empty() {
+            parts.push(format!("Project: {}", settings.project.trim()));
+        }
+        for set in settings
+            .rule_sets
+            .iter()
+            .filter(|set| self.rule_sets.contains(&set.name) && !set.rules.trim().is_empty())
+        {
+            parts.push(format!(
+                "Rules \"{}\", binding:\n{}",
+                set.name,
+                set.rules.trim()
+            ));
+        }
+        if !self.instructions.trim().is_empty() {
+            parts.push(self.instructions.trim().to_owned());
+        }
+        parts.join("\n\n")
+    }
 }
 
 /// A link a model card may carry: an https address without credentials.
@@ -151,6 +206,12 @@ impl Settings {
             self.project.chars().count() <= 60,
             "the project name is too long"
         );
+        if let Some(listen) = self.role_adapter_listen {
+            ensure!(
+                listen.ip().is_loopback() && listen.port() != 0,
+                "the role adapter listens on a fixed loopback port, e.g. 127.0.0.1:8195"
+            );
+        }
         ensure!(self.rule_sets.len() <= 32, "at most 32 rule sets");
         for set in &self.rule_sets {
             ensure!(
@@ -192,7 +253,21 @@ impl Settings {
                 );
             }
         }
-        unique(self.roles.iter().map(|r| r.name.as_str()), "roles")
+        unique(self.roles.iter().map(|r| r.name.as_str()), "roles")?;
+        for role in &self.roles {
+            ensure!(
+                !role.id().is_empty(),
+                "the role name {} needs a letter or digit",
+                role.name
+            );
+        }
+        let ids: Vec<_> = self.roles.iter().map(Role::id).collect();
+        unique(ids.iter().map(String::as_str), "roles (as model IDs)")
+    }
+
+    /// The role clients name with `id`, if there is one.
+    pub fn role(&self, id: &str) -> Option<&Role> {
+        self.roles.iter().find(|role| role.id() == id)
     }
 
     /// The settings in `path`; a file that does not exist yet means none.
@@ -291,6 +366,36 @@ mod tests {
         settings.roles[0].tools.push("shell".into());
         assert!(settings.check().is_err());
         settings.roles[0].tools.pop();
+        assert_eq!(settings.roles[0].id(), "coder");
+        settings.role_adapter_listen = Some("192.168.1.2:8195".parse().unwrap());
+        assert!(settings.check().is_err());
+        settings.role_adapter_listen = Some("127.0.0.1:9100".parse().unwrap());
+        settings.check().unwrap();
+        let prompt = settings.roles[0].system_prompt(&settings);
+        assert!(
+            prompt.contains("Project: Demo")
+                && prompt.contains("KISS")
+                && prompt.ends_with("secret task")
+        );
+        let named = |name: &str| {
+            Role {
+                name: name.into(),
+                description: String::new(),
+                model: String::new(),
+                instructions: String::new(),
+                rule_sets: vec![],
+                tools: vec![],
+            }
+            .id()
+        };
+        assert_eq!(named("Büro Assistent!"), "buero-assistent");
+        assert_eq!(named("  Code Reviewer 2 "), "code-reviewer-2");
+        let mut clash = settings.clone();
+        clash.roles.push(Role {
+            name: "CODER".into(),
+            ..settings.roles[0].clone()
+        });
+        assert!(clash.check().is_err());
 
         let folder = std::env::temp_dir().join(format!("kl-settings-{}", std::process::id()));
         std::fs::create_dir_all(&folder).unwrap();

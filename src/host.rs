@@ -744,6 +744,11 @@ async fn forward(
         };
         return respond(tx, credits, id, status, &serde_json::to_vec(&body)?).await;
     }
+    if let Some(message) = routes.roles_refusal(&upload.method, &upload.path, &upload.body) {
+        let body =
+            serde_json::to_vec(&serde_json::json!({"error": {"message": message, "code": 403}}))?;
+        return respond(tx, credits, id, 403, &body).await;
+    }
     let media = routes.media_backend(&upload.method, &upload.path);
     let index = match media {
         Some(index) => index,
@@ -1133,6 +1138,79 @@ mod tests {
         .unwrap();
         assert_eq!(routes.media_backend("POST", IMAGE_EDITS_PATH), Some(2));
         assert_eq!(routes.media_backend("POST", "/v1/images/generations"), None);
+    }
+
+    #[tokio::test]
+    async fn with_roles_only_the_host_lists_and_serves_nothing_but_the_roles() {
+        use crate::host_settings::{ModelCard, Role, Settings};
+        let primary = named("a", Arc::new(vec!["alpha"].into()), true).await;
+        let roles = named("roles", Arc::new(vec!["buchhalter"].into()), true).await;
+        let folder = std::env::temp_dir().join(format!("kl-roles-only-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("alpha.md"), "hidden model").unwrap();
+        let settings = folder.join("host-settings.json");
+        Settings {
+            roles: vec![Role {
+                name: "Buchhalter".into(),
+                description: String::new(),
+                model: "alpha".into(),
+                instructions: "private".into(),
+                rule_sets: vec![],
+                tools: vec![],
+            }],
+            model_cards: vec![ModelCard {
+                id: "alpha".into(),
+                page: String::new(),
+                benchmarks: String::new(),
+                readme: folder.join("alpha.md").display().to_string(),
+            }],
+            roles_only: true,
+            ..Default::default()
+        }
+        .save(&settings)
+        .unwrap();
+        let mut config = routed_config(primary, vec![backend(roles, false)]);
+        config.settings_file = Some(settings);
+        let routes = Routes::new(&config).unwrap();
+        let list: serde_json::Value =
+            serde_json::from_str(&ask(&routes, "GET", "/v1/models", "").await.unwrap()).unwrap();
+        let ids: Vec<_> = list["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].clone())
+            .collect();
+        assert_eq!(ids, ["buchhalter"]);
+        let chat = |model: &str| format!(r#"{{"model":"{model}","messages":[]}}"#);
+        let role = ask(&routes, "POST", "/v1/chat/completions", &chat("buchhalter"))
+            .await
+            .unwrap();
+        assert!(role.contains(r#""backend":"roles""#), "{role}");
+        for (method, path, body) in [
+            ("POST", "/v1/chat/completions", chat("alpha")),
+            (
+                "POST",
+                "/v1/chat/completions",
+                r#"{"messages":[]}"#.to_owned(),
+            ),
+            (
+                "POST",
+                k_lani_link_protocol::SPEECH_PATH,
+                r#"{"model":"buchhalter"}"#.to_owned(),
+            ),
+        ] {
+            let refused = ask(&routes, method, path, &body).await.unwrap();
+            assert!(
+                refused.contains("only the roles"),
+                "{path} {body}: {refused}"
+            );
+        }
+        let key = crate::host_settings::model_card_key("alpha");
+        let card = ask(&routes, "GET", &format!("{MODEL_CARD_PATH}{key}"), "")
+            .await
+            .unwrap();
+        assert!(card.contains("no README"), "{card}");
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 
     #[cfg(unix)]

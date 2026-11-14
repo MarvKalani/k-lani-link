@@ -7,6 +7,11 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- `k-lani-link role-adapter` offers the host settings' roles as models, as a backend
+  behind the host. A role's request gets its project, rule sets and task as a system
+  message and goes to the role's model; the answer names the role. With
+  `roles_only`, the host lists and serves nothing but the roles. The host setup page
+  shows each role's model ID, the adapter command and the switch.
 - The control panel's Roles tab is a playground for role profiles: each role has a
   model, a task and the tools it may use (search the archive, read e-mails, create an
   image or video, hand over to another role). Several roles answer in one

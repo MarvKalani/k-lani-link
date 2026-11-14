@@ -148,6 +148,20 @@ enum Command {
         #[arg(long)]
         no_open: bool,
     },
+    /// Offer the roles of a host settings file as models, as a backend behind the host
+    /// (add it under [[backends]] in host.toml). Each role answers with its own model, its
+    /// project, rule sets and task; clients see only the role.
+    RoleAdapter {
+        /// The host settings file (absolute path), as the setup page writes it.
+        #[arg(long)]
+        settings: PathBuf,
+        /// The backend the roles' models run on, on this computer.
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        upstream: String,
+        /// Where to listen; default: `role_adapter_listen` in the settings file, else 127.0.0.1:8195.
+        #[arg(long)]
+        listen: Option<std::net::SocketAddr>,
+    },
     /// Look for a newer signed release on GitHub and replace this program with it. Running
     /// hosts and clients keep the old version until they are restarted.
     Update {
@@ -891,8 +905,15 @@ async fn run(cli: Cli) -> Result<()> {
                     .await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
+        Command::RoleAdapter {
+            settings,
+            upstream,
+            listen,
+        } => {
+            local(k_lani_link::role_adapter::run(settings, &upstream, listen, stop).await)?;
+        }
         Command::HostUi { config, no_open } => {
-            k_lani_link::host_ui::run(&config, stop, !no_open).await?;
+            local(k_lani_link::host_ui::run(&config, stop, !no_open).await)?;
         }
         Command::Check { config } => {
             let loaded = Config::load(&config)?;

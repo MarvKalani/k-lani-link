@@ -15,7 +15,7 @@ const texts = {
     cardsTitle: 'Model cards', cardsIntro: 'Shown in the control panel next to the model. Links must start with https://. The README is a .md or .txt file on this computer (absolute path, at most 32 KB).',
     page: 'Model page', benchmarks: 'Benchmarks', readme: 'README file',
     projectTitle: 'Project, rule sets and roles',
-    projectIntro: 'Roles take effect once the role adapter runs (next step). Clients will then see the role and its description, never its task, rule sets or the model behind it.',
+    projectIntro: 'Clients see a role and its description, never its task, its rule sets or the model behind it. Saved roles apply in the running role adapter at once.',
     import: 'Load file from the roles playground', importFailed: 'This file holds no roles.', imported: 'Loaded. Check the models, then save.',
     project: 'Project', ruleSets: 'Rule sets', roles: 'Roles', add: 'Add', remove: 'Remove', name: 'Name', rules: 'Rules',
     description: 'Description for clients', descriptionHint: 'What the role does, as clients see it',
@@ -23,6 +23,9 @@ const texts = {
     roleRuleSets: 'Rule sets for this role', tools: 'May use (not run yet)',
     archive_search: 'Search the archive', email_read: 'Read e-mails', image_create: 'Create an image', video_create: 'Create a video', hand_over: 'Hand over to another role',
     save: 'Save', saved: 'Saved. Restart the host so that changed model cards apply.', closed: 'The page is closed. You can close this tab.',
+    adapterHint: 'Roles run through the role adapter. Start it on this computer and add it as a backend in the configuration:',
+    rolesOnly: 'Clients see and use only the roles', roleId: 'Model ID for clients', adapterPort: 'Port of the role adapter (on this computer)',
+    rolesOnlyHint: 'The host then refuses every other model, also when a client names it directly, as well as image, video and audio requests. Restart the host after changing this.',
     unknownModel: 'not offered by this host', features: { video: 'video', speech: 'speech', transcriptions: 'transcription', image_edits: 'image edits', unverified: 'no privacy check' }
   },
   de: {
@@ -33,7 +36,7 @@ const texts = {
     cardsTitle: 'Modellkarten', cardsIntro: 'Erscheinen im Kontrollfeld neben dem Modell. Links beginnen mit https://. Die README ist eine .md- oder .txt-Datei auf diesem Rechner (absoluter Pfad, höchstens 32 KB).',
     page: 'Modellseite', benchmarks: 'Benchmarks', readme: 'README-Datei',
     projectTitle: 'Projekt, Regelwerke und Rollen',
-    projectIntro: 'Rollen werden wirksam, sobald der Rollen-Adapter läuft (nächster Schritt). Clients sehen dann die Rolle und ihre Beschreibung, nie ihren Auftrag, ihre Regelwerke oder das Modell dahinter.',
+    projectIntro: 'Clients sehen eine Rolle und ihre Beschreibung, nie ihren Auftrag, ihre Regelwerke oder das Modell dahinter. Gespeicherte Rollen gelten im laufenden Rollen-Adapter sofort.',
     import: 'Datei aus der Rollen-Spielwiese laden', importFailed: 'In dieser Datei stehen keine Rollen.', imported: 'Geladen. Prüfe die Modelle und speichere dann.',
     project: 'Projekt', ruleSets: 'Regelwerke', roles: 'Rollen', add: 'Hinzufügen', remove: 'Entfernen', name: 'Name', rules: 'Regeln',
     description: 'Beschreibung für Clients', descriptionHint: 'Was die Rolle tut, so wie Clients es sehen',
@@ -41,6 +44,9 @@ const texts = {
     roleRuleSets: 'Regelwerke für diese Rolle', tools: 'Darf benutzen (wird noch nicht ausgeführt)',
     archive_search: 'Archiv durchsuchen', email_read: 'E-Mails lesen', image_create: 'Bild erstellen', video_create: 'Video erstellen', hand_over: 'An andere Rolle übergeben',
     save: 'Speichern', saved: 'Gespeichert. Starte den Host neu, damit geänderte Modellkarten gelten.', closed: 'Die Seite ist geschlossen. Du kannst diesen Tab schließen.',
+    adapterHint: 'Rollen laufen über den Rollen-Adapter. Starte ihn auf diesem Rechner und trage ihn als Backend in die Konfiguration ein:',
+    rolesOnly: 'Clients sehen und nutzen nur die Rollen', roleId: 'Modell-ID für Clients', adapterPort: 'Port des Rollen-Adapters (auf diesem Rechner)',
+    rolesOnlyHint: 'Der Host lehnt dann jedes andere Modell ab, auch wenn ein Client es direkt nennt, ebenso Bild-, Video- und Audio-Anfragen. Nach einer Änderung den Host neu starten.',
     unknownModel: 'bietet dieser Host nicht an', features: { video: 'Video', speech: 'Sprache', transcriptions: 'Transkription', image_edits: 'Bildbearbeitung', unverified: 'ohne Datenschutzprüfung' }
   }
 };
@@ -93,6 +99,8 @@ async function loadOverview() {
   byId('upstream').textContent = view.upstream + (view.unverified ? ' · ' + t('features').unverified : '');
   byId('link-hint').hidden = view.linked;
   byId('link-line').value = view.line;
+  overviewSeen = view;
+  showAdapter();
   byId('backends').replaceChildren(...(view.backends.length ? view.backends.map((backend) => {
     const tags = Object.keys(t('features')).filter((key) => backend[key]).map((key) => t('features')[key]);
     return el('li', '', backend.upstream + (tags.length ? ' · ' + tags.join(', ') : ''));
@@ -125,8 +133,42 @@ function drawCards() {
 }
 
 /* ---- project, rule sets, roles ---- */
+// The command that starts the role adapter and the backend entry for it, with the chosen port.
+let overviewSeen = null;
+const DEFAULT_PORT = 8195;
+function adapterPort() {
+  const port = Number(String(settings.role_adapter_listen || '').split(':').pop());
+  return Number.isInteger(port) && port > 0 ? port : DEFAULT_PORT;
+}
+function showAdapter() {
+  if (document.activeElement !== byId('adapter-port')) byId('adapter-port').value = adapterPort();
+  if (!overviewSeen) return;
+  const quote = (text) => /^[\w./:@-]+$/.test(text) ? text : "'" + text.replaceAll("'", "'\\''") + "'";
+  byId('adapter-command').value = 'k-lani-link role-adapter --settings ' + quote(overviewSeen.settings) + ' --upstream ' + quote(overviewSeen.upstream);
+  byId('adapter-backend').textContent = '[[backends]]\nupstream = "http://127.0.0.1:' + adapterPort() + '"';
+}
+byId('adapter-port').addEventListener('input', () => {
+  const port = Number(byId('adapter-port').value);
+  settings.role_adapter_listen = Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== DEFAULT_PORT
+    ? '127.0.0.1:' + port : undefined;
+  showAdapter();
+});
+
+// The model ID clients use for a role, as the host derives it from the name.
+function roleId(name) {
+  let id = '';
+  for (const c of String(name).trim().toLowerCase()) {
+    const spelled = { 'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'ß': 'ss' }[c];
+    if (spelled) id += spelled;
+    else if (/[a-z0-9._]/.test(c)) id += c;
+    else if (id && !id.endsWith('-')) id += '-';
+  }
+  return id.replace(/-+$/, '');
+}
 function drawProject() {
   byId('project').value = settings.project || '';
+  byId('roles-only').checked = !!settings.roles_only;
+  showAdapter();
   byId('rule-sets').replaceChildren(...settings.rule_sets.map((set, index) => {
     const box = el('div', 'host-item');
     let previous = set.name;
@@ -146,7 +188,10 @@ function drawProject() {
   }));
   byId('roles').replaceChildren(...settings.roles.map((role, index) => {
     const box = el('div', 'host-item');
-    box.append(field('name', input(role.name, (value) => { role.name = value; }, { maxLength: 40 })));
+    const shownId = el('p', 'muted host-id');
+    const showId = () => { shownId.textContent = t('roleId') + ': ' + (roleId(role.name) || '…'); };
+    box.append(field('name', input(role.name, (value) => { role.name = value; showId(); }, { maxLength: 40 })), shownId);
+    showId();
     box.append(field('description', input(role.description, (value) => { role.description = value; },
       { maxLength: 500, placeholder: t('descriptionHint') })));
     const model = el('select');
@@ -176,6 +221,11 @@ function drawProject() {
   }));
 }
 byId('project').addEventListener('input', () => { settings.project = byId('project').value; });
+byId('roles-only').addEventListener('change', () => { settings.roles_only = byId('roles-only').checked; });
+byId('adapter-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(byId('adapter-command').value); } catch { byId('adapter-command').select(); document.execCommand('copy'); }
+  byId('adapter-copy').textContent = t('copied'); setTimeout(() => { byId('adapter-copy').textContent = t('copy'); }, 1500);
+});
 byId('ruleset-add').addEventListener('click', () => { settings.rule_sets.push({ name: '', rules: '' }); drawProject(); });
 byId('role-add').addEventListener('click', () => {
   settings.roles.push({ name: '', description: '', model: '', instructions: '', rule_sets: [], tools: [] }); drawProject();
@@ -194,6 +244,7 @@ byId('import-file').addEventListener('change', async () => {
     if (!Array.isArray(data.roles) || !data.roles.length) throw new Error();
     const text = (value, max) => String(value ?? '').slice(0, max);
     settings.project = text(data.project, 60);
+    settings.roles_only = false;
     settings.rule_sets = (Array.isArray(data.rule_sets) ? data.rule_sets : []).slice(0, 32)
       .map((set) => ({ name: text(set.name, 40), rules: text(set.rules, 8000) }));
     const sets = settings.rule_sets.map((set) => set.name);

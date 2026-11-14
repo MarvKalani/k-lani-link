@@ -36,11 +36,19 @@
 
     <section class="host-card">
       <h2 data-t="projectTitle">Project, rule sets and roles</h2>
-      <p class="muted" data-t="projectIntro">Roles take effect once the role adapter runs (next step). Clients will then see the role and its description, never its task, rule sets or the model behind it.</p>
+      <p class="muted" data-t="projectIntro">Clients see a role and its description, never its task, its rule sets or the model behind it. Saved roles apply in the running role adapter at once.</p>
       <div class="buttons">
         <button id="import" class="secondary small" type="button" data-t="import">Load file from the roles playground</button>
         <input id="import-file" type="file" accept="application/json,.json" hidden>
       </div>
+      <div class="host-hint host-steps">
+        <p data-t="adapterHint">Roles run through the role adapter. Start it on this computer and add it as a backend in the configuration:</p>
+        <label class="host-port"><span data-t="adapterPort">Port of the role adapter</span><input id="adapter-port" type="number" min="1024" max="65535" step="1" inputmode="numeric"></label>
+        <div class="row"><input id="adapter-command" readonly><button id="adapter-copy" class="secondary copy" type="button" data-t="copy">Copy</button></div>
+        <pre id="adapter-backend" class="host-code"></pre>
+      </div>
+      <label class="check host-switch"><input id="roles-only" type="checkbox"><span data-t="rolesOnly">Clients see and use only the roles</span></label>
+      <p class="muted" data-t="rolesOnlyHint">The host then refuses every other model, also when a client names it directly, as well as image, video and audio requests. Restart the host after changing this.</p>
       <label><span data-t="project">Project</span><input id="project" type="text" maxlength="60" autocomplete="off"></label>
       <div class="host-head"><h3 data-t="ruleSets">Rule sets</h3><button id="ruleset-add" class="secondary small" type="button" data-t="add">Add</button></div>
       <div id="rule-sets" class="host-items"></div>

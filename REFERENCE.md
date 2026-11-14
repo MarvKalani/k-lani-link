@@ -326,8 +326,32 @@ In Docker, mount the settings file into the container at that path. A model card
 an https page link, an https benchmark link and a README (a `.md` or `.txt` file of at
 most 32 KiB, absolute path), read when the host starts. The host adds `card` to that
 model's entry in `GET /v1/models` and answers `GET /v1/link/model-cards/{key}` with the
-README itself; no backend is asked. Restart the host after changing model cards. Roles
-are stored for the role adapter; a role's task and rule sets stay on the model computer.
+README itself; no backend is asked. Restart the host after changing model cards.
+
+### Roles
+
+`k-lani-link role-adapter --settings /absolute/path/host-settings.json --upstream
+http://127.0.0.1:8080` offers the settings file's roles as models, on
+`127.0.0.1:8195` by default. Choose another port on the setup page (stored as
+`role_adapter_listen`) or with `--listen`, which wins. Add it to `host.toml` like any
+backend, with the same port:
+
+```toml
+[[backends]]
+upstream = "http://127.0.0.1:8195"
+```
+
+A role's model ID is its name in lower case ("Büro Assistent" → `buero-assistent`).
+A chat request for a role gets the project, the role's rule sets and its task as a
+system message and goes to the role's model on the adapter's upstream; the answer
+names the role. `GET /v1/models` shows only the role's ID and description. Saved roles
+apply at once. The adapter answers Chat Completions only, passes the client's tools
+through and runs none of the role's own tools yet. Its `/health` reports the
+upstream's privacy profile.
+
+With **Clients see and use only the roles** (`roles_only`), the host lists only the
+roles and refuses every other model, requests without a model and all image, video and
+audio routes, as well as a hidden model's card. Restart the host after changing it.
 
 ## Supported APIs
 
