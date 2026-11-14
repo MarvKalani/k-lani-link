@@ -622,7 +622,8 @@ function hasUnsavedWork(chat) {
 }
 // Open windows and studio results that a restart would lose.
 function unsavedChats() {
-  return [...chats.values()].filter(hasUnsavedWork).length + (typeof studioUnsaved === 'function' ? studioUnsaved() : 0);
+  return [...chats.values()].filter(hasUnsavedWork).length + (typeof studioUnsaved === 'function' ? studioUnsaved() : 0)
+    + (typeof rolesUnsaved === 'function' ? rolesUnsaved() : 0);
 }
 function chatModels() {
   for (const chat of chats.values()) {
@@ -630,6 +631,7 @@ function chatModels() {
     if (!chat.busy && !(reading && chat.view.log.contains(reading.button))) draw(chat);
   }
   if (typeof studioModels === 'function') studioModels();
+  if (typeof rolesModels === 'function') rolesModels();
 }
 // After a language switch. A window that is still answering is redrawn once its answer ends.
 function relabelChats() {
@@ -640,6 +642,7 @@ function relabelChats() {
   }
   if (savedLoaded) listSaved();
   if (typeof studioRelabel === 'function') studioRelabel();
+  if (typeof rolesRelabel === 'function') rolesRelabel();
 }
 // Errors and empty answers are not part of the conversation the model sees.
 function tidy(chat) {

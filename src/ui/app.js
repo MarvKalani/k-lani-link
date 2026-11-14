@@ -109,6 +109,19 @@ const texts = {
     imageInputsRequired: 'This model needs at least one input image. Add one or drop it here.',
     imageInputType: 'Use PNG, JPEG or WebP images.', imageInputsFull: 'This model takes no more images.',
     imageInputsTooLarge: 'The images are larger than 7.5 MB together.', imageUseInput: 'Edit further',
+    tabRoles: 'Roles', rolesTitle: 'Roles', roleNew: 'New role', roleName: 'Name', roleInstructions: 'Task and rules',
+    roleTools: 'May use', roleDelete: 'Delete role', roleUnnamed: 'New role', roleGone: 'Removed role',
+    rolesExport: 'Save roles as file', rolesImport: 'Load roles from file', rolesImportFailed: 'This file holds no roles.',
+    rolesNote: 'Playground: no tool is ever run. When a role wants to use one, you see what it asks for and decide what it gets back. Later, the model computer can set roles like these, and apps then see only the role.',
+    rolesEmpty: 'Write a task and choose which role answers first. Models that support tool calls ask for their tools here.',
+    rolesAnswerBy: 'Answer from', rolesClear: 'Clear', rolesPlaceholder: 'Task for the roles …',
+    rolesNone: 'Create a role first.', rolesTooManySteps: 'The roles took eight steps in a row. Write again to continue.',
+    rolesWantsTool: 'wants to use: {tool}', rolesWantsHandOver: 'wants to hand over to {role}',
+    rolesRunHandOver: 'Hand over', rolesGiveResult: 'Give this result', rolesRefuse: 'Refuse', rolesRefused: 'Refused in the playground.',
+    rolesResultHint: 'Simulated result, e.g. two short excerpts that match the search',
+    rolesEmptyResult: 'Nothing found.',
+    toolArchive: 'Search the archive', toolEmail: 'Read e-mails', toolImage: 'Create an image', toolVideo: 'Create a video',
+    toolHandOver: 'Hand over to another role',
     chatVideoReference: 'Start image (PNG or JPEG)', chatUseImage: 'Use as start image',
     chatImageRequired: 'Choose a start image for this model.', chatImageTooLarge: 'Choose an image smaller than 7 MiB.',
     chatMediaWaiting: 'Generating …', chatVideoQueued: 'Video queued …', chatVideoWorking: 'Generating video …',
@@ -243,6 +256,19 @@ const texts = {
     imageInputsRequired: 'Dieses Modell braucht mindestens ein Eingabebild. Füge eins hinzu oder zieh es hierher.',
     imageInputType: 'Verwende PNG-, JPEG- oder WebP-Bilder.', imageInputsFull: 'Dieses Modell nimmt keine weiteren Bilder.',
     imageInputsTooLarge: 'Die Bilder sind zusammen größer als 7,5 MB.', imageUseInput: 'Weiter bearbeiten',
+    tabRoles: 'Rollen', rolesTitle: 'Rollen', roleNew: 'Neue Rolle', roleName: 'Name', roleInstructions: 'Auftrag und Regeln',
+    roleTools: 'Darf benutzen', roleDelete: 'Rolle löschen', roleUnnamed: 'Neue Rolle', roleGone: 'Entfernte Rolle',
+    rolesExport: 'Rollen als Datei speichern', rolesImport: 'Rollen aus Datei laden', rolesImportFailed: 'In dieser Datei stehen keine Rollen.',
+    rolesNote: 'Spielwiese: Kein Werkzeug wird ausgeführt. Will eine Rolle eins benutzen, siehst du, was sie verlangt, und entscheidest, was sie zurückbekommt. Später kann der Modellrechner solche Rollen festlegen, und Apps sehen dann nur die Rolle.',
+    rolesEmpty: 'Schreib eine Aufgabe und wähle, welche Rolle zuerst antwortet. Modelle mit Werkzeugaufrufen fragen hier nach ihren Werkzeugen.',
+    rolesAnswerBy: 'Antwort von', rolesClear: 'Leeren', rolesPlaceholder: 'Aufgabe für die Rollen …',
+    rolesNone: 'Lege zuerst eine Rolle an.', rolesTooManySteps: 'Die Rollen haben acht Schritte hintereinander gemacht. Schreib erneut, um weiterzumachen.',
+    rolesWantsTool: 'möchte benutzen: {tool}', rolesWantsHandOver: 'möchte übergeben an {role}',
+    rolesRunHandOver: 'Übergeben', rolesGiveResult: 'Dieses Ergebnis geben', rolesRefuse: 'Ablehnen', rolesRefused: 'In der Spielwiese abgelehnt.',
+    rolesResultHint: 'Simuliertes Ergebnis, z. B. zwei kurze Auszüge, die zur Suche passen',
+    rolesEmptyResult: 'Nichts gefunden.',
+    toolArchive: 'Archiv durchsuchen', toolEmail: 'E-Mails lesen', toolImage: 'Bild erstellen', toolVideo: 'Video erstellen',
+    toolHandOver: 'An andere Rolle übergeben',
     chatVideoReference: 'Startbild (PNG oder JPEG)', chatUseImage: 'Als Startbild verwenden',
     chatImageRequired: 'Wähle ein Startbild für dieses Modell.', chatImageTooLarge: 'Wähle ein Bild unter 7 MiB.',
     chatMediaWaiting: 'Wird erstellt …', chatVideoQueued: 'Video in der Warteschlange …', chatVideoWorking: 'Video wird erstellt …',
@@ -380,7 +406,7 @@ function show(step) {
   document.body.classList.toggle('workspace', step === 'ready');
 }
 // Chat, image, video, audio and connection each have a tab of their own.
-const views = ['chat', 'image', 'video', 'audio', 'connection'];
+const views = ['chat', 'image', 'video', 'audio', 'roles', 'connection'];
 function workspace(view) {
   for (const name of views) {
     byId('open-' + name).setAttribute('aria-pressed', String(name === view));

@@ -46,7 +46,7 @@ jobs:
       - run: node --check website/main.js
       - run: node --test npm/k-lani-link/test/*.test.js
       - run: bash -n scripts/npm-pack.sh
-      - run: node --check src/ui/app.js && node --check src/ui/chat.js && node --check src/ui/media.js && node --check src/ui/studio.js && node --check src/ui/scan.js
+      - run: node --check src/ui/app.js && node --check src/ui/chat.js && node --check src/ui/media.js && node --check src/ui/studio.js && node --check src/ui/roles.js && node --check src/ui/scan.js
       - run: node --check deploy/cloudflare-relay/src/index.js && node --check deploy/cloudflare-relay/tokens.js
       - run: python3 -B deploy/check-names.py
       - run: python3 -B deploy/source-bundle.py

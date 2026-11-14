@@ -49,6 +49,7 @@
         <button id="open-image" class="workspace-tab" type="button" aria-controls="image-workspace" aria-pressed="false" data-t="chatImage" hidden>Image</button>
         <button id="open-video" class="workspace-tab" type="button" aria-controls="video-workspace" aria-pressed="false" data-t="chatVideo" hidden>Video</button>
         <button id="open-audio" class="workspace-tab" type="button" aria-controls="audio-workspace" aria-pressed="false" data-t="tabAudio" hidden>Audio</button>
+        <button id="open-roles" class="workspace-tab" type="button" aria-controls="roles-workspace" aria-pressed="false" data-t="tabRoles" hidden>Roles</button>
         <button id="open-connection" class="workspace-tab" type="button" aria-controls="connection-workspace" aria-pressed="false" data-t="connectionTab">Connection</button>
       </nav>
       <div id="chat-workspace">
@@ -152,6 +153,42 @@
           </div>
         </div>
       </div>
+      <div id="roles-workspace" class="roles" hidden>
+        <div class="roles-side">
+          <div class="roles-head"><h2 data-t="rolesTitle">Roles</h2><button id="role-new" class="secondary small" type="button" data-t="roleNew">New role</button></div>
+          <ul id="role-list" class="chat-list role-list"></ul>
+          <form id="role-form" class="role-form" hidden>
+            <label><span data-t="roleName">Name</span><input id="role-name" type="text" maxlength="40" autocomplete="off"></label>
+            <label><span data-t="chatModel">Model</span><select id="role-model"></select></label>
+            <label><span data-t="roleInstructions">Task and rules</span><textarea id="role-instructions" rows="7"></textarea></label>
+            <fieldset class="role-tools"><legend data-t="roleTools">May use</legend><div id="role-tools"></div></fieldset>
+            <div class="studio-actions"><button id="role-delete" class="link" type="button" data-t="roleDelete">Delete role</button></div>
+          </form>
+          <div class="studio-actions">
+            <button id="roles-export" class="link" type="button" data-t="rolesExport">Save roles as file</button>
+            <button id="roles-import" class="link" type="button" data-t="rolesImport">Load roles from file</button>
+            <input id="roles-file" type="file" accept="application/json,.json" hidden>
+          </div>
+          <p class="studio-note" data-t="rolesNote">Playground: no tool is ever run.</p>
+        </div>
+        <div class="roles-main">
+          <div id="roles-log" class="chat-log" role="log">
+            <div id="roles-thread" class="chat-thread"></div>
+            <p id="roles-empty" class="studio-empty" data-t="rolesEmpty">Write a task and choose which role answers first.</p>
+          </div>
+          <form id="roles-composer" class="chat-form">
+            <div class="chat-composer">
+              <textarea id="roles-input" rows="2"></textarea>
+              <p id="roles-problem" class="studio-problem" role="status" hidden></p>
+              <div class="chat-send-row">
+                <label class="roles-answer"><span data-t="rolesAnswerBy">Answer from</span><select id="roles-speaker"></select></label>
+                <button id="roles-clear" class="secondary" type="button" data-t="rolesClear">Clear</button>
+                <button id="roles-send" class="chat-send" type="submit" data-t="chatSend">Send</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
       <div id="connection-workspace" hidden>
         <h2 data-t="connectionTab">Connection</h2>
         <p data-t="readyIntro">In your AI app, add an “OpenAI-compatible” provider and copy in these three values:</p>
@@ -211,5 +248,5 @@
       <p class="muted"><span data-t="docker">Using OpenCode in Docker? It has its own launcher and does not use this page.</span> <a href="https://github.com/MarvKalani/k-lani-link/blob/main/deploy/desktop/README.md" target="_blank" rel="noreferrer" data-t="dockerLink">Docker setup</a></p>
       <p class="muted"><span data-t="privacy">This page controls the connection. A chat is kept only while its window is open, unless you save it.</span> <span id="version"></span></p>
     </details>
-  </main><script src="/app.js"></script><script src="/media.js"></script><script src="/chat.js"></script><script src="/studio.js"></script><script src="/scan.js"></script>
+  </main><script src="/app.js"></script><script src="/media.js"></script><script src="/chat.js"></script><script src="/studio.js"></script><script src="/roles.js"></script><script src="/scan.js"></script>
 </body></html>

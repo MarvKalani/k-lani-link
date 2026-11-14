@@ -7,6 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The control panel's Roles tab is a playground for role profiles: each role has a
+  model, a task and the tools it may use (search the archive, read e-mails, create an
+  image or video, hand over to another role). Several roles answer in one
+  conversation. No tool is run: a tool call shows what the role asks for, and the user
+  gives a simulated result, refuses it or carries out a hand-over. Roles can be saved
+  to and loaded from a JSON file.
 - The control-panel chat can dictate through a linked transcription model or the
   browser and read answers with a linked voice or a local device voice; both are
   set in the chat's "Dictation & voice" menu. Models that advertise image or video
