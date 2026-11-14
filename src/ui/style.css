@@ -194,6 +194,14 @@ dialog.model-card[open] { display: flex; flex-direction: column; }
 .roles button:hover:not(:disabled), .roles button:active:not(:disabled) { transform: none; box-shadow: none; }
 .roles button.secondary { padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; box-shadow: none; text-transform: none; letter-spacing: 0; font: 650 12px/1.4 Inter, system-ui, sans-serif; }
 .roles .studio-actions .link { color: var(--accent); font: 650 12px/1.5 Inter, system-ui, sans-serif; text-decoration: none; }
+.roles-project { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.roles-project label { display: grid; gap: 5px; margin: 0; }
+.roles-project label > span { display: block; text-transform: none; letter-spacing: 0; font: 600 12px/1.4 Inter, system-ui, sans-serif; color: var(--muted); }
+.roles-project input, .rule-set input, .rule-set textarea { width: 100%; margin: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); color: var(--paper); font: 13px/1.5 Inter, system-ui, sans-serif; }
+.rule-sets { display: grid; gap: 8px; }
+.rule-set { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+.rule-set textarea { resize: vertical; min-height: 64px; }
+.rule-set button.link { justify-self: start; color: var(--accent); font: 650 12px/1.5 Inter, system-ui, sans-serif; text-decoration: none; }
 .role-form { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
 .role-form label { display: grid; gap: 5px; margin: 0; }
 .role-form label > span, .roles-answer > span { display: block; text-transform: none; letter-spacing: 0; font: 600 12px/1.4 Inter, system-ui, sans-serif; color: var(--muted); }

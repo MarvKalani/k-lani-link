@@ -156,11 +156,17 @@
       <div id="roles-workspace" class="roles" hidden>
         <div class="roles-side">
           <div class="roles-head"><h2 data-t="rolesTitle">Roles</h2><button id="role-new" class="secondary small" type="button" data-t="roleNew">New role</button></div>
+          <div class="roles-project">
+            <label><span data-t="rolesProject">Project</span><input id="roles-project" type="text" maxlength="60" autocomplete="off"></label>
+            <div class="roles-head"><span class="studio-label" data-t="rolesRuleSets">Rule sets</span><button id="ruleset-new" class="secondary small" type="button" data-t="ruleSetNew">New rule set</button></div>
+            <div id="rule-sets" class="rule-sets"></div>
+          </div>
           <ul id="role-list" class="chat-list role-list"></ul>
           <form id="role-form" class="role-form" hidden>
             <label><span data-t="roleName">Name</span><input id="role-name" type="text" maxlength="40" autocomplete="off"></label>
             <label><span data-t="chatModel">Model</span><select id="role-model"></select></label>
             <label><span data-t="roleInstructions">Task and rules</span><textarea id="role-instructions" rows="7"></textarea></label>
+            <fieldset class="role-tools"><legend data-t="roleRuleSets">Rule sets for this role</legend><div id="role-rule-sets"></div></fieldset>
             <fieldset class="role-tools"><legend data-t="roleTools">May use</legend><div id="role-tools"></div></fieldset>
             <div class="studio-actions"><button id="role-delete" class="link" type="button" data-t="roleDelete">Delete role</button></div>
           </form>

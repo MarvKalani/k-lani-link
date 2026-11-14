@@ -26,20 +26,33 @@ function roleToolSchema(name, others) {
   return { type: 'function', function: { name, description, parameters: { type: 'object', properties, required } } };
 }
 
-const roleState = { roles: [], selected: null, entries: [], busy: null, steps: 0, examples: false };
+// A project: its rule sets (what the group agreed, e.g. for code or for design) and its
+// roles. Each role names the rule sets that apply to it; it gets them before its own task.
+const roleState = { project: '', ruleSets: [], roles: [], selected: null, entries: [], busy: null, steps: 0, examples: false };
 let roleIds = 0;
 const newRoleId = () => 'r' + (++roleIds);
 
-function exampleRoles() {
+function exampleProject() {
   const de = language === 'de';
+  const code = { id: newRoleId(), name: 'Code', rules: de
+    ? 'C# und Rust. KISS, minimalistisch, lesbarer Code. Höchstens 2.000 Zeilen je Datei. Dokumentation im Code, eine README.md je Bereich.'
+    : 'C# and Rust. KISS, minimal, readable code. At most 2,000 lines per file. Documentation in the code, a README.md per area.' };
+  const design = { id: newRoleId(), name: de ? 'Gestaltung' : 'Design', rules: de
+    ? 'Klare, kurze Texte. Barrierefrei (Kontrast, Tastatur, Bildschirmleser). Hell und dunkel. Funktioniert ab Handybreite.'
+    : 'Clear, short texts. Accessible (contrast, keyboard, screen readers). Light and dark. Works from phone width up.' };
+  roleState.project = de ? 'Beispielprojekt' : 'Example project';
+  roleState.ruleSets = [code, design];
   return [
-    { name: 'Designer', tools: ['image_create', 'hand_over'], instructions: de
+    { name: 'Designer', ruleSets: [design.id], tools: ['image_create', 'hand_over'], instructions: de
       ? 'Du entwirfst Oberflächen. Beschreibe Entwürfe knapp, erstelle bei Bedarf ein Bild und gib fertige Entwürfe an den Reviewer.'
       : 'You design user interfaces. Describe designs briefly, create an image when useful and hand finished designs to the Reviewer.' },
-    { name: 'Reviewer', tools: ['hand_over'], instructions: de
+    { name: 'Coder', ruleSets: [code.id], tools: ['hand_over'], instructions: de
+      ? 'Du setzt Entwürfe in Code um und gibst fertigen Code an den Reviewer.'
+      : 'You turn designs into code and hand finished code to the Reviewer.' },
+    { name: 'Reviewer', ruleSets: [code.id, design.id], tools: ['hand_over'], instructions: de
       ? 'Du prüfst Entwürfe auf Verständlichkeit, Barrierefreiheit und Fehler. Nenne konkrete Mängel und gib bei Bedarf an den Designer zurück.'
       : 'You review designs for clarity, accessibility and mistakes. Name concrete problems and hand back to the Designer when needed.' },
-    { name: de ? 'Archivar' : 'Archivist', tools: ['archive_search', 'email_read'], instructions: de
+    { name: de ? 'Archivar' : 'Archivist', ruleSets: [], tools: ['archive_search', 'email_read'], instructions: de
       ? 'Du beantwortest Fragen aus dem Archiv und den E-Mails darin. Gib nur die Information weiter, nach der gefragt wurde. Nenne nie Listen, Anzahlen oder ganze Dokumente aus dem Archiv.'
       : 'You answer questions from the archive and the e-mails in it. Pass on only the information asked for. Never reveal lists, counts or whole documents from the archive.' }
   ].map((role) => ({ ...role, id: newRoleId(), model: '' }));
@@ -79,6 +92,17 @@ function drawRoles() {
       label.append(box, el('span', '', t(roleToolLabels[name])));
       return label;
     }));
+    byId('role-rule-sets').replaceChildren(...roleState.ruleSets.map((set) => {
+      const label = el('label', 'check');
+      const box = el('input'); box.type = 'checkbox'; box.checked = role.ruleSets.includes(set.id);
+      box.addEventListener('change', () => {
+        role.ruleSets = roleState.ruleSets.map((item) => item.id)
+          .filter((id) => id === set.id ? box.checked : role.ruleSets.includes(id));
+      });
+      label.append(box, el('span', '', set.name || t('ruleSetUnnamed')));
+      return label;
+    }));
+    byId('role-rule-sets').closest('fieldset').hidden = !roleState.ruleSets.length;
   }
   const speaker = byId('roles-speaker'), previous = speaker.value;
   fillChoices(speaker, roleState.roles.map((item) => ({ value: item.id, label: item.name || t('roleUnnamed') })));
@@ -97,8 +121,35 @@ byId('role-model').addEventListener('change', () => {
   if (role) role.model = byId('role-model').value;
 });
 byId('role-model').addEventListener('focus', freshModels);
+byId('roles-project').addEventListener('input', () => { roleState.project = byId('roles-project').value.slice(0, 60); });
+// The project's rule sets: a name and the rules, each editable in place.
+function drawRuleSets() {
+  byId('roles-project').value = roleState.project;
+  byId('rule-sets').replaceChildren(...roleState.ruleSets.map((set) => {
+    const box = el('div', 'rule-set');
+    const name = el('input'); name.type = 'text'; name.maxLength = 40; name.value = set.name;
+    name.placeholder = t('ruleSetUnnamed'); name.setAttribute('aria-label', t('roleName'));
+    name.addEventListener('input', () => { set.name = name.value.replace(/\s+/g, ' '); drawRoles(); });
+    const rules = el('textarea'); rules.rows = 3; rules.value = set.rules; rules.placeholder = t('rolesRulesHint');
+    rules.setAttribute('aria-label', t('rolesRuleSets'));
+    rules.addEventListener('input', () => { set.rules = rules.value.slice(0, 8000); });
+    const remove = el('button', 'link', t('studioRemove')); remove.type = 'button';
+    remove.addEventListener('click', () => confirmed(remove, t('chatSure'), () => {
+      roleState.ruleSets = roleState.ruleSets.filter((item) => item !== set);
+      for (const role of roleState.roles) role.ruleSets = role.ruleSets.filter((id) => id !== set.id);
+      drawRuleSets(); drawRoles();
+    }));
+    box.append(name, rules, remove);
+    return box;
+  }));
+}
+byId('ruleset-new').addEventListener('click', () => {
+  roleState.ruleSets.push({ id: newRoleId(), name: '', rules: '' });
+  drawRuleSets(); drawRoles();
+  byId('rule-sets').lastElementChild.querySelector('input').focus();
+});
 byId('role-new').addEventListener('click', () => {
-  const role = { id: newRoleId(), name: t('roleUnnamed'), model: '', instructions: '', tools: [] };
+  const role = { id: newRoleId(), name: t('roleUnnamed'), model: '', instructions: '', tools: [], ruleSets: [] };
   roleState.roles.push(role);
   roleState.selected = role.id;
   drawRoles();
@@ -110,7 +161,13 @@ byId('role-delete').addEventListener('click', () => confirmed(byId('role-delete'
   drawRoles();
 }));
 byId('roles-export').addEventListener('click', () => {
-  const data = { version: 1, roles: roleState.roles.map(({ name, model, instructions, tools }) => ({ name, model, instructions, tools })) };
+  const setName = (id) => roleState.ruleSets.find((set) => set.id === id)?.name;
+  const data = {
+    version: 2, project: roleState.project,
+    rule_sets: roleState.ruleSets.map(({ name, rules }) => ({ name, rules })),
+    roles: roleState.roles.map(({ name, model, instructions, tools, ruleSets }) =>
+      ({ name, model, instructions, tools, rule_sets: ruleSets.map(setName).filter(Boolean) }))
+  };
   const link = el('a');
   link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   link.download = 'k-lani-link-roles.json';
@@ -126,17 +183,25 @@ byId('roles-file').addEventListener('change', async () => {
     if (file.size > 256 * 1024) throw new Error();
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data.roles)) throw new Error();
+    const sets = (Array.isArray(data.rule_sets) ? data.rule_sets : []).slice(0, 16).map((set) => ({
+      id: newRoleId(), name: String(set.name || '').replace(/\s+/g, ' ').slice(0, 40), rules: String(set.rules || '').slice(0, 8000)
+    }));
+    const byName = (names) => Array.isArray(names) ? sets.filter((set) => names.includes(set.name)).map((set) => set.id) : [];
     const roles = data.roles.slice(0, 12).map((role) => ({
       id: newRoleId(),
       name: String(role.name || '').replace(/\s+/g, ' ').slice(0, 40) || t('roleUnnamed'),
       model: String(role.model || '').slice(0, 256),
       instructions: String(role.instructions || '').slice(0, 8000),
-      tools: Array.isArray(role.tools) ? roleToolNames.filter((name) => role.tools.includes(name)) : []
+      tools: Array.isArray(role.tools) ? roleToolNames.filter((name) => role.tools.includes(name)) : [],
+      ruleSets: byName(role.rule_sets)
     }));
     if (!roles.length) throw new Error();
     roleState.roles = roles;
+    roleState.ruleSets = sets;
+    roleState.project = String(data.project || '').slice(0, 60);
     roleState.selected = roles[0].id;
     rolesSay('');
+    drawRuleSets();
     drawRoles();
   } catch {
     rolesSay('rolesImportFailed');
@@ -156,6 +221,9 @@ function roleMessages(role) {
       ? `Du bist die Rolle „${role.name}“ in einem Gespräch mit mehreren Rollen und einem Menschen.`
       : `You are the role "${role.name}" in a conversation with several roles and a person.`,
     others.length ? (language === 'de' ? 'Andere Rollen: ' : 'Other roles: ') + others.join(', ') + '.' : '',
+    roleState.project.trim() ? (language === 'de' ? 'Projekt: ' : 'Project: ') + roleState.project.trim() : '',
+    ...roleState.ruleSets.filter((set) => role.ruleSets.includes(set.id) && set.rules.trim())
+      .map((set) => (language === 'de' ? `Regeln „${set.name}“, verbindlich:\n` : `Rules "${set.name}", binding:\n`) + set.rules.trim()),
     role.instructions
   ].filter(Boolean).join('\n\n');
   const messages = [{ role: 'system', content: system }];
@@ -345,13 +413,15 @@ function rolesModels() {
   if (byId('open-roles').hidden && !byId('roles-workspace').hidden) workspace('chat');
   if (!roleState.examples && chatModelIds().length) {
     roleState.examples = true;
-    roleState.roles = exampleRoles();
+    roleState.roles = exampleProject();
+    drawRuleSets();
     roleState.selected = roleState.roles[0].id;
   }
   drawRoles();
 }
 function rolesRelabel() {
   byId('roles-input').placeholder = t('rolesPlaceholder');
+  drawRuleSets();
   if (byId('roles-problem').textContent) rolesSay('');
   drawRoles();
   if (!roleState.busy) rolesDraw();
