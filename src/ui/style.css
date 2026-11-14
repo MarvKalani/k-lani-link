@@ -185,6 +185,15 @@ dialog.model-card[open] { display: flex; flex-direction: column; }
 .image-input-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; color: var(--paper); }
 .image-input button.link { font-size: 12px; color: var(--accent); }
 
+/* Answer now and attached documents */
+button.msg-answer-now { justify-self: start; margin-top: 4px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--accent); box-shadow: none; text-transform: none; letter-spacing: 0; font: 650 12px/1.4 Inter, system-ui, sans-serif; }
+.msg-files, .chat-attached { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.msg-files li, .chat-attached li { margin: 0; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--canvas); font-size: 12px; color: var(--paper); display: flex; align-items: center; gap: 6px; }
+.chat-attached { margin: 0; }
+.chat-attached button.link { color: var(--muted); text-decoration: none; font-size: 14px; }
+.chat-composer.dropping { border-color: var(--accent); }
+button.chat-attach { padding: 6px 9px; color: var(--paper); border: 1px solid var(--border); border-radius: 7px; background: transparent; font: 600 12px/1.4 Inter, system-ui, sans-serif; }
+
 /* Tool calls in the chat */
 .msg.tool-call { align-self: stretch; max-width: min(100%, 640px); display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .tool-call-head { margin: 0; color: var(--accent); font: 700 12px/1.4 Inter, system-ui, sans-serif; }

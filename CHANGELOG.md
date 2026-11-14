@@ -7,6 +7,14 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- `POST /v1/answer_now` passes the tunnel. Both ends admit it beside the request limit
+  and the host sends it ahead of its queue, so it reaches Basalt while the reply it
+  ends still holds the only slot. The panel chat shows **Answer now** while a model
+  thinks; a backend without it hides the button for that model.
+- The panel chat attaches documents: PDF, Word, PowerPoint, Excel and text files, by
+  button or drag and drop, up to 5 MB together. They go to the model as Chat
+  Completions `file` parts, which Basalt reads; saved chats keep the message text,
+  not the files.
 - The control-panel chat lets its own model create images and videos and read text
   aloud: with **Tools** on, it offers the connection's media models as tool calls, runs
   them in the panel and shows the result in the conversation. A video is made only

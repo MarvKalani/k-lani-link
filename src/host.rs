@@ -3,9 +3,9 @@ use anyhow::{Result, ensure};
 use futures_util::StreamExt;
 use k_lani_link_protocol::{
     ANTHROPIC_VERSION, Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES,
-    MODEL_CARD_PATH, RESPONSE_WINDOW, UPLOAD_SECONDS, allowed_route, control_body_valid,
-    decode_data, management_route, model_card_route, multipart_content_type, multipart_route,
-    route_api,
+    MODEL_CARD_PATH, RESPONSE_WINDOW, STEERING_REQUESTS, UPLOAD_SECONDS, allowed_route,
+    control_body_valid, decode_data, management_route, model_card_route, multipart_content_type,
+    multipart_route, route_api, steering_route,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -382,48 +382,58 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
         // then the swap runs like a management operation. Requests for the loaded model may
         // overtake it a bounded number of times, so each model's requests run together.
         while let Some(front) = queue.front() {
+            // A request that steers a running reply goes first and past every limit: it
+            // exists to change what is already running.
+            let steering = queue
+                .iter()
+                .position(|u| steering_route(&u.method, &u.path));
             // The model list is answered from the catalog and need not wait for a swap.
             let listing = front.method == "GET" && front.path == "/v1/models";
-            if switching.is_some() && !listing
-                || registry.jobs.values().any(|j| j.control)
-                || (front.control && !registry.jobs.is_empty())
-                || registry.jobs.len() >= config.max_concurrent_requests
+            if steering.is_none()
+                && (switching.is_some() && !listing
+                    || registry.jobs.values().any(|j| j.control)
+                    || (front.control && !registry.jobs.is_empty())
+                    || registry.jobs.len() >= config.max_concurrent_requests)
             {
                 break;
             }
-            let index = match want(models.as_ref(), front) {
-                Want::Ready => 0,
-                Want::Unknown => {
-                    ask(&mut asking, &mut asked);
-                    break;
-                }
-                Want::Load(model) => {
-                    let patient = overtaken < crate::on_demand::OVERTAKE_LIMIT
-                        && front.started.elapsed()
-                            < Duration::from_secs(crate::on_demand::OVERTAKE_SECONDS);
-                    let overtaker = queue
-                        .iter()
-                        .take_while(|u| !u.control)
-                        .position(|u| matches!(want(models.as_ref(), u), Want::Ready))
-                        .filter(|_| patient);
-                    match overtaker {
-                        Some(index) => {
-                            overtaken += 1;
-                            index
-                        }
-                        None => {
-                            if registry.jobs.is_empty()
-                                && let Some(socket) = managed.clone()
-                            {
-                                switching = Some(model.clone());
-                                overtaken = 0;
-                                let changed = changed.clone();
-                                tokio::spawn(async move {
-                                    let result = crate::on_demand::load(&socket, &model).await;
-                                    let _ = changed.send((Some(model), result));
-                                });
+            let index = if let Some(index) = steering {
+                index
+            } else {
+                match want(models.as_ref(), front) {
+                    Want::Ready => 0,
+                    Want::Unknown => {
+                        ask(&mut asking, &mut asked);
+                        break;
+                    }
+                    Want::Load(model) => {
+                        let patient = overtaken < crate::on_demand::OVERTAKE_LIMIT
+                            && front.started.elapsed()
+                                < Duration::from_secs(crate::on_demand::OVERTAKE_SECONDS);
+                        let overtaker = queue
+                            .iter()
+                            .take_while(|u| !u.control)
+                            .position(|u| matches!(want(models.as_ref(), u), Want::Ready))
+                            .filter(|_| patient);
+                        match overtaker {
+                            Some(index) => {
+                                overtaken += 1;
+                                index
                             }
-                            break;
+                            None => {
+                                if registry.jobs.is_empty()
+                                    && let Some(socket) = managed.clone()
+                                {
+                                    switching = Some(model.clone());
+                                    overtaken = 0;
+                                    let changed = changed.clone();
+                                    tokio::spawn(async move {
+                                        let result = crate::on_demand::load(&socket, &model).await;
+                                        let _ = changed.send((Some(model), result));
+                                    });
+                                }
+                                break;
+                            }
                         }
                     }
                 }
@@ -561,10 +571,16 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                             && !registry.outlets.contains_key(&id)
                             && !queue.iter().any(|u| u.id == id), "duplicate request ID");
                         let control = management_route(&method, &path);
-                        let occupied = uploads.values().filter(|u| u.control == control).count()
-                            + queue.iter().filter(|u| u.control == control).count()
-                            + registry.jobs.values().filter(|j| j.control == control).count();
-                        let capacity = if control { 1 } else { config.max_concurrent_requests + config.max_queued_requests };
+                        let steering = steering_route(&method, &path);
+                        // A steering request waits for nothing, so only its own kind counts.
+                        let occupied = if steering {
+                            uploads.values().chain(queue.iter()).filter(|u| steering_route(&u.method, &u.path)).count()
+                        } else {
+                            uploads.values().filter(|u| u.control == control).count()
+                                + queue.iter().filter(|u| u.control == control).count()
+                                + registry.jobs.values().filter(|j| j.control == control).count()
+                        };
+                        let capacity = if control { 1 } else if steering { STEERING_REQUESTS } else { config.max_concurrent_requests + config.max_queued_requests };
                         if !(allowed_route(&method, &path) || control && config.model_control_socket.is_some()) {
                             reject(peer.tx(), id, 404, "route not available").await?;
                         } else if !(if multipart_route(&method, &path) {

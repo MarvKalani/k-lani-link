@@ -369,6 +369,7 @@ Status und Download verwenden eine begrenzte Job-ID.
 | OpenAI Audio | `POST /v1/audio/speech`, `POST /v1/audio/transcriptions` | Sprachausgabe und Dateitranskription mit [NeMo-Speech.cpp](../integrations/nemo-speech/README.md) |
 | Anthropic Messages | `POST /v1/messages`, `/v1/messages/count_tokens` | Claude Code über `ANTHROPIC_BASE_URL` |
 | Modellkarten | `GET /v1/link/model-cards/{key}` | Das Kontrollfeld, für eine README aus der Host-Konfiguration |
+| Jetzt antworten | `POST /v1/answer_now` | Beendet bei Basalt das Denken einer laufenden Antwort; neben dem Anfrage-Limit zugelassen, damit es nie hinter der Antwort wartet, die es abkürzt |
 
 Das [Compose-Profil für Sprache](../deploy/speech/README.md) startet Audio8,
 Ming und Nemotron. Der native Client kann Audio über `[local_audio.speech]`

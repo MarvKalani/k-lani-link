@@ -143,6 +143,8 @@ pub enum Api {
 pub const VIDEO_CREATE_PATH: &str = "/v1/videos";
 pub const SPEECH_PATH: &str = "/v1/audio/speech";
 pub const TRANSCRIPTIONS_PATH: &str = "/v1/audio/transcriptions";
+/// Ends a running reply's thinking so it answers now (Basalt). Its body names the request.
+pub const ANSWER_NOW_PATH: &str = "/v1/answer_now";
 /// Multipart: one or more input images and a prompt (edit an image, or combine several).
 pub const IMAGE_EDITS_PATH: &str = "/v1/images/edits";
 
@@ -155,6 +157,7 @@ pub const ROUTES: &[(Api, &str, &str)] = &[
     (Api::OpenAi, "POST", "/v1/images/generations"),
     (Api::OpenAi, "POST", IMAGE_EDITS_PATH),
     (Api::OpenAi, "POST", VIDEO_CREATE_PATH),
+    (Api::OpenAi, "POST", ANSWER_NOW_PATH),
     (Api::OpenAi, "POST", SPEECH_PATH),
     (Api::OpenAi, "POST", TRANSCRIPTIONS_PATH),
     (Api::Anthropic, "POST", "/v1/messages"),
@@ -203,6 +206,13 @@ fn video_job_route(method: &str, path: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
+
+/// A request that steers another one already running: it must not wait behind it, so
+/// both ends admit it beside the request limit, a few at a time.
+pub fn steering_route(method: &str, path: &str) -> bool {
+    method == "POST" && path == ANSWER_NOW_PATH
+}
+pub const STEERING_REQUESTS: usize = 2;
 
 pub fn multipart_route(method: &str, path: &str) -> bool {
     method == "POST"
@@ -617,6 +627,7 @@ mod tests {
             ("POST", "/v1/images/generations", Api::OpenAi),
             ("POST", IMAGE_EDITS_PATH, Api::OpenAi),
             ("POST", VIDEO_CREATE_PATH, Api::OpenAi),
+            ("POST", ANSWER_NOW_PATH, Api::OpenAi),
             ("POST", SPEECH_PATH, Api::OpenAi),
             ("POST", TRANSCRIPTIONS_PATH, Api::OpenAi),
             ("GET", "/v1/videos/video_valid-01", Api::OpenAi),
@@ -626,7 +637,8 @@ mod tests {
         ] {
             assert_eq!(route_api(method, path), Some(api), "{method} {path}");
         }
-        assert_eq!(ROUTES.len(), 11);
+        assert_eq!(ROUTES.len(), 12);
+        assert!(steering_route("POST", ANSWER_NOW_PATH) && !steering_route("GET", ANSWER_NOW_PATH));
         assert!(!allowed_route("GET", IMAGE_EDITS_PATH));
         assert!(allowed_route(
             "GET",

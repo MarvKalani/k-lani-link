@@ -114,6 +114,33 @@ function renderOpenChats() {
   byId('chat-idle').hidden = items.length > 0;
 }
 
+/* ---- documents attached to a message ---- */
+// What Basalt reads in a message (see its documents guide); others may refuse file parts.
+const DOCUMENT_TYPES = ['.pdf', '.docx', '.pptx', '.xlsx', '.txt', '.md', '.csv', '.json', '.yaml', '.yml', '.xml', '.html'];
+const DOCUMENT_MIME = {
+  pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', txt: 'text/plain', md: 'text/markdown',
+  csv: 'text/csv', json: 'application/json', yaml: 'application/yaml', yml: 'application/yaml', xml: 'application/xml', html: 'text/html'
+};
+// Sent with every turn, as base64 inside the 8 MiB request: a few megabytes together.
+const DOCUMENT_BYTES = 5 * MiB;
+function documentType(file) {
+  const ext = file.name.toLowerCase().split('.').pop();
+  return DOCUMENT_TYPES.includes('.' + ext) ? DOCUMENT_MIME[ext] : '';
+}
+function documentData(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result).split(',')[1] || '';
+      resolve(`data:${documentType(file)};base64,${base64}`);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 /* ---- one window ---- */
 // A window is a text conversation. Images and videos have their own tabs (studio.js).
 function openChat(data = {}, focus = true) {
@@ -163,13 +190,50 @@ function openChat(data = {}, focus = true) {
   options.append(modelField, effortLabel, toolsLabel);
   const input = el('textarea'); input.rows = 2;
   const send = el('button', 'chat-send'); send.type = 'submit';
+  // Documents for the next message: read by the model computer, never stored by the panel.
+  const attach = el('button', 'secondary chat-attach'); attach.type = 'button';
+  const picker = el('input'); picker.type = 'file'; picker.multiple = true; picker.hidden = true;
+  picker.accept = DOCUMENT_TYPES.join(',');
+  const attached = el('ul', 'chat-attached');
+  chat.attachments = [];
+  const drawAttached = () => {
+    attached.replaceChildren(...chat.attachments.map((file) => {
+      const item = el('li');
+      const remove = el('button', 'link', '×'); remove.type = 'button';
+      remove.setAttribute('aria-label', t('studioRemove') + ': ' + file.name);
+      remove.addEventListener('click', () => { chat.attachments = chat.attachments.filter((f) => f !== file); drawAttached(); });
+      item.append(el('span', '', file.name), remove);
+      return item;
+    }));
+    attached.hidden = !chat.attachments.length;
+  };
+  const addFiles = (files) => {
+    error('');
+    for (const file of files) {
+      const total = chat.attachments.reduce((sum, f) => sum + f.size, 0) + file.size;
+      if (!documentType(file)) { error(t('chatAttachType')); continue; }
+      if (total > DOCUMENT_BYTES) { error(t('chatAttachTooLarge')); break; }
+      chat.attachments.push(file);
+    }
+    drawAttached();
+  };
+  attach.addEventListener('click', () => picker.click());
+  picker.addEventListener('change', () => { addFiles([...picker.files]); picker.value = ''; });
   const audio = chatAudio(input);
   const voice = chatVoice();
   speechMenu.append(audio.preference, voice.element);
   const sendRow = el('div', 'chat-send-row');
-  sendRow.append(options, audio.element, send);
+  sendRow.append(options, attach, picker, audio.element, send);
   const composer = el('div', 'chat-composer');
-  composer.append(input, sendRow, audio.status);
+  composer.append(attached, input, sendRow, audio.status);
+  drawAttached();
+  composer.addEventListener('dragover', (event) => {
+    if ([...event.dataTransfer.items].some((item) => item.kind === 'file')) { event.preventDefault(); composer.classList.add('dropping'); }
+  });
+  composer.addEventListener('dragleave', () => composer.classList.remove('dropping'));
+  composer.addEventListener('drop', (event) => {
+    event.preventDefault(); composer.classList.remove('dropping'); addFiles([...event.dataTransfer.files]);
+  });
   form.append(composer);
   box.append(bar, log, form);
   const menus = [speech, conversation];
@@ -208,6 +272,7 @@ function openChat(data = {}, focus = true) {
       toolsName.textContent = t('chatToolsToggle'); toolsLabel.title = t('chatToolsHint');
       input.setAttribute('aria-label', t('chatMessage'));
       input.placeholder = t('chatPlaceholder');
+      attach.textContent = t('chatAttachFile'); attach.title = t('chatAttachHint');
       for (const option of effort.options) option.textContent = t(option.value ? 'effort_' + option.value : 'effortAuto');
       this.catalog(); this.mode();
     },
@@ -278,14 +343,21 @@ function openChat(data = {}, focus = true) {
     }
   });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight + 4, 180) + 'px'; });
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
     audio.cancel();
     if (chat.busy) { chat.busy.abort(); return; }
     const text = input.value.trim();
     if (!text) return;
+    let files = [];
+    try {
+      files = await Promise.all(chat.attachments.map(async (file) => ({ name: file.name, data: await documentData(file) })));
+    } catch {
+      error(t('chatAttachFailed')); return;
+    }
+    chat.attachments = []; drawAttached();
     tidy(chat);
-    chat.messages.push({ role: 'user', content: text });
+    chat.messages.push(files.length ? { role: 'user', content: text, files } : { role: 'user', content: text });
     // Only an untitled chat is named after its first message; a title set by hand stays.
     nameChat(chat, text);
     input.value = ''; input.style.height = '';
@@ -700,6 +772,14 @@ function view(chat, message, last) {
   box.append(el('div', 'msg-text'));
   if (message.role === 'assistant') {
     box.append(el('div', 'msg-progress'));
+    if (message.stats?.live) {
+      // Basalt can end the thinking of a running reply, so it answers now.
+      const now = el('button', 'secondary small msg-answer-now', t('chatAnswerNow')); now.type = 'button';
+      now.title = t('chatAnswerNowHint');
+      now.hidden = true;
+      now.addEventListener('click', () => answerNow(chat, message, box));
+      box.append(now);
+    }
     if (!message.stats?.live && !message.stats?.waiting && describe(message)) {
       const details = el('details', 'msg-details');
       details.append(el('summary', '', t('chatDetails')), el('div', 'msg-meta', describe(message)));
@@ -707,6 +787,11 @@ function view(chat, message, last) {
     }
   }
   paint(box, message);
+  if (message.files?.length) {
+    const files = el('ul', 'msg-files');
+    for (const file of message.files) files.append(el('li', '', file.name));
+    box.append(files);
+  }
   const actions = el('div', 'msg-actions');
   if (message.role === 'assistant' && !message.stats?.live && !message.stats?.waiting && split(message).content
     && chat.view.voice.select.value) {
@@ -736,8 +821,29 @@ function paint(box, message) {
   const think = box.querySelector('.msg-think');
   if (think) { think.hidden = !shown.reasoning; think.querySelector('.msg-think-text').textContent = shown.reasoning; }
   const progress = box.querySelector('.msg-progress');
-  if (progress) progress.textContent = message.stats?.waiting ? t('chatWaiting') : message.stats?.live ? t('chatWriting') : '';
+  if (progress) progress.textContent = message.answerNowNote || (message.stats?.waiting ? t('chatWaiting') : message.stats?.live ? t('chatWriting') : '');
+  const now = box.querySelector('.msg-answer-now');
+  if (now) now.hidden = !(message.stats?.live && shown.reasoning && !shown.content && message.requestId
+    && !message.answerNowAsked && !answerNowRefused.has(message.model || ''));
 }
+// Models whose backend refused answer now; the button stays away for them.
+const answerNowRefused = new Set();
+async function answerNow(chat, message, box) {
+  message.answerNowAsked = true;
+  message.answerNowNote = t('chatAnswerNowAsked');
+  paint(box, message);
+  try {
+    await chatApi('POST', 'answer-now', { request_id: message.requestId, model: message.model || undefined });
+  } catch (cause) {
+    answerNowRefused.add(message.model || '');
+    message.answerNowNote = t('chatAnswerNowFailed');
+    if (box.isConnected) paint(box, message);
+    setTimeout(() => { delete message.answerNowNote; if (box.isConnected) paint(box, message); }, 4000);
+    return;
+  }
+  delete message.answerNowNote;
+}
+
 // Some servers send the thinking inside the answer, between <think> tags.
 function split(message) {
   const content = message.content || '', reasoning = message.reasoning || '';
@@ -793,7 +899,11 @@ async function answer(chat, model = chat.view.model.value, effort = chat.view.ef
 function modelHistory(chat, tools) {
   const history = tools.length ? [{ role: 'system', content: CHAT_TOOL_HINT }] : [];
   for (const m of chat.messages) {
-    if (m.role === 'user') history.push({ role: 'user', content: m.content });
+    if (m.role === 'user' && m.files?.length) {
+      // Documents as Chat Completions file parts; Basalt reads PDF, Word, PowerPoint, Excel and text.
+      history.push({ role: 'user', content: [{ type: 'text', text: m.content },
+        ...m.files.map((file) => ({ type: 'file', file: { filename: file.name, file_data: file.data } }))] });
+    } else if (m.role === 'user') history.push({ role: 'user', content: m.content });
     else if (m.role === 'assistant' && m.tool_calls) history.push({ role: 'assistant', content: split(m).content || null, tool_calls: m.tool_calls });
     else if (m.role === 'assistant' && m.content) history.push({ role: 'assistant', content: split(m).content || m.content });
     else if (m.role === 'tool' && m.result !== undefined) history.push({ role: 'tool', tool_call_id: m.call_id, content: m.result });
@@ -868,6 +978,7 @@ async function answerOnce(chat, model, effort, offerTools) {
         let chunk;
         try { chunk = JSON.parse(data); } catch { continue; }
         if (chunk.error) throw new Error(said(chunk));
+        if (typeof chunk.id === 'string' && !message.requestId) message.requestId = chunk.id;
         const choice = (chunk.choices && chunk.choices[0]) || {}, delta = choice.delta || {};
         if (choice.finish_reason) finish = choice.finish_reason;
         const thought = delta.reasoning_content || delta.reasoning || '', text = delta.content || '';

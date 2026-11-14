@@ -877,3 +877,67 @@ async fn a_stop_request_does_not_wait_for_a_running_generation() {
     upstream_task.abort();
     signal_task.abort();
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn answer_now_reaches_the_backend_while_the_only_request_slot_is_busy() {
+    let state = Mock::default();
+    state.private.store(true, Ordering::SeqCst);
+    let asked = Arc::new(Mutex::new(serde_json::Value::Null));
+    let record = asked.clone();
+    let mock = Router::new()
+        .route("/health", get(mock_health))
+        .route("/v1/chat/completions", post(mock_chat))
+        .route(
+            k_lani_link_protocol::ANSWER_NOW_PATH,
+            post(move |Json(body): Json<serde_json::Value>| {
+                *record.lock().unwrap() = body;
+                async { Json(serde_json::json!({"object": "answer_now", "state": "thinking"})) }
+            }),
+        )
+        .with_state(state.clone());
+    let (upstream, upstream_task) = server(mock).await;
+    let (signal_url, signal_task) = server(signal::router("s".repeat(32))).await;
+    // One request at a time and no queue: the running reply holds the only slot.
+    let cfg = config(signal_url, upstream);
+    let (gateway, _closed, host_task, attach_task) = connect_gateway(&cfg).await;
+    let (base, api_task) = server(gateway.router()).await;
+    let http = reqwest::Client::builder().no_proxy().build().unwrap();
+    let running = http
+        .post(format!("{base}/v1/chat/completions"))
+        .bearer_auth(&cfg.api_key)
+        .json(&serde_json::json!({"model": "cancel", "stream": true}))
+        .send()
+        .await
+        .unwrap();
+    let mut stream = running.bytes_stream();
+    stream.next().await.unwrap().unwrap();
+    let blocked = http
+        .post(format!("{base}/v1/chat/completions"))
+        .bearer_auth(&cfg.api_key)
+        .json(&serde_json::json!({"model": "other", "messages": []}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    let answer: serde_json::Value = tokio::time::timeout(
+        Duration::from_secs(3),
+        http.post(format!("{base}{}", k_lani_link_protocol::ANSWER_NOW_PATH))
+            .bearer_auth(&cfg.api_key)
+            .json(&serde_json::json!({"request_id": "chatcmpl-running", "model": "cancel"}))
+            .send(),
+    )
+    .await
+    .expect("answer now must not wait behind the reply it ends")
+    .unwrap()
+    .error_for_status()
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(answer["state"], "thinking");
+    assert_eq!(asked.lock().unwrap()["request_id"], "chatcmpl-running");
+    drop(stream);
+    for task in [host_task, attach_task, upstream_task, signal_task, api_task] {
+        task.abort();
+    }
+}

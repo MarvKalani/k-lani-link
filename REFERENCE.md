@@ -367,6 +367,7 @@ multipart `Content-Type` with its boundary, as do image edits. Video status and 
 | OpenAI Audio | `POST /v1/audio/speech`, `POST /v1/audio/transcriptions` | Text-to-speech and file transcription with [NeMo-Speech.cpp](integrations/nemo-speech/README.md) |
 | Anthropic Messages | `POST /v1/messages`, `/v1/messages/count_tokens` | Claude Code via `ANTHROPIC_BASE_URL` |
 | Model cards | `GET /v1/link/model-cards/{key}` | The control panel, for a README the host configures |
+| Answer now | `POST /v1/answer_now` | Ends a running reply's thinking on Basalt; admitted beside the request limit, so it never waits behind the reply it ends |
 
 The [speech Compose profile](deploy/speech/README.md) runs Audio8, Ming and
 Nemotron. The native client can route audio on-device through `[local_audio.speech]`

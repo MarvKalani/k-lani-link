@@ -14,8 +14,8 @@ use axum::{
     routing::{get, post},
 };
 use k_lani_link_protocol::{
-    IMAGE_EDITS_PATH, MODEL_CARD_PATH, SPEECH_PATH, TRANSCRIPTIONS_PATH, model_card_route,
-    multipart_content_type, multipart_route, video_route,
+    ANSWER_NOW_PATH, IMAGE_EDITS_PATH, MODEL_CARD_PATH, SPEECH_PATH, TRANSCRIPTIONS_PATH,
+    model_card_route, multipart_content_type, multipart_route, video_route,
 };
 use serde_json::{Value, json};
 
@@ -33,6 +33,7 @@ pub fn routes() -> Router<Panel> {
         .route("/api/chats", get(list))
         .route("/api/chats/{id}", get(load).put(save).delete(remove))
         .route("/api/model-card/{key}", get(model_card))
+        .route("/api/answer-now", post(answer_now))
         .layer(DefaultBodyLimit::max(MAX_CHAT_BYTES))
 }
 
@@ -70,6 +71,33 @@ async fn chat(State(panel): State<Panel>, request: Request) -> Response {
             .post(format!("http://{listen}/v1/chat/completions"))
             .bearer_auth(key)
             .json(&request),
+    )
+    .await
+}
+
+/// Ends a running reply's thinking (Basalt's answer now). Only the request's ID and its
+/// model, which picks the computer, are passed on.
+async fn answer_now(State(panel): State<Panel>, body: Bytes) -> Response {
+    let request = serde_json::from_slice::<Value>(&body).unwrap_or_default();
+    let Some(id) = request["request_id"]
+        .as_str()
+        .filter(|id| !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_graphic()))
+    else {
+        return failure(StatusCode::BAD_REQUEST, "Name the running reply.");
+    };
+    let mut forward = json!({"request_id": id});
+    if let Some(model) = request["model"].as_str().filter(|model| model.len() <= 256) {
+        forward["model"] = json!(model);
+    }
+    let Some((listen, key)) = panel.gateway_address().await.zip(panel.key()) else {
+        return failure(StatusCode::CONFLICT, "Start the connection first.");
+    };
+    gateway_response(
+        panel
+            .http
+            .post(format!("http://{listen}{ANSWER_NOW_PATH}"))
+            .bearer_auth(key)
+            .json(&forward),
     )
     .await
 }

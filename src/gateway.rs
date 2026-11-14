@@ -49,6 +49,8 @@ pub struct Gateway {
     pending: Arc<Mutex<HashMap<u64, Pending>>>,
     slot: Arc<Semaphore>,
     control_slot: Arc<Semaphore>,
+    /// Requests that steer a running one (answer now) do not wait behind it.
+    steer_slot: Arc<Semaphore>,
     management_token: Option<String>,
     upload_timeout: Duration,
     next: Arc<AtomicU64>,
@@ -83,6 +85,7 @@ impl Gateway {
             pending: Default::default(),
             slot: Arc::new(Semaphore::new(capacity)),
             control_slot: Arc::new(Semaphore::new(1)),
+            steer_slot: Arc::new(Semaphore::new(k_lani_link_protocol::STEERING_REQUESTS)),
             management_token,
             upload_timeout: Duration::from_secs(UPLOAD_SECONDS),
             next: Arc::new(AtomicU64::new(1)),
@@ -542,6 +545,8 @@ async fn proxy(State(gateway): State<Gateway>, request: Request) -> Response {
         &gateway.audio_slot
     } else if control {
         &gateway.control_slot
+    } else if k_lani_link_protocol::steering_route(method.as_str(), uri.path()) {
+        &gateway.steer_slot
     } else {
         &gateway.slot
     };
