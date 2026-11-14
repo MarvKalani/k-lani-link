@@ -36,6 +36,7 @@ const CHAT_JS: &str = include_str!("ui/chat.js");
 const MEDIA_JS: &str = include_str!("ui/media.js");
 const STUDIO_JS: &str = include_str!("ui/studio.js");
 const ROLES_JS: &str = include_str!("ui/roles.js");
+const CHAT_TOOLS_JS: &str = include_str!("ui/chattools.js");
 const SCAN_JS: &str = include_str!("ui/scan.js");
 const CSS: &str = include_str!("ui/style.css");
 
@@ -307,6 +308,15 @@ fn router(panel: Panel) -> Router {
                 (
                     [("content-type", "text/javascript; charset=utf-8")],
                     STUDIO_JS,
+                )
+            }),
+        )
+        .route(
+            "/chattools.js",
+            get(|| async {
+                (
+                    [("content-type", "text/javascript; charset=utf-8")],
+                    CHAT_TOOLS_JS,
                 )
             }),
         )

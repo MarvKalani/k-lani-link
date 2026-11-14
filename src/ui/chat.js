@@ -122,7 +122,7 @@ function openChat(data = {}, focus = true) {
     saved: !!data.saved, model: data.model || '', effort: data.effort || '',
     messages: Array.isArray(data.messages) ? data.messages.filter((message) =>
       ['user', 'assistant', 'error'].includes(message?.role) && typeof message.content === 'string') : [],
-    busy: null
+    busy: null, tools: true
   };
   chats.set(chat.id, chat);
   const box = el('article', 'chat');
@@ -153,8 +153,14 @@ function openChat(data = {}, focus = true) {
   effort.value = chat.effort;
   const card = cardButton(model);
   modelField.append(card.button);
+  // The model may create images, videos and speech; off for this window with one click.
+  const toolsLabel = el('label', 'check chat-tools-toggle');
+  const toolsBox = el('input'); toolsBox.type = 'checkbox'; toolsBox.checked = true;
+  const toolsName = el('span');
+  toolsLabel.append(toolsBox, toolsName);
+  toolsBox.addEventListener('change', () => { chat.tools = toolsBox.checked; });
   const options = el('div', 'chat-options');
-  options.append(modelField, effortLabel);
+  options.append(modelField, effortLabel, toolsLabel);
   const input = el('textarea'); input.rows = 2;
   const send = el('button', 'chat-send'); send.type = 'submit';
   const audio = chatAudio(input);
@@ -188,6 +194,7 @@ function openChat(data = {}, focus = true) {
     },
     catalog() {
       audio.relabel(); voice.relabel(); fillModels(chat); card.update();
+      toolsLabel.hidden = !chatToolList().length;
     },
     // The texts that change only with the language.
     relabel() {
@@ -198,6 +205,7 @@ function openChat(data = {}, focus = true) {
       conversationLabel.textContent = t('chatActions');
       speechLabel.textContent = t('chatSpeech');
       modelName.textContent = t('chatModel'); effortName.textContent = t('chatEffort');
+      toolsName.textContent = t('chatToolsToggle'); toolsLabel.title = t('chatToolsHint');
       input.setAttribute('aria-label', t('chatMessage'));
       input.placeholder = t('chatPlaceholder');
       for (const option of effort.options) option.textContent = t(option.value ? 'effort_' + option.value : 'effortAuto');
@@ -246,6 +254,7 @@ function openChat(data = {}, focus = true) {
     audio.cancel();
     if (reading && box.contains(reading.button)) stopReading();
     if (chat.busy) chat.busy.abort();
+    releaseToolMedia(chat);
     chats.delete(chat.id); box.remove();
     front([...chats.values()].at(-1) || null);
     if (chat.saved) listSaved();
@@ -472,6 +481,7 @@ window.addEventListener('pagehide', (event) => {
   for (const chat of chats.values()) {
     chat.view.cancelAudio();
     if (chat.busy) chat.busy.abort();
+    if (!event.persisted) releaseToolMedia(chat);
   }
   stopReading();
 });
@@ -618,7 +628,8 @@ async function freshModels() {
 // The model list arrives with the connection test, after a window may have opened.
 // Open windows whose conversation would be lost by a restart.
 function hasUnsavedWork(chat) {
-  return (!chat.saved && chat.messages.length > 0) || !!chat.view.input.value.trim();
+  return (!chat.saved && chat.messages.length > 0) || !!chat.view.input.value.trim()
+    || chat.messages.some((message) => message.role === 'tool' && message.url);
 }
 // Open windows and studio results that a restart would lose.
 function unsavedChats() {
@@ -646,7 +657,7 @@ function relabelChats() {
 }
 // Errors and empty answers are not part of the conversation the model sees.
 function tidy(chat) {
-  chat.messages = chat.messages.filter((m) => m.role !== 'error' && !(m.role === 'assistant' && !m.content && !m.reasoning));
+  chat.messages = chat.messages.filter((m) => m.role !== 'error' && !(m.role === 'assistant' && !m.content && !m.reasoning && !m.tool_calls));
 }
 
 /* ---- messages ---- */
@@ -676,6 +687,11 @@ function describe(message) {
   return bits.join(' · ');
 }
 function view(chat, message, last) {
+  if (message.role === 'tool') return toolView(chat, message);
+  // A turn that only called tools shows through the tool cards.
+  if (message.role === 'assistant' && message.tool_calls && !split(message).content && !message.stats?.live) {
+    const empty = el('div'); empty.hidden = true; return empty;
+  }
   const box = el('div', 'msg ' + message.role);
   if (message.role === 'assistant') {
     const think = el('details', 'msg-think'); think.append(el('summary', '', t('chatThinking')), el('div', 'msg-think-text'));
@@ -705,6 +721,7 @@ function view(chat, message, last) {
       if (chat.busy) return;
       const lastUser = chat.messages.findLastIndex((entry) => entry.role === 'user');
       if (lastUser < 0) return;
+      for (const entry of chat.messages.slice(lastUser + 1)) if (entry.url) URL.revokeObjectURL(entry.url);
       chat.messages = chat.messages.filter((entry, index) => index <= lastUser);
       answer(chat, message.model || chat.model, message.effort ?? chat.effort);
     });
@@ -740,19 +757,59 @@ async function store(chat) {
   try {
     await chatApi('PUT', 'chats/' + chat.id, {
       title: chat.title, created: chat.created, updated: chat.updated,
-      model: chat.model, effort: chat.effort, messages: chat.messages.filter((m) => m.role === 'user' || m.role === 'assistant')
+      model: chat.model, effort: chat.effort,
+      // Text only: tool calls and their media stay in this page.
+      messages: chat.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
+        .map(({ role, content, reasoning, model, effort, stats }) => ({ role, content, reasoning, model, effort, stats }))
     });
   } catch (cause) { chat.view.mark(); error(cause.message); return; }
   listSaved();
 }
 
-/* ---- one answer ---- */
+/* ---- one answer, with the tools it calls ---- */
 async function answer(chat, model = chat.view.model.value, effort = chat.view.effort.value) {
+  for (let round = 0; ; round++) {
+    // The last round offers no tools, so the model ends with an answer.
+    const calls = await answerOnce(chat, model, effort, round < CHAT_TOOL_ROUNDS);
+    if (!calls.length || !chat.view.box.isConnected) return;
+    const v = chat.view, controller = new AbortController();
+    chat.busy = controller; v.mode(); v.send.classList.add('stop');
+    let stopped = false;
+    for (const call of calls) {
+      const message = { role: 'tool', call_id: call.id, name: call.function.name, arguments: call.function.arguments };
+      chat.messages.push(message);
+      draw(chat);
+      if (stopped) { message.result = 'Not run: the user stopped.'; continue; }
+      try { message.result = await runChatTool(chat, message, controller.signal); }
+      catch { message.result = 'Stopped by the user.'; stopped = true; }
+    }
+    chat.busy = null; v.mode(); v.send.classList.remove('stop');
+    draw(chat);
+    if (stopped) return;
+  }
+}
+
+// What the model sees: the conversation, its own tool calls and their notes.
+function modelHistory(chat, tools) {
+  const history = tools.length ? [{ role: 'system', content: CHAT_TOOL_HINT }] : [];
+  for (const m of chat.messages) {
+    if (m.role === 'user') history.push({ role: 'user', content: m.content });
+    else if (m.role === 'assistant' && m.tool_calls) history.push({ role: 'assistant', content: split(m).content || null, tool_calls: m.tool_calls });
+    else if (m.role === 'assistant' && m.content) history.push({ role: 'assistant', content: split(m).content || m.content });
+    else if (m.role === 'tool' && m.result !== undefined) history.push({ role: 'tool', tool_call_id: m.call_id, content: m.result });
+  }
+  return history;
+}
+
+async function answerOnce(chat, model, effort, offerTools) {
   const v = chat.view;
   const message = { role: 'assistant', content: '', reasoning: '', model, effort, stats: { live: true } };
   chat.model = message.model; chat.effort = message.effort;
-  const history = chat.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content).map((m) => ({ role: m.role, content: split(m).content || m.content }));
-  const request = { messages: history };
+  const tools = offerTools && chat.tools && !chat.toolsUnsupported ? chatToolList() : [];
+  const request = { messages: modelHistory(chat, tools) };
+  if (tools.length) request.tools = tools;
+  let toolsRefused = false;
+  const calls = [];
   if (message.model) request.model = message.model;
   if (message.effort) {
     request.reasoning_effort = message.effort;
@@ -782,6 +839,13 @@ async function answer(chat, model = chat.view.model.value, effort = chat.view.ef
         method: 'POST', cache: 'no-store', signal: controller.signal,
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(request)
       });
+      // A backend that does not take tools gets the same request without them, once.
+      if (!response.ok && response.status !== 429 && request.tools) {
+        delete request.tools;
+        request.messages = modelHistory(chat, []);
+        chat.toolsUnsupported = toolsRefused = true;
+        continue;
+      }
       if (response.status !== 429) break;
       message.stats.waiting = true; paint(box, message);
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -809,6 +873,12 @@ async function answer(chat, model = chat.view.model.value, effort = chat.view.ef
         const thought = delta.reasoning_content || delta.reasoning || '', text = delta.content || '';
         if (thought || text) { if (!first) first = performance.now(); pieces++; }
         message.reasoning += thought; message.content += text;
+        for (const part of delta.tool_calls || []) {
+          const call = calls[part.index ?? calls.length] ||= { id: '', type: 'function', function: { name: '', arguments: '' } };
+          if (part.id) call.id = part.id;
+          if (part.function?.name) call.function.name += part.function.name;
+          if (part.function?.arguments) call.function.arguments += part.function.arguments;
+        }
         if (chunk.usage) usage = chunk.usage;
         if (chunk.timings) timings = chunk.timings;
         if (!queued) { queued = true; requestAnimationFrame(live); }
@@ -833,10 +903,15 @@ async function answer(chat, model = chat.view.model.value, effort = chat.view.ef
   if (message.stats.stopped) s.stopped = true;
   if (finish === 'length') s.length = true;
   message.stats = s;
-  if (!message.content && !message.reasoning) chat.messages.pop();
+  const asked = failed || message.stats.stopped ? [] : calls.filter((call) => call.function.name)
+    .map((call) => ({ ...call, id: call.id || 'call_' + chatId().slice(0, 12) }));
+  if (asked.length) message.tool_calls = asked;
+  if (!message.content && !message.reasoning && !asked.length) chat.messages.pop();
   if (failed) chat.messages.push({ role: 'error', content: failed });
+  if (toolsRefused) chat.messages.push({ role: 'error', content: t('chatToolsUnsupported') });
   chat.busy = null; v.mode(); v.send.classList.remove('stop');
   chat.updated = Date.now();
   draw(chat);
   if (chat.saved) store(chat);
+  return asked;
 }

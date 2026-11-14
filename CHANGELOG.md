@@ -7,6 +7,11 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The control-panel chat lets its own model create images and videos and read text
+  aloud: with **Tools** on, it offers the connection's media models as tool calls, runs
+  them in the panel and shows the result in the conversation. A video is made only
+  after the user confirms it. A model that cannot call tools answers without them.
+  Saved chats keep the text; the media stay only while the page is open.
 - `k-lani-link role-adapter` offers the host settings' roles as models, as a backend
   behind the host. A role's request gets its project, rule sets and task as a system
   message and goes to the role's model; the answer names the role. With
