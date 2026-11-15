@@ -941,3 +941,142 @@ async fn answer_now_reaches_the_backend_while_the_only_request_slot_is_busy() {
         task.abort();
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "throughput measurement on this computer; run with --ignored --nocapture"]
+async fn throughput_over_a_direct_webrtc_connection() {
+    const DOWNLOAD: usize = 16 * 1024 * 1024;
+    const UPLOAD: usize = 6 * 1024 * 1024;
+    let state = Mock::default();
+    state.private.store(true, Ordering::SeqCst);
+    let mock = Router::new()
+        .route("/health", get(mock_health))
+        .route(
+            "/v1/videos/video_bench/content",
+            get(|| async { ([("content-type", "video/mp4")], vec![7u8; DOWNLOAD]) }),
+        )
+        .route(
+            "/v1/embeddings",
+            post(|body: Bytes| async move { Json(serde_json::json!({"received": body.len()})) })
+                .layer(axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024)),
+        )
+        .with_state(state);
+    let (upstream, upstream_task) = server(mock).await;
+    let (signal_url, signal_task) = server(signal::router("s".repeat(32))).await;
+    let cfg = config(signal_url, upstream);
+    let (gateway, _closed, host_task, attach_task) = connect_gateway(&cfg).await;
+    let (base, api_task) = server(gateway.router()).await;
+    let http = reqwest::Client::builder().no_proxy().build().unwrap();
+    let (mut downs, mut ups) = (Vec::new(), Vec::new());
+    for _ in 0..3 {
+        let started = std::time::Instant::now();
+        let body = http
+            .get(format!("{base}/v1/videos/video_bench/content"))
+            .bearer_auth(&cfg.api_key)
+            .send()
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        assert_eq!(body.len(), DOWNLOAD);
+        downs.push(DOWNLOAD as f64 / 1e6 / started.elapsed().as_secs_f64());
+        let started = std::time::Instant::now();
+        let answer: serde_json::Value = http
+            .post(format!("{base}/v1/embeddings"))
+            .bearer_auth(&cfg.api_key)
+            .header("content-type", "application/json")
+            .body(vec![b' '; UPLOAD])
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(answer["received"], UPLOAD);
+        ups.push(UPLOAD as f64 / 1e6 / started.elapsed().as_secs_f64());
+    }
+    let best = |values: &[f64]| values.iter().cloned().fold(0.0, f64::max);
+    println!(
+        "WebRTC, direct: download {:.1} MB/s, upload {:.1} MB/s (best of 3; runs {downs:.1?} / {ups:.1?})",
+        best(&downs),
+        best(&ups)
+    );
+    for task in [host_task, attach_task, upstream_task, signal_task, api_task] {
+        task.abort();
+    }
+}
+
+/// A gateway that sends no window offer (an older one) gets the small window; after the
+/// offer the host keeps up to the larger one in flight. Nothing is credited here, so the
+/// host stops exactly at the window.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_host_keeps_the_small_window_until_the_gateway_offers_the_larger_one() {
+    use k_lani_link::tunnel::Tunnel;
+    use k_lani_link_protocol::{Frame, LARGE_RESPONSE_WINDOW, RESPONSE_WINDOW, WINDOW_OFFER_ID};
+    let state = Mock::default();
+    state.private.store(true, Ordering::SeqCst);
+    let mock = Router::new()
+        .route("/health", get(mock_health))
+        .route(
+            "/v1/videos/video_bench/content",
+            get(|| async { ([("content-type", "video/mp4")], vec![7u8; 4 * 1024 * 1024]) }),
+        )
+        .with_state(state);
+    let (upstream, upstream_task) = server(mock).await;
+    let (signal_url, signal_task) = server(signal::router("s".repeat(32))).await;
+    let mut cfg = config(signal_url, upstream);
+    cfg.max_concurrent_requests = 2;
+    let host_cfg = cfg.clone();
+    let host_setup =
+        tokio::spawn(async move { peer::accept(&host_cfg, &mut String::new()).await.unwrap() });
+    let mut client: Tunnel = peer::connect(&cfg).await.unwrap().into();
+    let host_peer = host_setup.await.unwrap();
+    let host_cfg = cfg.clone();
+    let host_task = tokio::spawn(async move { host::serve(&host_cfg, host_peer).await.unwrap() });
+    async fn data_until_quiet(client: &mut Tunnel, id: u64) -> usize {
+        let mut data = 0;
+        while let Ok(Some(frame)) =
+            tokio::time::timeout(Duration::from_millis(800), client.receive()).await
+        {
+            if matches!(frame, Frame::Data { id: got, .. } if got == id) {
+                data += 1;
+            }
+        }
+        data
+    }
+    for (id, offer, window) in [
+        (1, false, RESPONSE_WINDOW),
+        (2, true, LARGE_RESPONSE_WINDOW),
+    ] {
+        if offer {
+            client
+                .tx()
+                .send(Frame::Credit {
+                    id: WINDOW_OFFER_ID,
+                })
+                .await
+                .unwrap();
+        }
+        for frame in [
+            Frame::Request {
+                id,
+                method: "GET".into(),
+                path: "/v1/videos/video_bench/content".into(),
+                content_type: None,
+            },
+            Frame::RequestEnd { id },
+        ] {
+            client.tx().send(frame).await.unwrap();
+        }
+        assert_eq!(
+            data_until_quiet(&mut client, id).await,
+            window,
+            "request {id}"
+        );
+        client.tx().send(Frame::Cancel { id }).await.unwrap();
+    }
+    for task in [host_task, upstream_task, signal_task] {
+        task.abort();
+    }
+}

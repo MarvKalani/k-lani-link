@@ -354,6 +354,24 @@ Rollen und lehnt jedes andere Modell ab, ebenso Anfragen ohne Modell, alle Bild-
 Video- und Audio-Routen und die Karte eines versteckten Modells. Nach einer Änderung
 den Host neu starten.
 
+### Durchsatz
+
+Gemessen auf einem Rechner (echtes Gateway, echter Host und TLS-Relay; 16 MiB herunter,
+6 MiB hoch; ohne Netzverzögerung), November 2026:
+
+| Weg | Modellrechner → Client | Client → Modellrechner |
+| --- | ---: | ---: |
+| WebRTC, direkt | 75 MB/s | 98 MB/s |
+| HTTPS-Relay (HTTP/1.1, HTTP/2 oder HTTP/3) | 15,6 MB/s | 60–68 MB/s |
+
+Eine Antwort hat höchstens 64 Datenblöcke à 8 KiB (512 KiB) unterwegs; ein Gateway
+dieser Version bietet dieses größere Fenster einmal pro Sitzung an, ein Host ohne das
+Angebot bleibt bei 8 Blöcken, deshalb darf jede Seite die ältere sein. Über ein echtes
+Netz bewegt eine Antwort also höchstens etwa 512 KiB pro Umlauf. Über einen Relay ist
+jeder Datensatz bis 12 KiB eine Anfrage: `requests_per_second` und `request_burst` des
+Relays, global und pro Token, begrenzen eine Übertragung, sobald der Vorrat verbraucht
+ist (1.000 pro Sekunde sind etwa 12 MB/s). Chat-Antworten liegen weit darunter.
+
 ## Unterstützte APIs
 
 Beide Peers prüfen die Routen anhand der Freigabeliste im Protokoll-Crate.

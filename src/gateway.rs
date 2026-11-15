@@ -12,9 +12,9 @@ use axum::{
     routing::get,
 };
 use k_lani_link_protocol::{
-    Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES, RESPONSE_WINDOW,
-    UPLOAD_SECONDS, accepted_query, allowed_route, control_body_valid, decode_data,
-    management_route, multipart_content_type, multipart_route, route_api,
+    Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES, UPLOAD_SECONDS,
+    accepted_query, allowed_route, control_body_valid, decode_data, management_route,
+    multipart_content_type, multipart_route, route_api,
 };
 use std::{
     collections::HashMap,
@@ -130,6 +130,13 @@ impl Gateway {
         };
         *self.link.lock().unwrap() = Some(link);
         self.linked.notify_waiters();
+        // This gateway buffers the larger response window; an older host ignores the offer.
+        let _ = peer
+            .tx()
+            .send(Frame::Credit {
+                id: k_lani_link_protocol::WINDOW_OFFER_ID,
+            })
+            .await;
         loop {
             let frame =
                 tokio::select! { _ = closed.cancelled() => break, frame = peer.receive() => frame };
@@ -701,7 +708,7 @@ async fn tunnel_request(gateway: &Gateway, mut link: Link, request: Forward<'_>)
         permit,
     } = request;
     let id = gateway.next.fetch_add(1, Ordering::Relaxed);
-    let (tx, mut rx) = mpsc::channel(RESPONSE_WINDOW + 4);
+    let (tx, mut rx) = mpsc::channel(k_lani_link_protocol::LARGE_RESPONSE_WINDOW + 4);
     gateway.pending.lock().unwrap().insert(
         id,
         Pending {

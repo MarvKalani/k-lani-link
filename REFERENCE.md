@@ -353,6 +353,24 @@ With **Clients see and use only the roles** (`roles_only`), the host lists only 
 roles and refuses every other model, requests without a model and all image, video and
 audio routes, as well as a hidden model's card. Restart the host after changing it.
 
+### Throughput
+
+Measured on one computer (real gateway, host and TLS relay; 16 MiB down, 6 MiB up; no
+network delay), November 2026:
+
+| Path | Model computer → client | Client → model computer |
+| --- | ---: | ---: |
+| WebRTC, direct | 75 MB/s | 98 MB/s |
+| HTTPS relay (HTTP/1.1, HTTP/2 or HTTP/3) | 15.6 MB/s | 60–68 MB/s |
+
+A response keeps at most 64 data frames of 8 KiB (512 KiB) in flight; a gateway of
+this version offers that larger window once per session, and a host without the offer
+keeps 8 frames, so either end may be older. Over a real network a response therefore
+moves at most about 512 KiB per round trip. Through a relay each record of up to
+12 KiB is one request: the relay's `requests_per_second` and `request_burst`, globally
+and per token, bound a transfer once its burst is spent (1,000 per second is about
+12 MB/s). Chat answers are far below these limits.
+
 ## Supported APIs
 
 Both peers check the protocol crate's route allowlist. Request and response bodies

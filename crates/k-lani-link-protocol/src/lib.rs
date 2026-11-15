@@ -21,6 +21,14 @@ pub const MAX_FRAME_BYTES: usize = 12 * 1024;
 // Large coding contexts include UTF-8 text, tool schemas and JSON escaping.
 pub const MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
 pub const RESPONSE_WINDOW: usize = 8;
+/// Data frames per response in flight once the gateway offered the larger window: about
+/// 512 KiB, so a response is not held to 64 KiB per round trip on slow or relayed paths.
+pub const LARGE_RESPONSE_WINDOW: usize = 64;
+/// A credit for this request ID acknowledges nothing: a gateway sends it once per session
+/// to say it buffers LARGE_RESPONSE_WINDOW Data frames per response. An older host ignores
+/// it like any credit for a request it does not know; without it a host keeps
+/// RESPONSE_WINDOW, so either end may be the older one.
+pub const WINDOW_OFFER_ID: u64 = u64::MAX;
 pub const MAX_CONTROL_BODY_BYTES: usize = 1024;
 /// How long a request body may take to arrive, on the local API and on the host.
 pub const UPLOAD_SECONDS: u64 = 30;

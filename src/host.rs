@@ -2,10 +2,10 @@ use crate::{config::Config, peer, routing::Routes, tunnel::Tunnel};
 use anyhow::{Result, ensure};
 use futures_util::StreamExt;
 use k_lani_link_protocol::{
-    ANTHROPIC_VERSION, Api, CHUNK_BYTES, Frame, MAX_BODY_BYTES, MAX_CONTROL_BODY_BYTES,
-    MODEL_CARD_PATH, RESPONSE_WINDOW, STEERING_REQUESTS, UPLOAD_SECONDS, allowed_route,
-    control_body_valid, decode_data, management_route, model_card_route, multipart_content_type,
-    multipart_route, route_api, steering_route,
+    ANTHROPIC_VERSION, Api, CHUNK_BYTES, Frame, LARGE_RESPONSE_WINDOW, MAX_BODY_BYTES,
+    MAX_CONTROL_BODY_BYTES, MODEL_CARD_PATH, RESPONSE_WINDOW, STEERING_REQUESTS, UPLOAD_SECONDS,
+    WINDOW_OFFER_ID, allowed_route, control_body_valid, decode_data, management_route,
+    model_card_route, multipart_content_type, multipart_route, route_api, steering_route,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -161,7 +161,7 @@ fn outlet(
     mpsc::UnboundedSender<Control>,
     Arc<std::sync::atomic::AtomicBool>,
 ) {
-    let (input, mut frames) = mpsc::channel(RESPONSE_WINDOW + 4);
+    let (input, mut frames) = mpsc::channel(LARGE_RESPONSE_WINDOW + 4);
     let (control, mut controls) = mpsc::unbounded_channel();
     let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let ended = finished.clone();
@@ -347,6 +347,8 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
     let mut uploads = HashMap::<u64, Upload>::new();
     let mut queue = VecDeque::<Upload>::new();
     registry.session += 1;
+    // Until the gateway offers more, a response keeps the small window an older one expects.
+    let mut window = RESPONSE_WINDOW;
     let resume = Duration::from_secs(config.resume_seconds);
     let mut deadline_tick = tokio::time::interval(Duration::from_millis(100));
     // Load on demand: the supervisor's catalog, a running model swap, and how many requests
@@ -442,7 +444,7 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
             let id = upload.id;
             let control = upload.control;
             let cancel = CancellationToken::new();
-            let credits = Arc::new(Semaphore::new(RESPONSE_WINDOW));
+            let credits = Arc::new(Semaphore::new(window));
             registry.serial += 1;
             let job_serial = registry.serial;
             registry.jobs.insert(
@@ -616,6 +618,7 @@ async fn serve_with(config: &Config, mut peer: Tunnel, registry: &mut Registry) 
                             }
                         }
                     }
+                    Frame::Credit { .. } if id == WINDOW_OFFER_ID => window = LARGE_RESPONSE_WINDOW,
                     Frame::Credit { .. } => {
                         if let Some(outlet) = registry.outlets.get(&id)
                             && outlet.session == Some(registry.session) { let _ = outlet.control.send(Control::Credit); }

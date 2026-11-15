@@ -7,6 +7,13 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- Downloads through the tunnel are much faster: a gateway now offers a response window
+  of 64 data frames (512 KiB) instead of 8 (64 KiB), once per session. Through the HTTPS
+  relay a download rose from 1.8 to 15.6 MB/s on one computer; over a real network the
+  gain grows with the round-trip time. An older host ignores the offer and an older
+  gateway never sends it, so both keep the small window. Two measurements run with
+  `cargo test -- --ignored --nocapture`, and the reference lists the results and the
+  relay's request rate, which bounds a long transfer.
 - `POST /v1/answer_now` passes the tunnel. Both ends admit it beside the request limit
   and the host sends it ahead of its queue, so it reaches Basalt while the reply it
   ends still holds the only slot. The panel chat shows **Answer now** while a model

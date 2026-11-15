@@ -1080,7 +1080,12 @@ async fn wired_resume(fixture: &Fixture, host_resume: u64, client_resume: u64) -
     let router=Router::new().route("/health",get(||async { Json(serde_json::json!({"link_privacy":{"version":1,"application_logs":false,"request_history":false,"diagnostics":false,"remote_images":false}})) }))
         .route("/v1/models",get(||async { Json(serde_json::json!({"data":[{"id":"https-test"}]})) }))
         .route("/v1/chat/completions",post(mock_completion))
-        .route("/v1/messages",post(mock_messages)).with_state(backend.clone());
+        .route("/v1/messages",post(mock_messages))
+        // For the throughput measurement: a large download and an upload that is only counted.
+        .route("/v1/videos/video_bench/content",get(||async { ([("content-type","video/mp4")], vec![7u8; BENCH_DOWNLOAD]) }))
+        .route("/v1/embeddings",post(|body: axum::body::Bytes| async move { Json(serde_json::json!({"received": body.len()})) })
+            .layer(axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024)))
+        .with_state(backend.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream = format!("http://{}", listener.local_addr().unwrap());
     let stop = CancellationToken::new();
@@ -1746,4 +1751,117 @@ async fn an_http3_upload_without_a_token_is_refused_before_it_is_read() {
     assert_eq!(response.status(), 401);
     quic.cancel();
     fixture.finish().await;
+}
+
+const BENCH_DOWNLOAD: usize = 16 * 1024 * 1024;
+const BENCH_UPLOAD: usize = 6 * 1024 * 1024;
+
+/// Megabytes per second for one download and one upload through a wired lab.
+pub(crate) async fn bench_api(http: &reqwest::Client, api: &str, key: &str) -> (f64, f64) {
+    let started = std::time::Instant::now();
+    let body = http
+        .get(format!("{api}/v1/videos/video_bench/content"))
+        .bearer_auth(key)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert_eq!(body.len(), BENCH_DOWNLOAD);
+    let down = BENCH_DOWNLOAD as f64 / 1e6 / started.elapsed().as_secs_f64();
+    let started = std::time::Instant::now();
+    let answer: serde_json::Value = http
+        .post(format!("{api}/v1/embeddings"))
+        .bearer_auth(key)
+        .header("content-type", "application/json")
+        .body(vec![b' '; BENCH_UPLOAD])
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(answer["received"], BENCH_UPLOAD);
+    let up = BENCH_UPLOAD as f64 / 1e6 / started.elapsed().as_secs_f64();
+    (down, up)
+}
+
+async fn bench_upload_only(http: &reqwest::Client, api: &str, key: &str) -> ((), f64) {
+    let started = std::time::Instant::now();
+    http.post(format!("{api}/v1/embeddings"))
+        .bearer_auth(key)
+        .header("content-type", "application/json")
+        .body(vec![b' '; BENCH_UPLOAD])
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    (
+        (),
+        BENCH_UPLOAD as f64 / 1e6 / started.elapsed().as_secs_f64(),
+    )
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "throughput measurement on this computer; run with --ignored --nocapture"]
+async fn throughput_through_the_relay_over_http1_http2_and_http3() {
+    for (label, http1, http3) in [
+        ("HTTPS mailbox, HTTP/1.1", true, false),
+        ("HTTPS mailbox, HTTP/2", false, false),
+        ("HTTPS mailbox, HTTP/3 (QUIC)", false, true),
+    ] {
+        let mut fixture = Fixture::new().await;
+        if http1 {
+            fixture.relay_http1 = true;
+            fixture.restart_relay().await;
+            fixture.options.http1_only = true;
+        }
+        fixture.options.http3 = http3;
+        let quic = http3.then(|| fixture.start_quic());
+        let lab = wired_lab(&fixture).await;
+        connected(&lab, 10).await;
+        let mut downs = Vec::new();
+        let mut ups = Vec::new();
+        let order = std::env::var("BENCH_ORDER").unwrap_or_default();
+        if order == "up-first" {
+            // Uploads alone first, then the usual pairs: shows whether a download leaves a trace.
+            for _ in 0..2 {
+                let (_, up) = bench_upload_only(&lab.http, &lab.api, &lab.api_key).await;
+                println!("  {label}: upload alone {up:.1} MB/s");
+            }
+        }
+        for _ in 0..3 {
+            let (down, up) = bench_api(&lab.http, &lab.api, &lab.api_key).await;
+            downs.push(down);
+            ups.push(up);
+        }
+        if http3 {
+            assert!(
+                fixture.fault.quic_requests.load(Ordering::SeqCst) > 0,
+                "QUIC was not used"
+            );
+        }
+        let best = |values: &[f64]| values.iter().cloned().fold(0.0, f64::max);
+        println!(
+            "{label}: download {:.1} MB/s, upload {:.1} MB/s (best of 3; runs {:?} / {:?})",
+            best(&downs),
+            best(&ups),
+            downs.iter().map(|v| format!("{v:.1}")).collect::<Vec<_>>(),
+            ups.iter().map(|v| format!("{v:.1}")).collect::<Vec<_>>(),
+        );
+        lab.stop.cancel();
+        for task in lab.tasks {
+            let _ = task.await;
+        }
+        if let Some(quic) = quic {
+            quic.cancel();
+        }
+        fixture.finish().await;
+    }
 }
