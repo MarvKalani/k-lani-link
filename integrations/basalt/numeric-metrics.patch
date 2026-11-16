@@ -172,13 +172,14 @@ diff --git a/serve/service.py b/serve/service.py
 index 3bd7135a..4a1fe6f4 100644
 --- a/serve/service.py
 +++ b/serve/service.py
-@@ -151,6 +151,8 @@ class Service:
+@@ -151,7 +151,9 @@ class Service:
          self.before_load = None
          self.vram_reserve = None                         # last POST /v1/vram reserve (None: the start's)
          self.reasoning_budget_tokens = 0                 # default thinking budget (0: none)
 +        self.numeric_metrics = False
 +        self.performance_last = None
          self.answer_room: str | int = "auto"             # answer reserve when thinking: "auto" or a fixed token count (0: none)
+         self.reasoning_effort: str | None = None         # effort for a request that names none (None: the template's)
          self.thinking_loop_tokens = 256                  # one token repeated this often in the thinking ends it (0: off)
          self.anthropic_think_unasked = True               # "anthropic_thinking": "on_request" -> False
 @@ -998,7 +1000,7 @@ class Service:

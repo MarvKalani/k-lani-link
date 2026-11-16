@@ -53,7 +53,7 @@ RUN --mount=type=bind,from=serving,source=/opt/basalt/CMakeLists.txt,target=/tmp
 # Basalt links cudart and cuBLAS. The base carries cudart; copy the two cuBLAS
 # runtime libraries from the build toolkit. llama.cpp keeps its own CUDA 12 libraries.
 FROM nvidia/cuda:13.5.0-base-ubuntu24.04@sha256:8c30b31b13a97ee353c21e666b227dea44f4331d38a221f257de70fc04b437d0 AS runtime
-ARG BASALT_REVISION=2729e2288f59e01836ddd7fcc630810ada98995a
+ARG BASALT_REVISION=d3b75742967c7f9fd892c6894a2b9ac6e36e0cf3
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends python3 libstdc++6 libgomp1 ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

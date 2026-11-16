@@ -7,6 +7,8 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The Basalt backend builds v0.4.1 with rebased privacy and numeric-metrics
+  patches. Flash-Next reserves memory for startup after planning its expert tier.
 - Downloads through the tunnel are much faster: a gateway now offers a response window
   of 64 data frames (512 KiB) instead of 8 (64 KiB), once per session. Through the HTTPS
   relay a download rose from 1.8 to 15.6 MB/s on one computer; over a real network the
