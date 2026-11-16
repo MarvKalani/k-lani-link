@@ -17,7 +17,7 @@ COPY crates ./crates
 COPY src ./src
 RUN cargo build --release --locked --jobs 2 --target x86_64-unknown-linux-musl
 
-FROM ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5 AS serving
+FROM ubuntu:25.10@sha256:7cc5e35f6567ee8c66d2abb4aab0fd866669e6207c237c3a8f0947a5c7f17092 AS serving
 RUN apt-get update && apt-get install -y --no-install-recommends git python3-venv ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/basalt
