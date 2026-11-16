@@ -133,7 +133,7 @@ jobs:
             LD_LIBRARY_PATH=/opt/llama/lib:/opt/llama /opt/llama/llama-server --version
           '
 
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         if: inputs.publish && steps.image.outcome == 'success'
         with:
           registry: ghcr.io
