@@ -1034,16 +1034,13 @@ async fn the_host_keeps_the_small_window_until_the_gateway_offers_the_larger_one
     let host_peer = host_setup.await.unwrap();
     let host_cfg = cfg.clone();
     let host_task = tokio::spawn(async move { host::serve(&host_cfg, host_peer).await.unwrap() });
-    async fn data_until_quiet(client: &mut Tunnel, id: u64) -> usize {
-        let mut data = 0;
-        while let Ok(Some(frame)) =
-            tokio::time::timeout(Duration::from_millis(800), client.receive()).await
-        {
+    async fn next_data(client: &mut Tunnel, id: u64) {
+        loop {
+            let frame = client.receive().await.expect("response tunnel closed");
             if matches!(frame, Frame::Data { id: got, .. } if got == id) {
-                data += 1;
+                return;
             }
         }
-        data
     }
     for (id, offer, window) in [
         (1, false, RESPONSE_WINDOW),
@@ -1069,10 +1066,22 @@ async fn the_host_keeps_the_small_window_until_the_gateway_offers_the_larger_one
         ] {
             client.tx().send(frame).await.unwrap();
         }
-        assert_eq!(
-            data_until_quiet(&mut client, id).await,
-            window,
-            "request {id}"
+        let mut received = 0;
+        let full_window = tokio::time::timeout(Duration::from_secs(10), async {
+            for _ in 0..window {
+                next_data(&mut client, id).await;
+                received += 1;
+            }
+        });
+        assert!(
+            full_window.await.is_ok(),
+            "request {id}: received {received} of {window} frames"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(800), next_data(&mut client, id))
+                .await
+                .is_err(),
+            "request {id}: received more than {window} frames without credit"
         );
         client.tx().send(Frame::Cancel { id }).await.unwrap();
     }
