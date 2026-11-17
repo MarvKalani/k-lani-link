@@ -69,7 +69,7 @@ check enabled by default.
 
 ## Building
 
-Rust 1.99.1. The repository builds without private neighboring projects.
+Rust 1.100.0. The repository builds without private neighboring projects.
 
 In the current MVP the native WebRTC adapter lives in k-lani-link's `src/peer.rs`;
 the HTTP/streaming protocol lives in `k-lani-link-protocol`. The native MVP is

@@ -8,7 +8,7 @@ RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
 
 # The supervisor, entrypoint and health probe: k-lani-link itself, statically linked so it
 # runs on the CUDA image's own libc. No interpreter of ours ships in the image.
-FROM rust:1.99.1-slim-trixie@sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a47dd02d7 AS link
+FROM rust:1.100.0-slim-trixie@sha256:e9d95b74296f7126a83ae3d041aeaba1ff4c478f13abc5cc034fcf7c131c3d4a AS link
 RUN apt-get update && apt-get install -y --no-install-recommends musl-tools cmake g++ pkg-config \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /source
