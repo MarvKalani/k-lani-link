@@ -25,7 +25,6 @@ done
 if command -v sha256sum >/dev/null; then sha() { sha256sum "$@"; }; else sha() { shasum -a 256 "$@"; }; fi
 
 root=$(git rev-parse --show-toplevel)
-source=$root/npm/k-lani-link
 out=$root/.artifacts/npm/$version
 [[ ! -e $out ]] || die "$out already exists; a packed version is never packed again"
 
@@ -34,6 +33,10 @@ out=$root/.artifacts/npm/$version
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+# Use the launcher's source and the updater key from the exact release tag.
+git -C "$root" archive "refs/tags/$tag" npm/k-lani-link src/update.rs LICENSING.md |
+  tar -xf - -C "$work"
+source=$work/npm/k-lani-link
 release=$work/release
 mkdir "$release"
 
@@ -55,7 +58,7 @@ for ((i = 1; i < ${#patterns[@]}; i += 2)); do
 done
 
 # 1. The checksum list carries the release key's signature.
-key=$(sed -n 's/^const PUBLIC_KEY: &str = "\(.*\)";$/\1/p' "$root/src/update.rs")
+key=$(sed -n 's/^const PUBLIC_KEY: &str = "\(.*\)";$/\1/p' "$work/src/update.rs")
 [[ -n $key ]] || die "no PUBLIC_KEY in src/update.rs"
 { printf '302a300506032b6570032100' | xxd -r -p; printf '%s' "$key" | base64 -d; } >"$work/key.der"
 openssl pkey -pubin -inform DER -in "$work/key.der" -out "$work/key.pem" 2>/dev/null \
@@ -76,9 +79,6 @@ openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$release/SHA25
   done
 )
 echo "Release $tag: signature and checksums verified."
-
-git -C "$root" show "$tag:LICENSING.md" >"$work/LICENSING.md" 2>/dev/null \
-  || die "LICENSING.md is missing at $tag"
 
 licenses() {
   cp "$release/LICENSE.txt" "$release/RUST-LICENSES.txt" "$work/LICENSING.md" "$1/"

@@ -313,6 +313,33 @@ The private key stays offline and outside the repository: losing it ends automat
 updates for every installed copy, and anyone holding it can ship code to them. Building from pinned source makes the build
 auditable; byte-for-byte reproducibility across machines has not been established.
 
+## npm Trusted Publishing
+
+The [npm publishing workflow](../../.github/workflows/npm-publish.yml) runs when a
+GitHub release is published. It verifies that the tag is on `main` and matches
+the Link version, waits for successful Check and Portable builds runs for
+that commit, and verifies the Ed25519 signature and asset checksums before
+packing. The publish job uses GitHub OIDC in the `npm` environment. The six
+platform packages go first so the starter can resolve them on installation.
+Stable releases use `latest` and GitHub prereleases use `next`.
+
+Each of the seven npm packages needs a Trusted Publisher for the GitHub
+repository `MarvKalani/k-lani-link`, workflow file `npm-publish.yml` and
+environment `npm`, with direct publishing enabled. npm requires a first
+successful publish within 48 hours of setting up each connection. The Link
+signing key stays with the maintainer who signs and uploads the GitHub release.
+[Trusted Publisher setup](https://docs.npmjs.com/trusted-publishers/)
+
+To verify a published release without publishing packages, dispatch from `main`.
+
+```bash
+gh workflow run npm-publish.yml --ref main -f tag=v1.2611.17
+```
+
+To resume publication after a failed run, rerun it or dispatch with the same
+release tag and `-f publish=true`. The workflow skips packages that already
+have the same tarball at that version and fails if any existing tarball differs.
+
 ## Keep README downloads current
 
 `Update download links` refreshes the marked blocks in both READMEs when a release
