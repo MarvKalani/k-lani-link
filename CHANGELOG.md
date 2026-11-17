@@ -7,6 +7,8 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.17
+
 - The Basalt backend builds v0.4.1 with rebased privacy and numeric-metrics
   patches. Flash-Next reserves memory for startup after planning its expert tier.
 - Downloads through the tunnel are much faster: a gateway now offers a response window
