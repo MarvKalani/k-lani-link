@@ -51,7 +51,7 @@ impl Code {
         let mut password = String::with_capacity(PASSWORD_DIGITS);
         while password.len() < PASSWORD_DIGITS {
             let mut byte = [0u8; 1];
-            getrandom::getrandom(&mut byte).map_err(|_| Diagnostic::err("OS randomness failed"))?;
+            getrandom::fill(&mut byte).map_err(|_| Diagnostic::err("OS randomness failed"))?;
             // Rejection sampling keeps every digit equally likely.
             if byte[0] < 250 {
                 password.push(char::from(b'0' + byte[0] % 10));

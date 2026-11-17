@@ -305,7 +305,7 @@ impl Observation {
 }
 fn random<const N: usize>() -> [u8; N] {
     let mut bytes = [0u8; N];
-    getrandom::getrandom(&mut bytes).unwrap();
+    getrandom::fill(&mut bytes).unwrap();
     bytes
 }
 fn sessions() -> Result<(String, SecureSession, SecureSession)> {

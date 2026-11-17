@@ -521,7 +521,7 @@ impl Relay {
             }
         }
         let mut salt = [0u8; 32];
-        getrandom::getrandom(&mut salt).map_err(|_| Diagnostic::err("OS randomness failed"))?;
+        getrandom::fill(&mut salt).map_err(|_| Diagnostic::err("OS randomness failed"))?;
         Ok(Arc::new(Self {
             inner: Mutex::new(Inner {
                 rooms: HashMap::new(),
@@ -874,7 +874,7 @@ impl Relay {
         inner.stats.today().minted += 1;
         drop(inner);
         let mut space = [0u8; 16];
-        getrandom::getrandom(&mut space).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        getrandom::fill(&mut space).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         let expires = now
             .saturating_add(trial.days.saturating_mul(86_400))
             .min(trial.until);

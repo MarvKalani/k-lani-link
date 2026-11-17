@@ -548,12 +548,12 @@ pub fn token_matches(value: Option<&str>, expected: &str) -> bool {
 
 pub fn random_secret() -> Result<String> {
     let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes).map_err(|e| anyhow::anyhow!("OS randomness failed: {e}"))?;
+    getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("OS randomness failed: {e}"))?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 pub fn random_id() -> Result<String> {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).map_err(|e| anyhow::anyhow!("OS randomness failed: {e}"))?;
+    getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("OS randomness failed: {e}"))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 

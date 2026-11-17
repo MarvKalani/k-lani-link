@@ -49,7 +49,7 @@ impl Drop for HttpsTunnel {
 }
 fn random<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0; N];
-    getrandom::getrandom(&mut bytes).map_err(|_| Diagnostic::err("OS randomness failed"))?;
+    getrandom::fill(&mut bytes).map_err(|_| Diagnostic::err("OS randomness failed"))?;
     Ok(bytes)
 }
 fn retryable(error: &anyhow::Error) -> bool {

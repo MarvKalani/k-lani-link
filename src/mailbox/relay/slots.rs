@@ -105,7 +105,7 @@ impl Relay {
             .filter(|n| !inner.slots.contains_key(n))
             .collect();
         let mut random = [0u8; 2];
-        getrandom::getrandom(&mut random).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        getrandom::fill(&mut random).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let number = free[usize::from(u16::from_be_bytes(random)) % free.len()];
         inner.slots.insert(
             number,

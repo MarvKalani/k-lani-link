@@ -21,7 +21,7 @@ base64 = "0.22"
 bytes = "1"
 clap = { version = "4", features = ["derive", "env"] }
 futures-util = "0.3"
-getrandom = "0.2"
+getrandom = "0.4"
 ipnet = "2"
 # Optional HTTP/3 (QUIC) mailbox path; ring only, no platform verifier or aws-lc.
 h3 = "0.0.8"

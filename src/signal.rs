@@ -177,7 +177,7 @@ pub fn seal(
     endpoint: EndpointRole,
 ) -> Result<Signal> {
     let mut nonce = [0u8; 24];
-    getrandom::getrandom(&mut nonce).map_err(|e| anyhow::anyhow!("OS randomness failed: {e}"))?;
+    getrandom::fill(&mut nonce).map_err(|e| anyhow::anyhow!("OS randomness failed: {e}"))?;
     Signal::seal(
         SignalContext {
             room: config.room.clone(),

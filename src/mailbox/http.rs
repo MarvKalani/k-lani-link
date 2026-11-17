@@ -72,7 +72,7 @@ impl Backoff {
     }
     pub async fn wait(&mut self, error: &anyhow::Error, stop: &CancellationToken) -> Result<()> {
         let mut seed = [0; 4];
-        getrandom::getrandom(&mut seed).map_err(|_| Diagnostic::err("OS randomness failed"))?;
+        getrandom::fill(&mut seed).map_err(|_| Diagnostic::err("OS randomness failed"))?;
         // Between half and all of the current step, so endpoints do not retry in lockstep.
         let step = self
             .0
