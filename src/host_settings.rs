@@ -322,22 +322,24 @@ mod tests {
 
     #[test]
     fn model_cards_carry_only_https_links_and_a_text_readme() {
+        let directory = std::env::current_dir().unwrap();
         for (page, readme, valid) in [
             (
                 "https://huggingface.co/org/model",
-                "/models/README.md",
+                directory.join("README.md"),
                 true,
             ),
-            ("", "", true),
-            ("", "/models/notes.TXT", true),
-            ("http://huggingface.co/org/model", "", false),
-            ("https://user:pw@example.org/model", "", false),
-            ("javascript:alert(1)", "", false),
-            ("", "README.md", false),
-            ("", "/etc/k-lani-link/host.toml", false),
+            ("", "".into(), true),
+            ("", directory.join("notes.TXT"), true),
+            ("http://huggingface.co/org/model", "".into(), false),
+            ("https://user:pw@example.org/model", "".into(), false),
+            ("javascript:alert(1)", "".into(), false),
+            ("", "README.md".into(), false),
+            ("", directory.join("host.toml"), false),
         ] {
+            let readme = readme.to_string_lossy();
             let settings = Settings {
-                model_cards: vec![card(page, readme)],
+                model_cards: vec![card(page, &readme)],
                 ..Settings::default()
             };
             assert_eq!(settings.check().is_ok(), valid, "{page} {readme}");
