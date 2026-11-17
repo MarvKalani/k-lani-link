@@ -18,7 +18,9 @@ COPY crates ./crates
 COPY src ./src
 RUN cargo build --release --locked --jobs 2 --target x86_64-unknown-linux-musl
 
-FROM ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5 AS serving
+# Build the virtual environment with the same system Python as the runtime.
+FROM nvidia/cuda:13.5.0-base-ubuntu24.04@sha256:8c30b31b13a97ee353c21e666b227dea44f4331d38a221f257de70fc04b437d0 AS cuda-base
+FROM cuda-base AS serving
 RUN apt-get update && apt-get install -y --no-install-recommends git python3-venv ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/basalt
@@ -53,7 +55,7 @@ RUN --mount=type=bind,from=serving,source=/opt/basalt/CMakeLists.txt,target=/tmp
 
 # Basalt links cudart and cuBLAS. The base carries cudart; copy the two cuBLAS
 # runtime libraries from the build toolkit. llama.cpp keeps its own CUDA 12 libraries.
-FROM nvidia/cuda:13.5.0-base-ubuntu24.04@sha256:8c30b31b13a97ee353c21e666b227dea44f4331d38a221f257de70fc04b437d0 AS runtime
+FROM cuda-base AS runtime
 ARG BASALT_REVISION=d3b75742967c7f9fd892c6894a2b9ac6e36e0cf3
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends python3 libstdc++6 libgomp1 ca-certificates \
