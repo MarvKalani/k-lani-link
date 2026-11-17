@@ -7,6 +7,10 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+## 1.2611.18-preview.1
+
+- Publish signed releases to npm through GitHub Actions and npm Trusted Publishing.
+
 ## 1.2611.17
 
 - The Basalt backend builds v0.4.1 with rebased privacy and numeric-metrics
