@@ -320,7 +320,8 @@ GitHub release is published. It verifies that the tag is on `main` and matches
 the Link version, waits for successful Check and Portable builds runs for
 that commit, and verifies the Ed25519 signature and asset checksums before
 packing. The publish job uses GitHub OIDC in the `npm` environment. The six
-platform packages go first so the starter can resolve them on installation.
+platform packages go first. The workflow waits for npm to scan and make them
+available before sending the starter.
 Stable releases use `latest` and GitHub prereleases use `next`.
 
 Each of the seven npm packages needs a Trusted Publisher for the GitHub

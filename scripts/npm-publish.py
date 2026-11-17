@@ -39,24 +39,50 @@ def package_set(directory, version):
     return [(name, packages[name]) for name in [*sorted(dependencies), STARTER]]
 
 
-def registry_integrity(name, version):
-    package = quote(name, safe="@")
+def registry_json(path):
     request = Request(
-        f"{REGISTRY}/{package}/{version}?verify={time.time_ns()}",
+        f"{REGISTRY}/{path}?verify={time.time_ns()}",
         headers={"Accept": "application/json", "Cache-Control": "no-cache"},
     )
     try:
         with urlopen(request, timeout=15) as response:
-            return json.load(response)["dist"]["integrity"]
+            return json.load(response)
     except HTTPError as error:
         if error.code != 404:
             raise
         return None
 
 
+def registry_integrity(name, version):
+    manifest = registry_json(f"{quote(name, safe='@')}/{version}")
+    return None if manifest is None else manifest["dist"]["integrity"]
+
+
+def pending_publish(name, version, channel):
+    # The dist-tag is visible here while the version is still being scanned.
+    tags = registry_json(f"-/package/{quote(name, safe='@')}/dist-tags")
+    return tags is not None and tags.get(channel) == version
+
+
 def require_same(name, version, expected, actual):
     if expected != actual:
         raise ValueError(f"Registry integrity does not match the prepared {name}@{version}")
+
+
+def wait_for_registry(waiting, version):
+    deadline = time.monotonic() + 20 * 60
+    while waiting:
+        for name, integrity in list(waiting.items()):
+            actual = registry_integrity(name, version)
+            if actual is not None:
+                require_same(name, version, integrity, actual)
+                print(f"Available on npm {name}@{version}", flush=True)
+                del waiting[name]
+        if not waiting:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"npm has not finished processing {version}: {', '.join(waiting)}")
+        time.sleep(20)
 
 
 def main():
@@ -80,31 +106,34 @@ def main():
     # Check the whole set before writing to npm. Retrying an interrupted release is safe
     # as long as the already published tarballs are byte-for-byte identical.
     existing = set()
+    processing = set()
     for name, (_, _, integrity) in packages:
         actual = registry_integrity(name, version)
         if actual is not None:
             require_same(name, version, integrity, actual)
             existing.add(name)
+        elif pending_publish(name, version, args.channel):
+            processing.add(name)
 
-    for name, (file, _, integrity) in packages:
-        if name in existing:
-            print(f"Already published {name}@{version}", flush=True)
-            continue
-        command = ["npm", "publish", str(file.resolve()), "--access", "public", "--ignore-scripts",
-                   "--registry", REGISTRY]
-        # npm's default latest tag refuses to move below a newer stable version.
-        if args.channel == "next":
-            command.extend(["--tag", "next"])
-        subprocess.run(command, check=True)
-        # The first read can hit a cached 404 from before the upload.
-        for _ in range(12):
-            actual = registry_integrity(name, version)
-            if actual is not None:
-                require_same(name, version, integrity, actual)
-                break
-            time.sleep(5)
-        else:
-            raise RuntimeError(f"{name}@{version} did not appear in the registry")
+    # Submit all platform packages before waiting for npm's scans. The starter
+    # only goes to npm once the platform packages are available to installers.
+    for group in (packages[:-1], packages[-1:]):
+        waiting = {}
+        for name, (file, _, integrity) in group:
+            if name in existing:
+                print(f"Already published {name}@{version}", flush=True)
+                continue
+            if name in processing:
+                print(f"npm is already processing {name}@{version}", flush=True)
+            else:
+                command = ["npm", "publish", str(file.resolve()), "--access", "public", "--ignore-scripts",
+                           "--registry", REGISTRY]
+                # The default latest tag refuses to move below a newer stable version.
+                if args.channel == "next":
+                    command.extend(["--tag", "next"])
+                subprocess.run(command, check=True)
+            waiting[name] = integrity
+        wait_for_registry(waiting, version)
 
 
 if __name__ == "__main__":
