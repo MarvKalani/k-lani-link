@@ -11,6 +11,9 @@
 # A version folder that already exists is never touched: npm never accepts a version twice.
 set -euo pipefail
 
+# Predictable archive modes let a retry reproduce already published tarballs.
+umask 022
+
 REPOSITORY=MarvKalani/k-lani-link
 die() { printf 'npm-pack: %s\n' "$*" >&2; exit 1; }
 
