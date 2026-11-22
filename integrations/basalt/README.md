@@ -29,8 +29,8 @@ diese Dateien auf tmpfs und der Server hat gar kein Netzwerkinterface.
 
 ## Updates
 
-Der aktuelle Quellstand ist [Basalt v0.4.1](https://github.com/jesdga95/basalt/releases/tag/v0.4.1)
-mit Commit `d3b75742967c7f9fd892c6894a2b9ac6e36e0cf3`. Das Image
+Der aktuelle Quellstand ist [Basalt v0.5.5](https://github.com/jesdga95/basalt/releases/tag/v0.5.5)
+mit Commit `ff0b978d2ee9ff195d113b6feb80961b2d2f99ef`. Das Image
 vermerkt den Quellstand als `io.k-lani.basalt.revision`. Wer
 `BASALT_SOURCE_CONTEXT` überschreibt, setzt `BASALT_REVISION` auf den dazugehörigen Commit.
 

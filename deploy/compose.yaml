@@ -6,10 +6,10 @@ services:
       context: ..
       dockerfile: deploy/basalt.Dockerfile
       additional_contexts:
-        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#d3b75742967c7f9fd892c6894a2b9ac6e36e0cf3}
+        basalt_source: ${BASALT_SOURCE_CONTEXT:-https://github.com/jesdga95/basalt.git#ff0b978d2ee9ff195d113b6feb80961b2d2f99ef}
       args:
         BUILD_JOBS: ${BASALT_BUILD_JOBS:-2}
-        BASALT_REVISION: ${BASALT_REVISION:-d3b75742967c7f9fd892c6894a2b9ac6e36e0cf3}
+        BASALT_REVISION: ${BASALT_REVISION:-ff0b978d2ee9ff195d113b6feb80961b2d2f99ef}
     network_mode: none
     gpus: all
     environment: {LINK_NUMERIC_METRICS: '${LINK_NUMERIC_METRICS:-0}'}

@@ -1,6 +1,6 @@
 # llama.cpp for GGUF models in the managed catalog (deploy/managed). Pinned by digest; it
-# brings its own CUDA 12 libraries, which only its process loads. server-cuda-b12182.
-FROM ghcr.io/ggml-org/llama.cpp@sha256:77e84a5d6d885c07afbda0ae2fe48f4943f5181c8c8fe3b2e4231e8a1498bb24 AS llama
+# brings its own CUDA 12 libraries, which only its process loads. server-cuda-b12602.
+FROM ghcr.io/ggml-org/llama.cpp@sha256:26f89ebd3bf17a5ecf6caee62bdabfa55abea3058150879f6f07b1fc786baa2d AS llama
 RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
     && cp -L /usr/local/cuda/lib64/libcudart.so.12 /usr/local/cuda/lib64/libcublas.so.12 \
        /usr/local/cuda/lib64/libcublasLt.so.12 /lib/x86_64-linux-gnu/libnccl.so.2 /opt/llama/lib/ \
@@ -8,7 +8,7 @@ RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
 
 # The supervisor, entrypoint and health probe: k-lani-link itself, statically linked so it
 # runs on the CUDA image's own libc. No interpreter of ours ships in the image.
-FROM rust:1.100.0-slim-trixie@sha256:e9d95b74296f7126a83ae3d041aeaba1ff4c478f13abc5cc034fcf7c131c3d4a AS link
+FROM rust:1.100.0-slim-trixie@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe AS link
 RUN apt-get update && apt-get install -y --no-install-recommends musl-tools cmake g++ pkg-config \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /source
@@ -56,7 +56,7 @@ RUN --mount=type=bind,from=serving,source=/opt/basalt/CMakeLists.txt,target=/tmp
 # Basalt links cudart and cuBLAS. The base carries cudart; copy the two cuBLAS
 # runtime libraries from the build toolkit. llama.cpp keeps its own CUDA 12 libraries.
 FROM cuda-base AS runtime
-ARG BASALT_REVISION=d3b75742967c7f9fd892c6894a2b9ac6e36e0cf3
+ARG BASALT_REVISION=ff0b978d2ee9ff195d113b6feb80961b2d2f99ef
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends python3 libstdc++6 libgomp1 ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

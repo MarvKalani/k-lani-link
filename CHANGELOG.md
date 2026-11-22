@@ -7,6 +7,14 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
+- The Basalt backend builds v0.5.5 with rebased privacy and numeric-metrics
+  patches, and updates the bundled llama.cpp CUDA server image to `b12602`.
+- Harden the PHP relay's request-body reader (`KLaniRelay::readStream`) against
+  unbounded memory growth (`CVE-2026-129289`) and document patched PHP minimum
+  versions (`8.2.36` / `8.3.37` / `8.4.28` / `8.5.13`) and `session.upload_progress.enabled = 0`.
+- Update Rust workspace and `mailbox-bench` dependencies, container digests, and
+  the Cloudflare Workers relay (`wrangler` 4.166.0).
+
 ## 1.2611.18-preview.1
 
 - Publish signed releases to npm through GitHub Actions and npm Trusted Publishing.
