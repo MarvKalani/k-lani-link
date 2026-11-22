@@ -213,6 +213,14 @@ check('the relay-wide limit applies', $pairCall($pairRelay(['pair_slots' => 1]),
 check('pair_slots 0 on the relay turns pairing off', $pairCall($pairRelay(['pair_slots' => 0]), 'POST', '/v1/pair', $hostToken, 'x')[0] === 403);
 check('pair_slots 0 on a token turns it off for its space', $pairCall($pairRelay([], ['pair_slots' => 0]), 'POST', '/v1/pair', $hostToken, 'x')[0] === 403);
 
+// Oversized body reads keep bounded memory while draining the stream to EOF (CVE-2026-129289 defense-in-depth).
+$oversized = fopen('php://temp', 'r+b');
+fwrite($oversized, str_repeat('A', 32768));
+rewind($oversized);
+$kept = KLaniRelay::readStream($oversized, 100);
+check('readStream caps buffered bytes and drains to EOF', strlen($kept) === 101 && feof($oversized));
+fclose($oversized);
+
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $path) {
     $path->isDir() ? rmdir((string) $path) : unlink((string) $path);
 }

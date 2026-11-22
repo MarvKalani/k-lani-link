@@ -9,7 +9,7 @@ German setup guide for site owners: [ANLEITUNG.de.md](ANLEITUNG.de.md).
 
 | File | Purpose |
 | --- | --- |
-| `k-lani-relay.php` | Relay core (PHP 8.2+), shared by both variants |
+| `k-lani-relay.php` | Relay core (patched PHP 8.2+: >= 8.2.36, 8.3.37, 8.4.28, or 8.5.13), shared by both variants |
 | `wordpress/` | Plugin: fast path `relay.php` (no WordPress start), REST route `/wp-json/k-lani-link/v1/...`, settings page for access tokens, cron sweep, deactivation and uninstall hooks |
 | `standalone/` | Plain web space: `index.php`, `.htaccess`, `config.example.php`, `sweep.php` for cron, denied `data/` folder |
 | `test_relay.php` | Core checks without a web server: `php deploy/php-relay/test_relay.php` |
@@ -48,6 +48,12 @@ German setup guide for site owners: [ANLEITUNG.de.md](ANLEITUNG.de.md).
 - Deactivating the plugin removes the fast path's settings file at once; the fast path
   then answers `404`. Uninstalling removes settings, token hashes and stored files.
 - The relay never sees keys or plaintext. A site administrator sees only ciphertext.
+- **PHP runtime security (Nov 2026):** Run the relay only on patched PHP releases
+  (`>= 8.2.36`, `8.3.37`, `8.4.28`, `8.5.13` or distro security backports) to cover
+  `CVE-2026-129289` (PHP-FPM request smuggling) and `CVE-2026-115560` (session upload
+  progress). As defense-in-depth, `KLaniRelay::readPhpInput()` drains `php://input` to
+  EOF in small chunks without buffering oversized payloads, and `session.upload_progress.enabled = 0`
+  is recommended in `php.ini`.
 
 ## Differences from the Rust relay
 

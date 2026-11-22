@@ -8,7 +8,7 @@ Nutzer** auf einem kleinen Hosting-Paket.
 
 ## Voraussetzungen
 
-- WordPress 6 oder neuer mit **PHP 8.2 oder neuer**
+- WordPress 6 oder neuer mit **gepatchtem PHP 8.2+** (mindestens **8.2.36 / 8.3.37 / 8.4.28 / 8.5.13** bzw. aktuelle Sicherheits-Backports wegen `CVE-2026-129289` & `CVE-2026-115560`; empfohlen: `session.upload_progress.enabled = 0` in den PHP-Einstellungen)
 - HTTPS für die Seite (Let's-Encrypt-Zertifikat reicht)
 - **„Schöne“ Permalinks**: *Einstellungen → Permalinks* auf etwas anderes als „Einfach“
   stellen (z. B. „Beitragsname“). Sonst ist `/wp-json/` nicht erreichbar.

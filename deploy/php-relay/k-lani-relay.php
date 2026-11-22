@@ -1047,4 +1047,42 @@ final class KLaniRelay
     {
         return $this->dir . '/.pairs.json';
     }
+
+    /**
+     * Reads up to `$limit + 1` bytes from a request body stream and drains any remaining
+     * bytes to EOF in small chunks without buffering them, mitigating PHP-FPM persistent
+     * FastCGI request smuggling (CVE-2026-129289) on unpatched PHP runtimes.
+     *
+     * @param resource $stream
+     */
+    public static function readStream($stream, int $limit): string
+    {
+        $keep = max(0, $limit) + 1;
+        $buf = '';
+        while (!feof($stream)) {
+            $chunk = fread($stream, 8192);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            $need = $keep - strlen($buf);
+            if ($need > 0) {
+                $buf .= strlen($chunk) <= $need ? $chunk : substr($chunk, 0, $need);
+            }
+        }
+        return $buf;
+    }
+
+    /** Reads `php://input` with bounded memory while draining the stream to EOF. */
+    public static function readPhpInput(int $limit): string
+    {
+        $stream = fopen('php://input', 'rb');
+        if ($stream === false) {
+            return '';
+        }
+        try {
+            return self::readStream($stream, $limit);
+        } finally {
+            fclose($stream);
+        }
+    }
 }

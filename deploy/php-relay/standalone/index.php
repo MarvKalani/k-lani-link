@@ -23,7 +23,7 @@ if (!str_starts_with($path, $base . '/v1/')) {
         substr($path, strlen($base)),
         $_GET,
         $authorization,
-        static fn (int $limit): string => (string) file_get_contents('php://input', false, null, 0, $limit + 1),
+        static fn (int $limit): string => KLaniRelay::readPhpInput($limit),
         null,
         $_SERVER['CONTENT_TYPE'] ?? null,
         // The direct peer only; forwarded-for headers are never trusted.
