@@ -6,11 +6,22 @@ video workflows use the native ComfyUI nodes and the configured Qwen text
 encoder. The workflow JSON files list the required model filenames. Edit
 their loader inputs if your local files have different names.
 
-MiniMax H3 and its HyperFlow derivative use the
-[MiniMax H3 Community License Agreement][h3-license]. That agreement excludes
-the EU, UK, Republic of Korea and US and describes how to obtain a separate
-license. Supply weights you are authorized to use. The adapter can be started
-with `--disable-h3` to keep the H3 routes unavailable.
+## Model licenses
+
+k-lani-link provides the interface to the operator's ComfyUI backend and
+example workflows. The model operator obtains the weights and runs the model
+on their chosen infrastructure under the model provider's terms.
+
+MiniMax H3 and HyperFlow H3 Flash use the
+[MiniMax H3 Community License Agreement][h3-license]. MiniMax H3 Image has its
+[own community license][h3-image-license]. Both standard licenses exclude
+operation in the EU, UK, Republic of Korea and US. Operators in those regions
+can request a separate license directly from MiniMax. For other models, ask
+the respective provider about its licensing options.
+
+## Connect ComfyUI
+
+The adapter accepts `--disable-h3` to disable the H3 routes.
 
 ```sh
 python3 integrations/comfyui/serve.py
@@ -101,10 +112,10 @@ test media in an ignored directory such as `.artifacts/`.
 
 ## HyperFlow H3 Flash
 
-The optional workflow uses the FL2VA checkpoint for image-to-video with stereo
-audio. Install the [HyperFlow nodes][hyperflow-nodes] and, for GGUF, the
-[ComfyUI-GGUF nodes][gguf-nodes] in a MiniMax-H3-capable ComfyUI. Put the
-[checkpoint][hyperflow-weights] in a ComfyUI `diffusion_models` directory.
+The optional workflow uses Video Rebirth's HyperFlow H3 Flash FL2VA checkpoint
+for image-to-video with stereo audio. Install the [HyperFlow nodes][hyperflow-nodes]
+and, for GGUF, the [ComfyUI-GGUF nodes][gguf-nodes] in a MiniMax-H3-capable
+ComfyUI. Put the [checkpoint][hyperflow-weights] in `diffusion_models`.
 It uses the same Qwen encoder and video and audio VAEs as the MiniMax workflow.
 Use `--fast-disk` in ComfyUI to allow disk-backed loading on a machine with
 limited RAM.
@@ -120,6 +131,7 @@ and the same 24 fps, tiled video decoding and duration trim as the MiniMax H3
 Turbo workflow. Both model IDs appear under `/v1/models` when configured.
 
 [h3-license]: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE
+[h3-image-license]: https://huggingface.co/MiniMaxAI/MiniMax-H3-Image/blob/main/LICENSE
 [hyperflow-nodes]: https://github.com/Video-Rebirth/ComfyUI-HyperFlow-Flash
 [gguf-nodes]: https://github.com/city96/ComfyUI-GGUF
 [hyperflow-weights]: https://huggingface.co/VideoRebirthAI/hyperflow-h3-flash

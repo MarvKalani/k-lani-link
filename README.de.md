@@ -133,6 +133,14 @@ unterstützen. Für PDF und DOCX braucht das Chat- oder Responses-Backend
 Unterstützung für direkt mitgesendete Anhänge. Basalt, MiniMax H3, Audio8,
 Ming und Nemotron sind getestete Beispiele.
 
+k-lani-link stellt die Schnittstelle zum gewählten Backend bereit. Der
+Modellbetreiber bezieht die Gewichte, betreibt das Modell und klärt dessen
+Lizenz direkt mit dem Anbieter. Die Standardlizenzen für MiniMax H3,
+MiniMax H3 Image und HyperFlow H3 Flash schließen den Betrieb in der EU aus.
+Für den Einsatz in der EU kann der Betreiber eine separate Lizenz direkt
+bei MiniMax anfragen.
+[Modelllizenzen und Gebietsgrenzen](integrations/comfyui/README.md#model-licenses).
+
 **Andere lokale Server:** Standardmäßig verlangt der Host das Datenschutzprofil
 des Backends. Für einen
 anderen lokalen OpenAI-kompatiblen Server kannst du in `host.toml` ausdrücklich

@@ -127,6 +127,13 @@ corresponding endpoint and data format. PDF and DOCX require a chat or responses
 backend that can read inline attachments. Basalt, MiniMax H3, Audio8, Ming and
 Nemotron are tested examples.
 
+k-lani-link provides the interface to the chosen backend. The model operator
+obtains the weights, runs the model and arranges any license directly with
+the model provider. The standard licenses for MiniMax H3, MiniMax H3 Image
+and HyperFlow H3 Flash exclude operation in the EU. Operators can request a
+separate license directly from MiniMax for use in the EU.
+[Model licenses and territory limits](integrations/comfyui/README.md#model-licenses).
+
 **Other local servers:** by default the host requires the backend's privacy
 profile. To use another local OpenAI-compatible server, explicitly set `allow_unverified_backend = true` in
 `host.toml` and configure its loopback `upstream`. k-lani-link then skips that
