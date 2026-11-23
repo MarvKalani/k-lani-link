@@ -1,4 +1,4 @@
-FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+FROM nginx:1.31-alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
 RUN apk add --no-cache iptables
 COPY deploy/thinkrail/network-guard.sh /opt/network-guard.sh
 ENTRYPOINT ["/bin/sh", "/opt/network-guard.sh"]
