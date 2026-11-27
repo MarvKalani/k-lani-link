@@ -1448,7 +1448,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "chacha20poly1305",
  "clap",
@@ -1496,7 +1496,7 @@ dependencies = [
 name = "k-lani-link-protocol"
 version = "1.2611.18-preview.1"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "chacha20poly1305",
  "hkdf 0.13.0",
  "serde",
