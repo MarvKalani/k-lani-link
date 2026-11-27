@@ -29,8 +29,8 @@ diese Dateien auf tmpfs und der Server hat gar kein Netzwerkinterface.
 
 ## Updates
 
-Der aktuelle Quellstand ist [Basalt v0.5.5](https://github.com/jesdga95/basalt/releases/tag/v0.5.5)
-mit Commit `ff0b978d2ee9ff195d113b6feb80961b2d2f99ef`. Das Image
+Der aktuelle Quellstand ist [Basalt v0.5.7](https://github.com/jesdga95/basalt/releases/tag/v0.5.7)
+mit Commit `400b411c58031d064812ea21a259b2381acdaa3e`. Das Image
 vermerkt den Quellstand als `io.k-lani.basalt.revision`. Wer
 `BASALT_SOURCE_CONTEXT` überschreibt, setzt `BASALT_REVISION` auf den dazugehörigen Commit.
 
@@ -129,6 +129,11 @@ for numeric measurements, not a claim that the measurement run stores no data.
 git apply /path/to/k-lani-link/integrations/basalt/numeric-metrics.patch
 .venv/bin/python -B -m unittest serve.tests.test_privacy serve.tests.test_numeric_metrics
 ```
+
+`upstream-tests.patch` only corrects a Basalt test, `test_vram`'s
+`test_holders_say_when_a_size_is_unreadable`: it lists fake processes 7 and 8, and
+`holders()` leaves out its own process, which in a container build is often pid 7.
+The image applies it after the two patches above; it changes no server code.
 
 ## Managed model processes
 

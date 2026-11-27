@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       basalt_tag:
-        description: Basalt tag such as v0.5.5. Leave empty to check the latest stable tag.
+        description: Basalt tag such as v0.5.7. Leave empty to check the latest stable tag.
         type: string
       publish:
         description: Push the tested backend image to GitHub Container Registry.

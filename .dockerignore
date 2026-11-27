@@ -21,6 +21,7 @@
 !integrations/basalt/
 !integrations/basalt/privacy.patch
 !integrations/basalt/numeric-metrics.patch
+!integrations/basalt/upstream-tests.patch
 !integrations/voice-tts/
 !integrations/voice-tts/serve.py
 !integrations/voice-tts/synthesize.py

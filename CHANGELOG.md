@@ -7,8 +7,12 @@ tagged versions and downloads are listed on
 
 ## Unreleased
 
-- The Basalt backend builds v0.5.5 with rebased privacy and numeric-metrics
-  patches, and updates the bundled llama.cpp CUDA server image to `b12602`.
+- The Basalt backend builds v0.5.7 with rebased privacy and numeric-metrics
+  patches, and the bundled llama.cpp CUDA server image is `b12767`. In privacy mode
+  Basalt's new persistent token totals are neither counted nor written to a file, and
+  its Unix socket no longer fails on 0.5.7's TCP-only `TCP_NODELAY` setting.
+  `upstream-tests.patch` corrects a Basalt test that failed whenever the test runner
+  was pid 7, as in a container build, which had stopped the image build since 0.5.5.
 - Harden the PHP relay's request-body reader (`KLaniRelay::readStream`) against
   unbounded memory growth (`CVE-2026-129289`) and document patched PHP minimum
   versions (`8.2.36` / `8.3.37` / `8.4.28` / `8.5.13`) and `session.upload_progress.enabled = 0`.

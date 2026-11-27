@@ -1,0 +1,28 @@
+diff --git a/serve/tests/test_vram.py b/serve/tests/test_vram.py
+index e1eea53f..7ec777a8 100644
+--- a/serve/tests/test_vram.py
++++ b/serve/tests/test_vram.py
+@@ -1,4 +1,5 @@
+ """Per-process GPU memory from NVML: an unlisted or unreadable process is unknown, never zero."""
++import os
+ import unittest
+ from unittest import mock
+ 
+@@ -24,11 +25,14 @@ class ProcessMemory(unittest.TestCase):
+             self.assertIsNone(vram.process_mib(7, [0]))
+ 
+     def test_holders_say_when_a_size_is_unreadable(self):
+-        with mock.patch.object(vram, "processes", return_value=[(7, None), (8, 2 << 30)]), \
++        # holders() leaves out its own process: in a container build the test runner itself
++        # can be pid 7, so the listed processes must never be this one.
++        first, second = os.getpid() + 1, os.getpid() + 2
++        with mock.patch.object(vram, "processes", return_value=[(first, None), (second, 2 << 30)]), \
+                 mock.patch.object(vram, "_command", side_effect=lambda pid: f"cmd{pid}"):
+             text = vram.holders([0], ignore=None)
+-        self.assertIn("pid 7 (cmd7) an unreadable amount on GPU 0", text)
+-        self.assertIn("pid 8 (cmd8) 2.0 GiB on GPU 0", text)
++        self.assertIn(f"pid {first} (cmd{first}) an unreadable amount on GPU 0", text)
++        self.assertIn(f"pid {second} (cmd{second}) 2.0 GiB on GPU 0", text)
+ 
+     def test_the_not_available_marker_reads_as_unknown(self):
+         self.assertEqual(vram._NOT_AVAILABLE, 2**64 - 1)

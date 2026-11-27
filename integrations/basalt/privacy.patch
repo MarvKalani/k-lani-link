@@ -1,5 +1,5 @@
 diff --git a/serve/api/documents.py b/serve/api/documents.py
-index e505e3e..c70dcd2 100644
+index e505e3ef..c70dcd24 100644
 --- a/serve/api/documents.py
 +++ b/serve/api/documents.py
 @@ -67,17 +67,21 @@ def expand_documents(content: list) -> list:
@@ -49,10 +49,10 @@ index e505e3e..c70dcd2 100644
  
  
 diff --git a/serve/config.py b/serve/config.py
-index 68e55d9..62dd97d 100644
+index c037937d..5f3b7902 100644
 --- a/serve/config.py
 +++ b/serve/config.py
-@@ -293,6 +293,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str], server_argv=(),
+@@ -302,6 +302,9 @@ def parse_settings(ap: argparse.ArgumentParser, cli: list[str], server_argv=(),
                  ctx = int(src[at + 1])
                  src[at + 1] = str(slot_share(ctx, a.parallel))
                  a.shared_context = ctx                     # the total, for the startup line
@@ -62,7 +62,7 @@ index 68e55d9..62dd97d 100644
      return a, file_argv + cli, file_words, cli_words
  
  
-@@ -537,6 +540,9 @@ def build_parser() -> argparse.ArgumentParser:
+@@ -557,6 +560,9 @@ def build_parser() -> argparse.ArgumentParser:
                                   allow_abbrev=False)
      ap.add_argument("--mock-engine", action="store_true",
                      help="run a scripted engine instead of the model, for clients and tests (no --model needed)")
@@ -73,7 +73,7 @@ index 68e55d9..62dd97d 100644
      ap.add_argument("--engine-bin", help=argparse.SUPPRESS)      # set by `basalt serve`
      ap.add_argument("--alias", help="the model name the API reports (default: the name stored in the model file)")
 diff --git a/serve/engine/mock.py b/serve/engine/mock.py
-index c859ff0..4b862d0 100644
+index c859ff05..4b862d0e 100644
 --- a/serve/engine/mock.py
 +++ b/serve/engine/mock.py
 @@ -19,12 +19,13 @@ class MockEngine:
@@ -106,10 +106,10 @@ index c859ff0..4b862d0 100644
          if self.route:
              script = self.scripts[self.route(list(ids))]
 diff --git a/serve/handler.py b/serve/handler.py
-index e5b162e..31aa626 100644
+index 9359ed6b..9d4f230d 100644
 --- a/serve/handler.py
 +++ b/serve/handler.py
-@@ -5,6 +5,7 @@ import json
+@@ -6,6 +6,7 @@ import math
  import os
  import select
  import socket
@@ -117,7 +117,7 @@ index e5b162e..31aa626 100644
  import sys
  import threading
  import time
-@@ -19,17 +20,18 @@ from serve.api.responses import error_body as responses_error_body
+@@ -20,17 +21,18 @@ from serve.api.responses import error_body as responses_error_body
  from serve import ROOT
  from serve.api.anthropic import anthropic_collect, anthropic_events
  from serve.api.documents import sources as document_sources
@@ -138,7 +138,7 @@ index e5b162e..31aa626 100644
  from serve.router import Router
  from serve.service import LOG_FIRST_LINES, LOG_MAX_LINES, QUEUE_BEAT_S, Service, _debug_req
  from serve.api.structured import anthropic_format, check_format
-@@ -102,6 +104,9 @@ def make_handler(target: Service | Router):
+@@ -113,6 +115,9 @@ def make_handler(target: Service | Router):
  
          def _open_live(self, rid: str, req: dict) -> None:
              """Register this request under its response id (and the client's x-client-request-id) for answer now."""
@@ -148,7 +148,7 @@ index e5b162e..31aa626 100644
              client = (self.headers.get("x-client-request-id") or "").strip()[:256] or None
              self.live = router.live.open(rid, self._session_id(req), client)
  
-@@ -214,6 +219,8 @@ def make_handler(target: Service | Router):
+@@ -225,6 +230,8 @@ def make_handler(target: Service | Router):
  
          def _image_access(self):
              """What this request may name as an image, from its own connection."""
@@ -157,17 +157,17 @@ index e5b162e..31aa626 100644
              why = "remote-only" if svc.image_sources.remote_only else remote_reason(self.client_address, self.headers)
              return replace(svc.image_sources, local=not why, why=why, peer=peer_of(self.client_address))
  
-@@ -332,6 +339,9 @@ def make_handler(target: Service | Router):
+@@ -343,6 +350,9 @@ def make_handler(target: Service | Router):
  
          def do_GET(self):
-             path = self.path.split("?")[0].rstrip("/")
+             path = request_path(self.path)
 +            if svc.privacy and path not in ("/health", "/api/health", "/v1/models", "/models"):
 +                self._json(404, {"error": {"message": "not found"}})
 +                return
              if path.startswith("/fonts/"):
                  name = path[len("/fonts/"):]
                  f = ROOT / "serve" / "web" / "fonts" / name
-@@ -387,7 +397,11 @@ def make_handler(target: Service | Router):
+@@ -418,7 +428,11 @@ def make_handler(target: Service | Router):
                  self._json(200, {"status": "ok", "max_context": shown.engine.max_context, "model": shown.model,
                                   "images": shown.vision is not None, "api_key": bool(svc.api_key),
                                   "loaded": shown.loaded(), "loading": shown.loading, "service": "basalt",
@@ -180,26 +180,26 @@ index e5b162e..31aa626 100644
              elif path == "/status":
                  if not self._authorized():                  # it shows the last answer's tail
                      return
-@@ -426,6 +440,9 @@ def make_handler(target: Service | Router):
+@@ -457,6 +471,9 @@ def make_handler(target: Service | Router):
              if not self._authorized():
                  return
-             path = self.path.split("?")[0].rstrip("/")   # clients post /v1/messages?beta=true
+             path = request_path(self.path)   # clients post /v1/messages?beta=true
 +            if svc.privacy and path not in ("/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/messages/count_tokens"):
 +                self._json(404, {"error": {"message": "not found"}})
 +                return
              if path.startswith("/v1/") and self._foreign_page():
                  return
              if path in ("/unload", "/load") and not self._control_body():
-@@ -523,7 +540,7 @@ def make_handler(target: Service | Router):
-                     return
+@@ -601,7 +618,7 @@ def make_handler(target: Service | Router):
                  self.svc.request_ctx.path = path
                  self.svc.request_ctx.model = self.svc.model  # always the served name, never the requested one
+                 self.svc.request_ctx.arrived = time.time()   # arrival timestamp for end-to-end / TTFT histograms
 -                with document_sources(self._image_access()):   # a document by URL or path follows the image rules
-+                with document_sources(self._image_access(), private=svc.privacy):
++                with document_sources(self._image_access(), private=svc.privacy):   # a document by URL or path follows the image rules
                      if path == "/v1/responses":
                          self._responses(req)
                      elif path == "/v1/chat/completions":
-@@ -572,7 +589,7 @@ def make_handler(target: Service | Router):
+@@ -650,7 +667,7 @@ def make_handler(target: Service | Router):
                  self.turn = None
              if self.watch_done is not None:
                  self.watch_done.set()
@@ -208,7 +208,7 @@ index e5b162e..31aa626 100644
                  router.live.close(self.live)
  
          def _props(self):
-@@ -846,10 +863,11 @@ def make_handler(target: Service | Router):
+@@ -925,10 +942,11 @@ def make_handler(target: Service | Router):
                  raise ResponsesError(str(e).replace("response_format", "text.format"), "text.format") from None
              req[GRAMMAR_KEY] = self.svc.grammar_for(tools, req.get("tool_choice"), req.get("tools"),
                                                 responses_api.text_format(req))
@@ -224,7 +224,7 @@ index e5b162e..31aa626 100644
              try:
                  self.svc.reasoning_budget(req)                    # a bad value is a 400 before streaming
              except ValueError as e:
-@@ -972,12 +990,41 @@ class Server(ThreadingHTTPServer):
+@@ -1051,12 +1069,43 @@ class Server(ThreadingHTTPServer):
              super().handle_error(request, client_address)
  
  
@@ -262,7 +262,9 @@ index e5b162e..31aa626 100644
 +    if unix_socket:
 +        if not hasattr(socket, "AF_UNIX") or not os.path.isabs(unix_socket):
 +            raise ValueError("unix-socket requires an absolute path and AF_UNIX support")
-+        httpd = UnixServer(unix_socket, make_handler(router))
++        handler = make_handler(router)
++        handler.disable_nagle_algorithm = False             # TCP_NODELAY does not exist on a Unix socket
++        httpd = UnixServer(unix_socket, handler)
 +    else:
 +        httpd = Server((host, port), make_handler(router))
      httpd.router = router
@@ -271,7 +273,7 @@ index e5b162e..31aa626 100644
      return httpd
 diff --git a/serve/privacy.py b/serve/privacy.py
 new file mode 100644
-index 0000000..c745741
+index 00000000..c745741d
 --- /dev/null
 +++ b/serve/privacy.py
 @@ -0,0 +1,48 @@
@@ -324,10 +326,10 @@ index 0000000..c745741
 +        if name in ("--conversation-cache-dir", "--conversation-cache-disk-mib"):
 +            raise ValueError("privacy forbids writing conversations to disk")
 diff --git a/serve/router.py b/serve/router.py
-index 020b9a1..8f724dd 100644
+index 79974c8b..8d2e5a9f 100644
 --- a/serve/router.py
 +++ b/serve/router.py
-@@ -162,6 +162,8 @@ class Router:
+@@ -165,6 +165,8 @@ class Router:
  
      def start_telemetry(self) -> None:
          """One hardware sampler over the cards of every model; the speeds are the shown model's."""
@@ -337,7 +339,7 @@ index 020b9a1..8f724dd 100644
          if current is None or current.stopped():
              from serve.util.telemetry import Telemetry
 diff --git a/serve/server.py b/serve/server.py
-index a90dad8..b75dd15 100644
+index 0f3de0ff..8464fd07 100644
 --- a/serve/server.py
 +++ b/serve/server.py
 @@ -45,6 +45,7 @@ from serve.util.logbuf import ColorStream, LogBuffer, TeeStream, tail_file  # no
@@ -348,7 +350,7 @@ index a90dad8..b75dd15 100644
  
  
  SWAP_START_TRIES = 2      # a swap's load: a second try for VRAM still being released, not a third for clients to wait on
-@@ -253,6 +254,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+@@ -256,6 +257,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
          sampling_defaults = {**sampling_defaults_from_config(cfg), **a.sampling_launch}
          if a.lazy and not multi:
              drop_sidecar_vision(cfg)
@@ -357,7 +359,7 @@ index a90dad8..b75dd15 100644
          shown = [x for x in cfg["items"] if x not in cfg.get("shared_items", ())]
          shown += sampling_items(sampling_defaults) + [x for x in [vision_item(cfg.get("vision"), cfg)] if x]
          print(model_line(cfg["model_name"], cfg.get("name_width", 0), shown), flush=True)
-@@ -283,13 +286,16 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+@@ -286,13 +289,16 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
              threading.Thread(target=tail_file, args=(logs, cfg["log"], "eng"),
                               kwargs={"on_line": echo_engine_line,
                                       "skip": lambda line: load_progress(line) is not None}, daemon=True).start()
@@ -376,7 +378,7 @@ index a90dad8..b75dd15 100644
      # the model's exported template, else the bundled one
      dialect = dialect_for(cfg.get("arch"))
      template = files["chat_template.jinja"].decode("utf-8") if "chat_template.jinja" in files else \
-@@ -297,7 +303,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
+@@ -300,7 +306,8 @@ def build_model(a, cfg: dict, logs, multi: bool, known) -> Service:
      svc = Service(engine, tok, dialect.template(template),
                    model_name=cfg.get("model_name", "basalt"), vision=vision,
                    sampling_defaults=sampling_defaults, fit_max_tokens=a.fit_max_tokens, grammar=a.grammar,
@@ -386,7 +388,7 @@ index a90dad8..b75dd15 100644
      svc.logs = logs
      svc.idle_unload_s = a.idle_unload or 0
      svc.idle_sleep_s = a.idle_sleep or 0
-@@ -330,6 +337,8 @@ def check_models(services: list[Service]) -> None:
+@@ -333,6 +340,8 @@ def check_models(services: list[Service]) -> None:
  
  
  def main() -> int:
@@ -395,7 +397,7 @@ index a90dad8..b75dd15 100644
      ap = build_parser()
      engine_bin = ap.parse_known_args(sys.argv[1:])[0].engine_bin
      try:
-@@ -339,10 +348,13 @@ def main() -> int:
+@@ -342,10 +351,13 @@ def main() -> int:
          fail(f"--config: {e}")
      a = settings[0][0]                                  # the options every model shares read the same in each
      multi = len(settings) > 1
@@ -412,7 +414,7 @@ index a90dad8..b75dd15 100644
      print(tagged("legend", LEGEND), flush=True)          # first line, so the key precedes every value
      problems = model_file_problems(settings)
      for line in problems:
-@@ -358,10 +370,11 @@ def main() -> int:
+@@ -361,10 +373,11 @@ def main() -> int:
          image_sources = image_sources_of(a.image_url_host, a.image_dir, a.image_remote_only)
      except ValueError as e:
          fail(str(e))
@@ -428,16 +430,26 @@ index a90dad8..b75dd15 100644
      width = max(len(c.get("model_name") or "") for c in cfgs) + 1
      shared = [x for x in cfgs[0].get("items", []) if all(x in c.get("items", []) for c in cfgs[1:])] if multi else []
      line, shared_sleep = shared_line(shared, [m[0].idle_sleep for m in settings])
-@@ -413,7 +426,7 @@ def main() -> int:
-         print(tagged("cors", ",".join(svc.cors_origins)), flush=True)
-         if "*" in svc.cors_origins and not svc.api_key:
-             print(tagged("warning", "any web page can use the model (--api-key KEY)"), flush=True)
+@@ -427,7 +440,8 @@ def main() -> int:
+         tp = totals_path_of(a.totals_file, a.config)
+         if tp and multi:
+             tp = str(Path(tp).with_suffix("")) + f".{s.model}.json"
+-        if tp:
++        # Privacy mode keeps no counters, so it writes no totals file either.
++        if tp and not s.privacy:
+             if a.totals_reset:
+                 prev = totals_reset_file(tp)
+                 if prev:
+@@ -435,7 +449,7 @@ def main() -> int:
+             s.totals_path = tp
+             s.load_totals(pricing_cli)
+             print(tagged("totals", f"persistent{' ' + s.model if multi else ''}, {tp}"), flush=True)
 -    httpd = serve(router, host=a.host, port=a.port)
 +    httpd = serve(router, host=a.host, port=a.port, unix_socket=a.unix_socket)
      here = "127.0.0.1" if a.host in ("0.0.0.0", "", "::") else a.host
  
      def announcer(s: Service, m):
-@@ -488,7 +501,7 @@ def main() -> int:
+@@ -510,7 +524,7 @@ def main() -> int:
      except KeyboardInterrupt:
          if not rc:
              print("[server] stopping (Ctrl+C again to force)", flush=True)
@@ -447,18 +459,18 @@ index a90dad8..b75dd15 100644
              closers += [getattr(s.engine, "close", None), s.vision.close if s.vision else None]
          for close in filter(None, closers):
 diff --git a/serve/service.py b/serve/service.py
-index bff4d43..6d551b4 100644
+index 3a802a64..70e0451a 100644
 --- a/serve/service.py
 +++ b/serve/service.py
-@@ -15,6 +15,7 @@ from serve.engine.errors import EngineDied, EngineError, EngineSilent, EngineSta
- from serve.engine.console import engine_facts, hardware_view
+@@ -16,6 +16,7 @@ from serve.engine.console import engine_facts, hardware_view
  from serve.engine.mock import Engine
+ from serve.api.grammar import REQUEST_KEY as GRAMMAR_KEY
  from serve.frontend import ChatTemplate, Event, effort_kwargs, images_of, mark_think_literals, media_of, unmark_think_literals
 +from serve.privacy import NullLogBuffer
  from serve.util import vram
  from serve.util.logbuf import LogBuffer
  from serve.security import LOOPBACK_NAMES
-@@ -97,7 +98,11 @@ class Service:
+@@ -98,7 +99,11 @@ class Service:
      def __init__(self, engine: Engine, tokenizer, template: ChatTemplate, model_name: str = "basalt",
                   vision: Vision | None = None, sampling_defaults: dict | None = None,
                   fit_max_tokens: bool = False, grammar: bool = GRAMMAR_DEFAULT, grammar_engine: bool = True,
@@ -471,7 +483,7 @@ index bff4d43..6d551b4 100644
          self.engine, self.tok, self.template, self.model, self.vision = engine, tokenizer, template, model_name, vision
          self.dialect = dialect or dialect_for(None)      # how this model's prompts and replies are written
          self.literals = self.dialect.literal_tags(control_literals(tokenizer))   # control texts that stay text inside a message
-@@ -120,7 +125,7 @@ class Service:
+@@ -121,7 +126,7 @@ class Service:
          self.images_waiting = 0                         # bytes of read images waiting for their turn to encode
          # put a non-default reasoning effort in a system turn before the answer so the cached prefix survives
          self.effort_end = False
@@ -480,7 +492,7 @@ index bff4d43..6d551b4 100644
          # origins allowed to call /v1/* (CORS; "*" = any); empty: no CORS headers
          self.cors_origins: list[str] = []
          self.max_payload = 256 << 20                     # the most a JSON request body may hold, in bytes
-@@ -206,8 +211,9 @@ class Service:
+@@ -266,8 +271,9 @@ class Service:
              return budget
          room = max_new - reserve
          if budget is None or budget > room:
@@ -492,7 +504,7 @@ index bff4d43..6d551b4 100644
              return room
          return budget
  
-@@ -1177,6 +1183,8 @@ class Service:
+@@ -1267,6 +1273,8 @@ class Service:
          return ids, kwargs.get("enable_thinking", True) is not False, max_new
  
      def _note(self, n, evs, st=None, rate=None):
@@ -501,7 +513,7 @@ index bff4d43..6d551b4 100644
          with self.status_lock:
              s = self.status if st is None else st
              s["generated"] = n
-@@ -1217,6 +1225,8 @@ class Service:
+@@ -1307,6 +1315,8 @@ class Service:
  
      def live_line(self, now: float) -> str | None:
          """One line for every request that is generating; None when none is."""
@@ -510,16 +522,16 @@ index bff4d43..6d551b4 100644
          with self.status_lock:
              reqs = [st for st, _ in self.live_reqs.values()] or ([self.status] if self.status.get("busy") else [])
              rows = []
-@@ -1238,6 +1248,8 @@ class Service:
- 
+@@ -1329,6 +1339,8 @@ class Service:
      def _progress(self, last_print, every=1.0, st=None):
-         """Print progress while a request runs: its prompt read, then the shared live line."""
+         """Print progress while a request runs: its prompt read, then the shared live line. The common case, nothing
+         due, takes no lock and copies nothing: the two fields that decide it are plain scalar reads."""
 +        if self.privacy:
 +            return last_print
          now = time.time()
-         with self.status_lock:
-             s = dict(self.status if st is None else st)
-@@ -1457,9 +1469,11 @@ class Service:
+         s = self.status if st is None else st
+         if now - last_print < (READ_PRINT_EVERY if s.get("first_token") is None else every):
+@@ -1557,9 +1569,11 @@ class Service:
                                          ended_thinking = True
                                          break
                                      finish = "stop"
@@ -533,7 +545,7 @@ index bff4d43..6d551b4 100644
                                  seg.append(t)
                                  if parser.state == "reasoning":
                                      run_n = run_n + 1 if t == run_id else 1
-@@ -1614,7 +1628,8 @@ class Service:
+@@ -1714,7 +1728,8 @@ class Service:
                                  break                   # no room for the call: "length"
                          for t in extra:
                              n += 1
@@ -543,7 +555,7 @@ index bff4d43..6d551b4 100644
                              thinking_n += parser.state == "reasoning"
                              state0 = parser.state
                              evs = cut(parser.feed(detok.push(t)))
-@@ -1659,46 +1674,54 @@ class Service:
+@@ -1759,15 +1774,6 @@ class Service:
                                  if last.get("offloaded") is not None and routed else None
                              ssd_share = round(last["file_reads"] / routed, 3) if last.get("file_reads") and routed else None
                              seen = prompt_tokens_seen(len(ids), last)   # less than len(ids) when cancelled mid-read
@@ -552,16 +564,20 @@ index bff4d43..6d551b4 100644
 -                                             ("prompt_ms", last.get("prompt_ms") or 0.0),
 -                                             ("decode_ms", last.get("decode_ms") or 0.0)):
 -                                self.totals[key] += add
+-                            self._save_totals()
 -                            if st.get("slot") is not None:
 -                                self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
 -                                                              "accepted": last.get("drafts_accepted"), "at": time.time()}
                              ft = st.get("first_token")
                              ttft = ft - st["started"] if ft and st.get("started") else None
+                             now_done = time.time()
+@@ -1780,34 +1786,51 @@ class Service:
+                             )
                              windows, window_tokens = st.get("windows") or 0, st.get("window_tokens") or 0
                              dl = window_tokens / windows if windows else None
 -                            self.history.append({
 -                                "id": f"r_{self.requests_done:04d}", "path": path, "slot": self._slot_of(st),
--                                "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,
+-                                "time": started, "duration_s": round(now_done - started, 1), "finish": finish,
 -                                "prompt_tokens": seen, "reused": last.get("reused"), "output_tokens": n,
 -                                "prompt_ms": last.get("prompt_ms"),
 -                                "decode_tok_s": round(last["generated"] / (last["decode_ms"] / 1000), 1)
@@ -595,12 +611,13 @@ index bff4d43..6d551b4 100644
 +                                                 ("prompt_ms", last.get("prompt_ms") or 0.0),
 +                                                 ("decode_ms", last.get("decode_ms") or 0.0)):
 +                                    self.totals[key] += add
++                                self._save_totals()
 +                                if st.get("slot") is not None:
 +                                    self.slot_last[st["slot"]] = {"ctx": seen + n, "offered": last.get("drafts_offered"),
 +                                                                  "accepted": last.get("drafts_accepted"), "at": time.time()}
 +                                self.history.append({
 +                                    "id": f"r_{self.requests_done:04d}", "path": path, "slot": self._slot_of(st),
-+                                    "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,
++                                    "time": started, "duration_s": round(now_done - started, 1), "finish": finish,
 +                                    "prompt_tokens": seen, "reused": last.get("reused"), "output_tokens": n,
 +                                    "prompt_ms": last.get("prompt_ms"),
 +                                    "decode_tok_s": round(last["generated"] / (last["decode_ms"] / 1000), 1)
@@ -630,7 +647,7 @@ index bff4d43..6d551b4 100644
                          st["busy"] = False
                          st.pop("tail", None)                     # drop the tail once done
                          st.pop("tool", None)
-@@ -1707,6 +1730,10 @@ class Service:
+@@ -1816,6 +1839,10 @@ class Service:
                              if self.live_reqs:              # the newest request still running
                                  self.status.update(list(self.live_reqs.values())[-1][0])
                              else:
@@ -643,7 +660,7 @@ index bff4d43..6d551b4 100644
                                  self.status.pop("tool", None)
 diff --git a/serve/tests/test_privacy.py b/serve/tests/test_privacy.py
 new file mode 100644
-index 0000000..b5365a1
+index 00000000..b5365a1d
 --- /dev/null
 +++ b/serve/tests/test_privacy.py
 @@ -0,0 +1,207 @@

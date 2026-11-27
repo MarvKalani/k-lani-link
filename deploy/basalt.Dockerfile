@@ -1,6 +1,6 @@
 # llama.cpp for GGUF models in the managed catalog (deploy/managed). Pinned by digest; it
-# brings its own CUDA 12 libraries, which only its process loads. server-cuda-b12602.
-FROM ghcr.io/ggml-org/llama.cpp@sha256:26f89ebd3bf17a5ecf6caee62bdabfa55abea3058150879f6f07b1fc786baa2d AS llama
+# brings its own CUDA 12 libraries, which only its process loads. server-cuda-b12767.
+FROM ghcr.io/ggml-org/llama.cpp@sha256:d3160910fcaebaf9a6223a5cb7ca8305b5530af2c740884b0ec3789761580273 AS llama
 RUN mkdir -p /opt/llama/lib && cp -a /app/. /opt/llama/ \
     && cp -L /usr/local/cuda/lib64/libcudart.so.12 /usr/local/cuda/lib64/libcublas.so.12 \
        /usr/local/cuda/lib64/libcublasLt.so.12 /lib/x86_64-linux-gnu/libnccl.so.2 /opt/llama/lib/ \
@@ -30,7 +30,9 @@ COPY --from=basalt_source /tools ./tools
 COPY --from=basalt_source /requirements.txt ./
 COPY integrations/basalt/privacy.patch /tmp/link-privacy.patch
 COPY integrations/basalt/numeric-metrics.patch /tmp/link-numeric-metrics.patch
-RUN for patch in /tmp/link-privacy.patch /tmp/link-numeric-metrics.patch; do \
+# A Basalt test that fails when the test runner itself is pid 7, as in a container build.
+COPY integrations/basalt/upstream-tests.patch /tmp/link-upstream-tests.patch
+RUN for patch in /tmp/link-privacy.patch /tmp/link-numeric-metrics.patch /tmp/link-upstream-tests.patch; do \
       git apply "$patch" || { echo "Cannot apply $patch to the selected Basalt source" >&2; exit 1; }; \
     done
 RUN python3 -m venv .venv && .venv/bin/pip install --no-cache-dir -r requirements.txt
@@ -56,7 +58,7 @@ RUN --mount=type=bind,from=serving,source=/opt/basalt/CMakeLists.txt,target=/tmp
 # Basalt links cudart and cuBLAS. The base carries cudart; copy the two cuBLAS
 # runtime libraries from the build toolkit. llama.cpp keeps its own CUDA 12 libraries.
 FROM cuda-base AS runtime
-ARG BASALT_REVISION=ff0b978d2ee9ff195d113b6feb80961b2d2f99ef
+ARG BASALT_REVISION=400b411c58031d064812ea21a259b2381acdaa3e
 LABEL io.k-lani.basalt.revision="${BASALT_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends python3 libstdc++6 libgomp1 ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
